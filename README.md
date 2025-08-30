@@ -22,6 +22,7 @@ A responsive 3D printing model management application built with React, TypeScri
 1. **Install dependencies**
    ```bash
    npm install
+   ```
 
 2. **Start the backend server**
    ```bash
