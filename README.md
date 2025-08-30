@@ -24,6 +24,11 @@ A responsive 3D printing model management application built with React, TypeScri
    npm install
    ```
 
+1. **build**
+   ```bash
+   npx tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts
+   ```
+
 2. **Start the backend server**
    ```bash
    node server.js
