@@ -1,139 +1,24 @@
 import { useRef, useState, Suspense, memo, useMemo, useEffect, useCallback } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera, Environment, Center } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
+// Fix JSX types for three.js objects
+import '@react-three/fiber';
+import { OrbitControls, PerspectiveCamera, Environment, Center, Bounds } from "@react-three/drei";
+import * as THREE from "three";
 import { Button } from "./ui/button";
 import { RotateCcw, Eye, EyeOff } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { ThreeJSManager, disposeWebGLContext } from "../utils/threeJSManager";
+import { ModelMesh } from "./ModelMesh";
 
 interface ModelViewer3DProps {
   modelUrl?: string;
   modelName?: string;
 }
 
-// Memoized placeholder model to prevent re-creation
-const PlaceholderModel = memo(({ modelName }: { modelName?: string }) => {
-  const meshRef = useRef<any>(null);
-  const [isRotating, setIsRotating] = useState(true);
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useFrame((state, delta) => {
-    if (meshRef.current && isRotating && isMountedRef.current) {
-      meshRef.current.rotation.y += delta * 0.5;
-    }
-  });
-
-  // Memoize geometry creation to prevent unnecessary recalculation
-  const geometry = useMemo(() => {
-    // Safely handle undefined or null modelName
-    const name = (modelName || '').toLowerCase();
-    
-    if (name.includes('dragon') || name.includes('miniature')) {
-      return (
-        <group ref={meshRef} scale={1.2}>
-          {/* Dragon-like shape */}
-          <mesh position={[0, 0, 0]}>
-            <sphereGeometry args={[0.6, 16, 16]} />
-            <meshStandardMaterial color="#8B4513" roughness={0.3} />
-          </mesh>
-          <mesh position={[0, 0.8, 0]}>
-            <sphereGeometry args={[0.4, 12, 12]} />
-            <meshStandardMaterial color="#8B4513" roughness={0.3} />
-          </mesh>
-          <mesh position={[-0.8, 0.2, 0.3]} rotation={[0, 0, Math.PI / 4]}>
-            <coneGeometry args={[0.3, 1.2, 8]} />
-            <meshStandardMaterial color="#654321" roughness={0.3} />
-          </mesh>
-          <mesh position={[0.8, 0.2, 0.3]} rotation={[0, 0, -Math.PI / 4]}>
-            <coneGeometry args={[0.3, 1.2, 8]} />
-            <meshStandardMaterial color="#654321" roughness={0.3} />
-          </mesh>
-        </group>
-      );
-    } else if (name.includes('vase') || name.includes('planter')) {
-      return (
-        <mesh ref={meshRef} scale={1.5}>
-          <cylinderGeometry args={[0.8, 0.6, 2, 16]} />
-          <meshStandardMaterial color="#E6E6FA" roughness={0.1} metalness={0.1} />
-        </mesh>
-      );
-    } else if (name.includes('chess') || name.includes('king')) {
-      return (
-        <group ref={meshRef} scale={1.3}>
-          <mesh position={[0, -0.8, 0]}>
-            <cylinderGeometry args={[0.6, 0.6, 0.3, 16]} />
-            <meshStandardMaterial color="#2C2C2C" roughness={0.2} />
-          </mesh>
-          <mesh position={[0, -0.4, 0]}>
-            <cylinderGeometry args={[0.4, 0.5, 0.8, 16]} />
-            <meshStandardMaterial color="#2C2C2C" roughness={0.2} />
-          </mesh>
-          <mesh position={[0, 0.2, 0]}>
-            <sphereGeometry args={[0.35, 16, 16]} />
-            <meshStandardMaterial color="#2C2C2C" roughness={0.2} />
-          </mesh>
-          <mesh position={[0, 0.7, 0]}>
-            <coneGeometry args={[0.2, 0.4, 8]} />
-            <meshStandardMaterial color="#FFD700" roughness={0.1} metalness={0.8} />
-          </mesh>
-        </group>
-      );
-    } else if (name.includes('organizer') || name.includes('tool')) {
-      return (
-        <group ref={meshRef} scale={1.2}>
-          <mesh position={[0, 0, 0]}>
-            <boxGeometry args={[1.5, 0.8, 1]} />
-            <meshStandardMaterial color="#4A90E2" roughness={0.3} />
-          </mesh>
-          <mesh position={[-0.5, 0.6, 0]}>
-            <boxGeometry args={[0.3, 0.4, 0.8]} />
-            <meshStandardMaterial color="#357ABD" roughness={0.3} />
-          </mesh>
-          <mesh position={[0, 0.6, 0]}>
-            <boxGeometry args={[0.3, 0.4, 0.8]} />
-            <meshStandardMaterial color="#357ABD" roughness={0.3} />
-          </mesh>
-          <mesh position={[0.5, 0.6, 0]}>
-            <boxGeometry args={[0.3, 0.4, 0.8]} />
-            <meshStandardMaterial color="#357ABD" roughness={0.3} />
-          </mesh>
-        </group>
-      );
-    } else {
-      // Default phone stand or generic object
-      return (
-        <group ref={meshRef} scale={1.3}>
-          <mesh position={[0, -0.3, 0.3]} rotation={[-Math.PI / 6, 0, 0]}>
-            <boxGeometry args={[1, 0.1, 1.2]} />
-            <meshStandardMaterial color="#6B7280" roughness={0.3} />
-          </mesh>
-          <mesh position={[0, 0.2, -0.3]}>
-            <boxGeometry args={[1, 1, 0.1]} />
-            <meshStandardMaterial color="#6B7280" roughness={0.3} />
-          </mesh>
-        </group>
-      );
-    }
-  }, [modelName]);
-
-  return (
-    <Center>
-      {geometry}
-    </Center>
-  );
-});
-
-PlaceholderModel.displayName = "PlaceholderModel";
 
 // Memoized scene component
-const Scene = memo(({ modelName }: { modelName?: string }) => {
+
+const Scene = memo(({ modelUrl, isWireframe }: { modelUrl?: string; isWireframe?: boolean }) => {
   return (
     <>
       <PerspectiveCamera makeDefault position={[3, 3, 3]} fov={50} />
@@ -142,32 +27,25 @@ const Scene = memo(({ modelName }: { modelName?: string }) => {
         enableZoom={true}
         enableRotate={true}
         minDistance={2}
-        maxDistance={10}
-        autoRotate={false}
+        maxDistance={500}
+        autoRotate={true}
       />
-      
       {/* Lighting */}
       <ambientLight intensity={0.4} />
-      <directionalLight
-        position={[5, 5, 5]}
-        intensity={1}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-      />
-      <directionalLight
-        position={[-5, 3, -5]}
-        intensity={0.5}
-      />
-      
+      <directionalLight position={[5, 5, 5]} intensity={1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+      <directionalLight position={[-5, 3, -5]} intensity={0.5} />
       {/* Environment for reflections */}
       <Environment preset="studio" />
-      
-      {/* Model */}
+      {/* Model with Bounds for auto-fit */}
       <Suspense fallback={null}>
-        <PlaceholderModel modelName={modelName} />
+        {modelUrl ? (
+          <Bounds fit clip observe margin={1.2}>
+            <Center>
+              <ModelMesh modelUrl={modelUrl} isWireframe={isWireframe} />
+            </Center>
+          </Bounds>
+        ) : null}
       </Suspense>
-      
       {/* Ground plane */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
         <planeGeometry args={[10, 10]} />
@@ -178,6 +56,7 @@ const Scene = memo(({ modelName }: { modelName?: string }) => {
 });
 
 Scene.displayName = "Scene";
+
 
 export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
@@ -196,11 +75,9 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
   // Global Canvas instance management - prevent multiple Three.js instances
   useEffect(() => {
     const currentInstanceId = instanceId.current;
-    
     // Try to register this instance
     const registered = ThreeJSManager.register(currentInstanceId);
     setIsRegistered(registered);
-    
     if (registered) {
       // Small delay to prevent rendering conflicts
       const timer = setTimeout(() => {
@@ -208,13 +85,11 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
           setCanvasReady(true);
         }
       }, 100);
-
       return () => {
         clearTimeout(timer);
         ThreeJSManager.unregister(currentInstanceId);
         setIsDestroyed(true);
         setCanvasReady(false);
-        
         // Clean up WebGL context
         if (canvasRef.current) {
           disposeWebGLContext(canvasRef.current);
@@ -228,14 +103,6 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
       };
     }
   }, [isDestroyed]);
-
-  const resetCamera = useCallback(() => {
-    // Reset camera would be implemented with camera controls
-    if (canvasRef.current && !isDestroyed && isRegistered) {
-      // This would reset the camera position in a real implementation
-      console.log("Reset camera for viewer:", instanceId.current);
-    }
-  }, [isDestroyed, isRegistered]);
 
   // Memoize canvas configuration to prevent recreation
   const canvasConfig = useMemo(() => ({
@@ -292,7 +159,7 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
             ref={canvasRef}
             {...canvasConfig}
           >
-            <Scene modelName={modelName} />
+            <Scene modelUrl={modelUrl} isWireframe={isWireframe} />
           </Canvas>
         </Suspense>
       </div>
@@ -312,7 +179,7 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
         <Button
           variant="secondary"
           size="sm"
-          onClick={resetCamera}
+          onClick={() => { /* Bounds will auto-fit on model change */ }}
           className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
           disabled={isDestroyed}
           aria-label="Reset camera position"
