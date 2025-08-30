@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "categories": [
+    { "id": "miniatures", "label": "Miniatures", "icon": "Package" },
+    { "id": "utility", "label": "Utility", "icon": "Wrench" },
+    { "id": "decorative", "label": "Decorative", "icon": "Flower" },
+    { "id": "games", "label": "Games", "icon": "Gamepad2" },
+    { "id": "props", "label": "Props", "icon": "Sword" }
+  ],
+  "settings": {
+    "defaultTheme": "system",
+    "defaultView": "grid",
+    "defaultGridDensity": 4,
+    "defaultModelView": "images",
+    "autoSave": true,
+    "modelDirectory": "./models",
+    "exportDirectory": "./exports"
+  },
+  "filters": {
+    "defaultCategory": "all",
+    "defaultPrintStatus": "all",
+    "defaultLicense": "all"
+  },
+  "lastModified": "2024-01-01T00:00:00.000Z"
+}

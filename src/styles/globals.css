@@ -1,0 +1,228 @@
+@custom-variant dark (&:is(.dark *));
+
+/* Color aliases for frequently used hex values */
+:root {
+  /* Core brand colors */
+  --brand-primary: #4b0082;
+  --brand-secondary: #7c3aed;
+  --brand-white: #ffffff;
+  --brand-dark: #1a1625;
+  --brand-dark-bg: #0f0a1a;
+  --brand-muted-dark: #2d1b4e;
+  --brand-accent-light: #ede8f5;
+  --brand-light-bg: #f3f1f7;
+  --brand-border-light: #e8e4f0;
+  --brand-text-light: #f4f1f8;
+  --brand-text-muted: #d6c7e3;
+  --brand-surface-dark: #241934;
+  --brand-purple-light: #a855f7;
+  --brand-purple-lightest: #c084fc;
+  --brand-purple-pale: #ddd6fe;
+}
+
+:root {
+  --font-size: 14px;
+  --background: #fafafa;
+  --foreground: var(--brand-dark);
+  --card: var(--brand-white);
+  --card-foreground: var(--brand-dark);
+  --popover: var(--brand-white);
+  --popover-foreground: var(--brand-dark);
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--brand-white);
+  --secondary: #f1f0f4;
+  --secondary-foreground: var(--brand-muted-dark);
+  --muted: #f8f7fb;
+  --muted-foreground: #6b5b73;
+  --accent: var(--brand-accent-light);
+  --accent-foreground: var(--brand-muted-dark);
+  --destructive: #dc2626;
+  --destructive-foreground: var(--brand-white);
+  --border: var(--brand-border-light);
+  --input: transparent;
+  --input-background: var(--brand-white);
+  --switch-background: #e0d9ea;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: var(--brand-primary);
+  --chart-1: var(--brand-primary);
+  --chart-2: var(--brand-secondary);
+  --chart-3: var(--brand-purple-light);
+  --chart-4: var(--brand-purple-lightest);
+  --chart-5: var(--brand-purple-pale);
+  --radius: 0.625rem;
+  --sidebar: var(--brand-light-bg);
+  --sidebar-foreground: var(--brand-muted-dark);
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: var(--brand-white);
+  --sidebar-accent: var(--brand-accent-light);
+  --sidebar-accent-foreground: var(--brand-muted-dark);
+  --sidebar-border: var(--brand-border-light);
+  --sidebar-ring: var(--brand-primary);
+}
+
+.dark {
+  --background: var(--brand-dark-bg);
+  --foreground: var(--brand-text-light);
+  --card: var(--brand-dark);
+  --card-foreground: var(--brand-text-light);
+  --popover: var(--brand-dark);
+  --popover-foreground: var(--brand-text-light);
+  --primary: var(--brand-secondary);
+  --primary-foreground: var(--brand-white);
+  --secondary: var(--brand-muted-dark);
+  --secondary-foreground: var(--brand-text-muted);
+  --muted: var(--brand-surface-dark);
+  --muted-foreground: #8b7a99;
+  --accent: var(--brand-muted-dark);
+  --accent-foreground: var(--brand-text-muted);
+  --destructive: #ef4444;
+  --destructive-foreground: var(--brand-white);
+  --border: var(--brand-muted-dark);
+  --input: var(--brand-surface-dark);
+  --ring: var(--brand-secondary);
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: var(--brand-secondary);
+  --chart-2: var(--brand-purple-light);
+  --chart-3: var(--brand-purple-lightest);
+  --chart-4: var(--brand-purple-pale);
+  --chart-5: #f3f4f6;
+  --sidebar: var(--brand-dark);
+  --sidebar-foreground: var(--brand-text-muted);
+  --sidebar-primary: var(--brand-secondary);
+  --sidebar-primary-foreground: var(--brand-white);
+  --sidebar-accent: var(--brand-muted-dark);
+  --sidebar-accent-foreground: var(--brand-text-muted);
+  --sidebar-border: var(--brand-muted-dark);
+  --sidebar-ring: var(--brand-secondary);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h2 {
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h3 {
+      font-size: var(--text-lg);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h4 {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    p {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+
+    label {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    button {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    input {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+  }
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+/* Custom gradient backgrounds for enhanced visual depth */
+@layer utilities {
+  .bg-gradient-primary {
+    background: linear-gradient(135deg, var(--brand-primary) 0%, #6a1b9a 100%);
+  }
+  
+  .bg-gradient-secondary {
+    background: linear-gradient(135deg, var(--brand-secondary) 0%, var(--brand-purple-light) 100%);
+  }
+  
+  .bg-gradient-accent {
+    background: linear-gradient(135deg, var(--brand-accent-light) 0%, var(--brand-light-bg) 100%);
+  }
+  
+  .bg-gradient-dark {
+    background: linear-gradient(135deg, var(--brand-dark-bg) 0%, var(--brand-dark) 100%);
+  }
+}
