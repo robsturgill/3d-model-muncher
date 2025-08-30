@@ -20,4 +20,34 @@ export interface Model {
     infill: string;
     supports: string;
   };
+
+  // Added for file integrity and duplicate detection
+  hash?: string;
+  lastScanned?: string;
+}
+
+// Group of duplicate models by hash
+export interface DuplicateGroup {
+  hash: string;
+  models: Model[];
+  totalSize: string;
+}
+
+// Details for a corrupted file
+export interface CorruptedFile {
+  model: Model;
+  error: string;
+  expectedHash?: string;
+  actualHash: string;
+  filePath: string;
+}
+
+// Result of a hash check operation
+export interface HashCheckResult {
+  totalFiles: number;
+  checkedFiles: number;
+  corruptedFiles: number;
+  corruptedFileDetails: CorruptedFile[];
+  duplicateGroups: DuplicateGroup[];
+  lastCheck: string;
 }

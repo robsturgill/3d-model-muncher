@@ -1,9 +1,11 @@
 import { useState, useRef } from "react";
+// import { scanDirectory } from "../utils/threeMFToJson";
+// ...existing code...
 import { Category } from "../types/category";
 import { AppConfig } from "../types/config";
 import { Model, DuplicateGroup, HashCheckResult, CorruptedFile } from "../types/model";
 import { ConfigManager } from "../utils/configManager";
-import { performHashCheck, findDuplicates, removeDuplicates, calculateSpaceSavings } from "../utils/fileManager";
+import { performHashCheck, findDuplicates, removeDuplicates, calculateSpaceSavings, scanModelFile } from "../utils/fileManager";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -92,13 +94,46 @@ export function SettingsPage({
   const [renameTagValue, setRenameTagValue] = useState('');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('general');
-  const [hashCheckResult, setHashCheckResult] = useState<HashCheckResult | null>(null);
+  type UIHashCheckResult = {
+    verified: number;
+    corrupted: number;
+    duplicateGroups: DuplicateGroup[];
+    corruptedFiles: (Model & { error: string })[];
+  };
+  const [hashCheckResult, setHashCheckResult] = useState<UIHashCheckResult | null>(null);
   const [isHashChecking, setIsHashChecking] = useState(false);
   const [hashCheckProgress, setHashCheckProgress] = useState(0);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [selectedDuplicateGroup, setSelectedDuplicateGroup] = useState<DuplicateGroup | null>(null);
   const [isRemoveDuplicateDialogOpen, setIsRemoveDuplicateDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State and handler for generating model JSONs via backend API
+  const [isGeneratingJson, setIsGeneratingJson] = useState(false);
+  const handleGenerateModelJson = async () => {
+    setIsGeneratingJson(true);
+    setStatusMessage('Generating JSON for all .3mf files...');
+    try {
+      const response = await fetch('http://localhost:3001/api/scan-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setSaveStatus('saved');
+        setStatusMessage('Model JSON files generated successfully.');
+      } else {
+        setSaveStatus('error');
+        setStatusMessage(data.message || 'Failed to generate model JSON files.');
+      }
+    } catch (error) {
+      setSaveStatus('error');
+      setStatusMessage('Failed to generate model JSON files.');
+      console.error('Model JSON generation error:', error);
+    } finally {
+      setIsGeneratingJson(false);
+    }
+  };
 
   // Get all unique tags with their usage information
   const getAllTags = (): TagInfo[] => {
@@ -326,46 +361,55 @@ export function SettingsPage({
     setIsRenameDialogOpen(true);
   };
 
+  // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
   const handleRunHashCheck = async () => {
     setIsHashChecking(true);
     setHashCheckProgress(0);
-    
+    setStatusMessage('Scanning model files...');
     try {
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setHashCheckProgress(prev => {
-          if (prev >= 95) {
-            clearInterval(progressInterval);
-            return 95;
-          }
-          return prev + Math.random() * 10;
-        });
-      }, 200);
-
-      const result = await performHashCheck(models);
-      
-      clearInterval(progressInterval);
-      setHashCheckProgress(100);
-      setHashCheckResult(result);
-      setDuplicateGroups(result.duplicateGroups);
-      
-      // Update models with hash information
-      const modelsWithHashes = models.map(model => {
-        const updatedModel = models.find(m => m.id === model.id);
-        return updatedModel || model;
-      });
-      
+      const total = models.length;
+      let completed = 0;
+      const updatedModels: Model[] = [];
+      let verified = 0;
+      let corrupted = 0;
+      const corruptedFiles: any[] = [];
+      for (const model of models) {
+        // eslint-disable-next-line no-await-in-loop
+        const scanned = await scanModelFile(model);
+        const merged = { ...model, ...scanned };
+        updatedModels.push(merged);
+        // Determine if corrupted (simulate: hash === 'CORRUPTED' or 'ERROR')
+        if (merged.hash === 'CORRUPTED' || merged.hash === 'ERROR') {
+          corrupted++;
+          corruptedFiles.push({ ...merged, error: merged.hash });
+        } else {
+          verified++;
+        }
+        completed++;
+        setHashCheckProgress(Math.round((completed / total) * 100));
+      }
+      // Find duplicate groups
+      const duplicateGroups = findDuplicates(updatedModels);
+      setDuplicateGroups(duplicateGroups);
+      // Compose HashCheckResult for UI
+      const hashCheckResult = {
+        verified,
+        corrupted,
+        duplicateGroups,
+        corruptedFiles,
+      };
+      setHashCheckResult(hashCheckResult as any);
+      onModelsUpdate(updatedModels);
       setSaveStatus('saved');
-      setStatusMessage(`Hash check completed. Found ${result.duplicateGroups.length} duplicate groups.`);
-      
+      setStatusMessage('Model files scanned and updated.');
       setTimeout(() => {
         setSaveStatus('idle');
         setStatusMessage('');
-      }, 5000);
+      }, 4000);
     } catch (error) {
       setSaveStatus('error');
-      setStatusMessage('Hash check failed');
-      console.error('Hash check error:', error);
+      setStatusMessage('Model scan failed');
+      console.error('Model scan error:', error);
     } finally {
       setIsHashChecking(false);
       setHashCheckProgress(0);
@@ -474,7 +518,7 @@ export function SettingsPage({
                       <Label htmlFor="default-theme">Default Theme</Label>
                       <Select 
                         value={localConfig.settings.defaultTheme}
-                        onValueChange={(value) => handleConfigFieldChange('settings.defaultTheme', value)}
+                        onValueChange={(value: string) => handleConfigFieldChange('settings.defaultTheme', value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -491,7 +535,7 @@ export function SettingsPage({
                       <Label htmlFor="default-view">Default View</Label>
                       <Select 
                         value={localConfig.settings.defaultView}
-                        onValueChange={(value) => handleConfigFieldChange('settings.defaultView', value)}
+                        onValueChange={(value: string) => handleConfigFieldChange('settings.defaultView', value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -507,7 +551,7 @@ export function SettingsPage({
                       <Label htmlFor="grid-density">Default Grid Density</Label>
                       <Select 
                         value={localConfig.settings.defaultGridDensity.toString()}
-                        onValueChange={(value) => handleConfigFieldChange('settings.defaultGridDensity', parseInt(value))}
+                        onValueChange={(value: string) => handleConfigFieldChange('settings.defaultGridDensity', parseInt(value))}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -527,7 +571,7 @@ export function SettingsPage({
                       <Label htmlFor="default-model-view">Default Model View</Label>
                       <Select 
                         value={localConfig.settings.defaultModelView}
-                        onValueChange={(value) => handleConfigFieldChange('settings.defaultModelView', value)}
+                        onValueChange={(value: string) => handleConfigFieldChange('settings.defaultModelView', value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -555,7 +599,7 @@ export function SettingsPage({
                     <div className="flex items-center space-x-3 pt-6 md:col-span-2">
                       <Switch
                         checked={localConfig.settings.autoSave}
-                        onCheckedChange={(checked) => handleConfigFieldChange('settings.autoSave', checked)}
+                        onCheckedChange={(checked: boolean) => handleConfigFieldChange('settings.autoSave', checked)}
                         id="auto-save"
                       />
                       <Label htmlFor="auto-save">Auto-save configuration</Label>
@@ -611,7 +655,7 @@ export function SettingsPage({
                       <Label>Default Category</Label>
                       <Select 
                         value={localConfig.filters.defaultCategory}
-                        onValueChange={(value) => handleConfigFieldChange('filters.defaultCategory', value)}
+                        onValueChange={(value: string) => handleConfigFieldChange('filters.defaultCategory', value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -631,7 +675,7 @@ export function SettingsPage({
                       <Label>Default Print Status</Label>
                       <Select 
                         value={localConfig.filters.defaultPrintStatus}
-                        onValueChange={(value) => handleConfigFieldChange('filters.defaultPrintStatus', value)}
+                        onValueChange={(value: string) => handleConfigFieldChange('filters.defaultPrintStatus', value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -648,7 +692,7 @@ export function SettingsPage({
                       <Label>Default License</Label>
                       <Select 
                         value={localConfig.filters.defaultLicense}
-                        onValueChange={(value) => handleConfigFieldChange('filters.defaultLicense', value)}
+                        onValueChange={(value: string) => handleConfigFieldChange('filters.defaultLicense', value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -831,7 +875,7 @@ export function SettingsPage({
                 <CardHeader>
                   <CardTitle>File Integrity Check</CardTitle>
                   <CardDescription>
-                    Verify your model files are intact and identify any corrupted files
+                    Verify your model files are intact and identify any corrupted files                
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -853,6 +897,19 @@ export function SettingsPage({
                         <FileCheck className="h-4 w-4" />
                       )}
                       {isHashChecking ? 'Checking...' : 'Run Check'}
+                    </Button>
+                    <Button
+                      onClick={handleGenerateModelJson}
+                      disabled={isGeneratingJson}
+                      className="gap-2 ml-2"
+                      variant="secondary"
+                    >
+                      {isGeneratingJson ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Files className="h-4 w-4" />
+                      )}
+                      {isGeneratingJson ? 'Generating...' : 'Generate Model JSONs'}
                     </Button>
                   </div>
 

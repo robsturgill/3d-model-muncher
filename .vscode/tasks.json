@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "tsc: build backend utils",
+			"type": "shell",
+			"command": "npx tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts",
+			"args": [],
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

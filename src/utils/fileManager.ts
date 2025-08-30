@@ -1,3 +1,19 @@
+// --- 3MF Directory Scan and JSON Generation ---
+import { scanDirectory as scan3MFDirectory } from "./threeMFToJson";
+import * as path from "path";
+import * as fs from "fs";
+// Import the real parse3MF function for extracting metadata from a .3mf file
+// Note: parse3MF is not exported, so we need to export it from threeMFToJson.ts
+import { parse3MF as realParse3MF } from "./threeMFToJson";
+
+/**
+ * Scans a directory for .3mf files and generates JSON metadata for each.
+ * Uses the scanDirectory function from threeMFToJson.ts
+ * @param dir Directory to scan
+ */
+export function generate3MFJsonForDirectory(dir: string) {
+  scan3MFDirectory(dir);
+}
 import { Model, DuplicateGroup, HashCheckResult, CorruptedFile } from "../types/model";
 
 /**
@@ -16,16 +32,38 @@ export function generateFileHash(modelUrl: string): Promise<string> {
 }
 
 /**
- * Simulates scanning a model file to extract metadata
+ * Scans a real .3mf file to extract metadata using the real parse3MF function.
+ * Returns a Partial<Model> with extracted fields, or simulated if not found.
  */
 export function scanModelFile(model: Model): Promise<Partial<Model>> {
   return new Promise((resolve) => {
+    try {
+      // Try to resolve the real file path from modelUrl
+      // Remove leading /models/ if present
+      let fileName = model.modelUrl.replace(/^\/models\//, "");
+      // Try both relative to process.cwd() and absolute
+      let filePath = path.resolve("models", fileName);
+      if (!fs.existsSync(filePath)) {
+        // fallback: try as absolute path
+        filePath = fileName;
+      }
+      if (fs.existsSync(filePath)) {
+        // Use the real parse3MF function
+        const metadata = realParse3MF(filePath, Number(model.id) || 1);
+        resolve({
+          ...metadata,
+          lastScanned: new Date().toISOString(),
+        });
+        return;
+      }
+    } catch (e) {
+      // fallback to simulation below
+    }
+    // Fallback: Simulate file scanning and metadata extraction
     setTimeout(() => {
-      // Simulate file scanning and metadata extraction
       const scannedData: Partial<Model> = {
         hash: btoa(model.modelUrl).slice(0, 32),
         lastScanned: new Date().toISOString(),
-        // Simulate potential file size changes
         fileSize: model.fileSize,
       };
       resolve(scannedData);

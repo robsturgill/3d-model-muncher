@@ -16,6 +16,7 @@ export class ConfigManager {
       defaultTheme: "system",
       defaultView: "grid",
       defaultGridDensity: 4,
+      defaultModelView: "3d",
       autoSave: true,
       modelDirectory: "./models",
       exportDirectory: "./exports"
@@ -126,6 +127,7 @@ export class ConfigManager {
         defaultTheme: config.settings?.defaultTheme || this.defaultConfig.settings.defaultTheme,
         defaultView: config.settings?.defaultView || this.defaultConfig.settings.defaultView,
         defaultGridDensity: config.settings?.defaultGridDensity || this.defaultConfig.settings.defaultGridDensity,
+        defaultModelView: config.settings?.defaultModelView || this.defaultConfig.settings.defaultModelView,
         autoSave: config.settings?.autoSave !== undefined ? config.settings.autoSave : this.defaultConfig.settings.autoSave,
         modelDirectory: config.settings?.modelDirectory || this.defaultConfig.settings.modelDirectory,
         exportDirectory: config.settings?.exportDirectory || this.defaultConfig.settings.exportDirectory
