@@ -224,7 +224,8 @@ export function calculateSpaceSavings(duplicateGroups: DuplicateGroup[]): string
 
   duplicateGroups.forEach(group => {
     if (group.models.length > 1) {
-      const singleFileSize = parseFileSize(group.models[0].fileSize);
+      const fileSize = group.models[0]?.fileSize;
+      const singleFileSize = parseFileSize(fileSize);
       const duplicateFiles = group.models.length - 1;
       totalSavings += singleFileSize * duplicateFiles;
     }
@@ -236,7 +237,8 @@ export function calculateSpaceSavings(duplicateGroups: DuplicateGroup[]): string
 /**
  * Parse file size string to bytes
  */
-function parseFileSize(sizeStr: string): number {
+function parseFileSize(sizeStr: string | undefined | null): number {
+  if (!sizeStr || typeof sizeStr !== 'string') return 0;
   const size = parseFloat(sizeStr.replace(/[^\d.]/g, ''));
   if (sizeStr.includes('GB')) return size * 1024 * 1024 * 1024;
   if (sizeStr.includes('MB')) return size * 1024 * 1024;

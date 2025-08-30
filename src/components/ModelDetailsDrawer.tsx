@@ -55,8 +55,15 @@ export function ModelDetailsDrawer({
   if (!model) return null;
 
   // Combine thumbnail with additional images for gallery view
-  const allImages = [model.thumbnail, ...model.images];
+  const safeImages = Array.isArray(model.images) ? model.images : [];
+  const allImages = [model.thumbnail, ...safeImages];
   const currentModel = editedModel || model;
+  // Defensive: ensure printSettings is always an object with string fields
+  const safePrintSettings = {
+    layerHeight: currentModel.printSettings?.layerHeight || '',
+    infill: currentModel.printSettings?.infill || '',
+    supports: currentModel.printSettings?.supports || ''
+  };
 
   const startEditing = () => {
     setEditedModel({ ...model });
@@ -569,7 +576,7 @@ export function ModelDetailsDrawer({
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Layer Height</p>
-                  <p className="font-semibold text-foreground">{currentModel.printSettings.layerHeight}</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.layerHeight}</p>
                 </div>
               </div>
 
@@ -579,7 +586,7 @@ export function ModelDetailsDrawer({
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Infill</p>
-                  <p className="font-semibold text-foreground">{currentModel.printSettings.infill}</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.infill}</p>
                 </div>
               </div>
 
@@ -589,7 +596,7 @@ export function ModelDetailsDrawer({
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Supports</p>
-                  <p className="font-semibold text-foreground">{currentModel.printSettings.supports}</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.supports}</p>
                 </div>
               </div>
             </div>
@@ -600,7 +607,7 @@ export function ModelDetailsDrawer({
           {/* Tags Display */}
           <div className="space-y-4">
             <h3 className="font-semibold text-lg text-card-foreground">Tags</h3>
-            {currentModel.tags.length > 0 ? (
+            {Array.isArray(currentModel.tags) && currentModel.tags.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {currentModel.tags.map((tag, index) => (
                   <Badge key={`${tag}-${index}`} variant="secondary" className="text-sm">

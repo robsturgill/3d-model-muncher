@@ -32,6 +32,20 @@ function bytesToMB(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+// Utility to compute MD5 hash from a file path or buffer
+export function computeMD5(input: string | Buffer | Uint8Array): string {
+  const crypto = require('crypto');
+  let buffer: Buffer | Uint8Array;
+  if (typeof input === 'string') {
+    // input is a file path
+    const fs = require('fs');
+    buffer = fs.readFileSync(input);
+  } else {
+    buffer = input;
+  }
+  return crypto.createHash('md5').update(buffer).digest('hex');
+}
+
 export async function parse3MF(filePath: string, id: number): Promise<ModelMetadata> {
   const buffer = fs.readFileSync(filePath);
   const size = fs.statSync(filePath).size;
@@ -93,9 +107,7 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
     }
 
     // ---- MD5 HASH ----
-    const crypto = await import("crypto");
-    const hash = crypto.createHash("md5").update(buffer).digest("hex");
-    metadata.hash = hash;
+    metadata.hash = computeMD5(buffer);
 
     // ---- THUMBNAIL SELECTION ----
     if (unzipped["Metadata/plate_1.png"]) {

@@ -140,19 +140,21 @@ export function SettingsPage({
     const tagMap = new Map<string, TagInfo>();
     
     models.forEach(model => {
-      model.tags.forEach(tag => {
-        if (tagMap.has(tag)) {
-          const existingTag = tagMap.get(tag)!;
-          existingTag.count++;
-          existingTag.models.push(model);
-        } else {
-          tagMap.set(tag, {
-            name: tag,
-            count: 1,
-            models: [model]
-          });
-        }
-      });
+      if (Array.isArray(model.tags)) {
+        model.tags.forEach(tag => {
+          if (tagMap.has(tag)) {
+            const existingTag = tagMap.get(tag)!;
+            existingTag.count++;
+            existingTag.models.push(model);
+          } else {
+            tagMap.set(tag, {
+              name: tag,
+              count: 1,
+              models: [model]
+            });
+          }
+        });
+      }
     });
 
     const tags = Array.from(tagMap.values());
@@ -365,43 +367,81 @@ export function SettingsPage({
   const handleRunHashCheck = async () => {
     setIsHashChecking(true);
     setHashCheckProgress(0);
-    setStatusMessage('Scanning model files...');
+    setStatusMessage('Rescanning .3mf files and comparing hashes...');
     try {
-      const total = models.length;
-      let completed = 0;
-      const updatedModels: Model[] = [];
+      const resp = await fetch('http://localhost:3001/api/hash-check');
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Hash check failed');
+      // Map backend results to UIHashCheckResult
       let verified = 0;
       let corrupted = 0;
       const corruptedFiles: any[] = [];
-      for (const model of models) {
-        // eslint-disable-next-line no-await-in-loop
-        const scanned = await scanModelFile(model);
-        const merged = { ...model, ...scanned };
-        updatedModels.push(merged);
-        // Determine if corrupted (simulate: hash === 'CORRUPTED' or 'ERROR')
-        if (merged.hash === 'CORRUPTED' || merged.hash === 'ERROR') {
-          corrupted++;
-          corruptedFiles.push({ ...merged, error: merged.hash });
-        } else {
+      const duplicateGroups: any[] = [];
+      const hashToModels: Record<string, any[]> = {};
+      const updatedModels: any[] = [];
+      // Default Model shape for missing fields
+      const defaultModel = {
+        id: '',
+        name: '',
+        thumbnail: '',
+        images: [],
+        tags: [],
+        isPrinted: false,
+        printTime: '',
+        filamentUsed: '',
+        category: '',
+        description: '',
+        fileSize: '',
+        modelUrl: '',
+        license: '',
+        notes: '',
+        printSettings: { layerHeight: '', infill: '', supports: '' },
+        hash: '',
+        lastScanned: ''
+      };
+      for (const r of data.results) {
+        // Try to find the full model in the current models array for images/thumbnails
+        const fullModel = models.find(m => m.name === r.baseName || m.modelUrl.endsWith(r.threeMF || ''));
+        const mergedModel = {
+          ...defaultModel,
+          ...fullModel,
+          name: r.baseName,
+          modelUrl: r.threeMF ? `/models/${r.threeMF}` : '',
+          hash: r.hash,
+          status: r.status
+        };
+        if (r.status === 'ok') {
           verified++;
+        } else {
+          corrupted++;
+          corruptedFiles.push({
+            ...mergedModel,
+            error: r.details,
+            storedHash: r.storedHash
+          });
         }
-        completed++;
-        setHashCheckProgress(Math.round((completed / total) * 100));
+        if (r.hash) {
+          if (!hashToModels[r.hash]) hashToModels[r.hash] = [];
+          hashToModels[r.hash].push(mergedModel);
+        }
+        updatedModels.push(mergedModel);
       }
       // Find duplicate groups
-      const duplicateGroups = findDuplicates(updatedModels);
+      for (const hash in hashToModels) {
+        if (hashToModels[hash].length > 1) {
+          duplicateGroups.push({ hash, models: hashToModels[hash], totalSize: '0' });
+        }
+      }
       setDuplicateGroups(duplicateGroups);
-      // Compose HashCheckResult for UI
-      const hashCheckResult = {
+      setHashCheckResult({
         verified,
         corrupted,
         duplicateGroups,
-        corruptedFiles,
-      };
-      setHashCheckResult(hashCheckResult as any);
+        corruptedFiles
+      });
       onModelsUpdate(updatedModels);
       setSaveStatus('saved');
-      setStatusMessage('Model files scanned and updated.');
+      setStatusMessage('Hash check complete. See results below.');
       setTimeout(() => {
         setSaveStatus('idle');
         setStatusMessage('');
@@ -971,8 +1011,8 @@ export function SettingsPage({
                           </CardHeader>
                           <CardContent>
                             <div className="space-y-2">
-                              {hashCheckResult.corruptedFiles.map((file) => (
-                                <div key={file.id} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                              {hashCheckResult.corruptedFiles.map((file, idx) => (
+                                <div key={file.id || file.name || idx} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
                                   <div>
                                     <p className="font-medium text-red-900 dark:text-red-100">{file.name}</p>
                                     <p className="text-sm text-red-600 dark:text-red-400">{file.error}</p>
@@ -1032,7 +1072,7 @@ export function SettingsPage({
 
                       <div className="space-y-3">
                         {duplicateGroups.map((group, index) => (
-                          <Card key={group.hash}>
+                          <Card key={group.hash || index}>
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between mb-3">
                                 <h4 className="font-medium">Duplicate Group {index + 1}</h4>
@@ -1040,13 +1080,14 @@ export function SettingsPage({
                               </div>
                               
                               <div className="space-y-2">
-                                {group.models.map((model) => (
-                                  <div key={model.id} className="flex items-center justify-between p-2 bg-muted rounded">
+                                {group.models.map((model, idx) => (
+                                  <div key={model.id || idx} className="flex items-center justify-between p-2 bg-muted rounded">
                                     <div className="flex items-center gap-3">
                                       <img
-                                        src={model.thumbnail}
-                                        alt={model.name}
+                                        src={model.thumbnail || '/placeholder.png'}
+                                        alt={model.name || 'Model thumbnail'}
                                         className="w-10 h-10 object-cover rounded border"
+                                        onError={e => { e.currentTarget.src = '/placeholder.png'; }}
                                       />
                                       <div>
                                         <p className="font-medium">{model.name}</p>
@@ -1067,10 +1108,13 @@ export function SettingsPage({
                               <div className="flex justify-end mt-3">
                                 <Dialog>
                                   <DialogTrigger asChild>
-                                    <Button variant="outline" size="sm" className="gap-2">
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive border bg-background text-foreground hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5"
+                                    >
                                       <Trash2 className="h-4 w-4" />
                                       Remove Duplicates
-                                    </Button>
+                                    </button>
                                   </DialogTrigger>
                                   <DialogContent>
                                     <DialogHeader>
@@ -1080,8 +1124,8 @@ export function SettingsPage({
                                       </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-2">
-                                      {group.models.map((model) => (
-                                        <div key={model.id} className="flex items-center justify-between p-3 border rounded">
+                                      {group.models.map((model, idx) => (
+                                        <div key={model.id || idx} className="flex items-center justify-between p-3 border rounded">
                                           <div className="flex items-center gap-3">
                                             <img
                                               src={model.thumbnail}

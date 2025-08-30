@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.computeMD5 = computeMD5;
 exports.parse3MF = parse3MF;
 exports.scanDirectory = scanDirectory;
 const fs = require("fs");
@@ -8,6 +9,20 @@ const fflate_1 = require("fflate");
 const fast_xml_parser_1 = require("fast-xml-parser");
 function bytesToMB(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+// Utility to compute MD5 hash from a file path or buffer
+function computeMD5(input) {
+    const crypto = require('crypto');
+    let buffer;
+    if (typeof input === 'string') {
+        // input is a file path
+        const fs = require('fs');
+        buffer = fs.readFileSync(input);
+    }
+    else {
+        buffer = input;
+    }
+    return crypto.createHash('md5').update(buffer).digest('hex');
 }
 async function parse3MF(filePath, id) {
     const buffer = fs.readFileSync(filePath);
@@ -65,9 +80,7 @@ async function parse3MF(filePath, id) {
             }
         }
         // ---- MD5 HASH ----
-        const crypto = await Promise.resolve().then(() => require("crypto"));
-        const hash = crypto.createHash("md5").update(buffer).digest("hex");
-        metadata.hash = hash;
+        metadata.hash = computeMD5(buffer);
         // ---- THUMBNAIL SELECTION ----
         if (unzipped["Metadata/plate_1.png"]) {
             const b64 = Buffer.from(unzipped["Metadata/plate_1.png"]).toString("base64");

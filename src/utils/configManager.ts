@@ -33,17 +33,47 @@ export class ConfigManager {
    * Load configuration from localStorage (fallback) or return default config
    */
   static loadConfig(): AppConfig {
-    try {
-      const storedConfig = localStorage.getItem('3d-model-muncher-config');
-      if (storedConfig) {
-        const parsed = JSON.parse(storedConfig);
-        return this.validateConfig(parsed);
+    const isNode = typeof window === 'undefined';
+    if (isNode) {
+      // Node.js: use fs
+      try {
+        // @ts-ignore
+        const fs = require('fs');
+        // @ts-ignore
+        const path = require('path');
+        let configPath = path.join(__dirname, '../config/default-config.json');
+        if (!fs.existsSync(configPath)) {
+          // fallback to src/config if not found in dist-backend/config
+          configPath = path.join(process.cwd(), 'src/config/default-config.json');
+        }
+        return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to load config from file:', e);
+        return {} as AppConfig;
       }
-    } catch (error) {
-      console.warn('Failed to load config from localStorage:', error);
+    } else {
+      // Browser: use localStorage
+      try {
+        const storedConfig = localStorage.getItem('3d-model-muncher-config');
+        if (storedConfig) {
+          const parsed = JSON.parse(storedConfig);
+          return this.validateConfig(parsed);
+        }
+      } catch (error) {
+        console.warn('Failed to load config from localStorage:', error);
+      }
+      try {
+        const stored = localStorage.getItem('appConfig');
+        if (stored) {
+          return JSON.parse(stored);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to load config from localStorage:', e);
+      }
+      return {} as AppConfig;
     }
-    
-    return { ...this.defaultConfig };
   }
 
   /**
