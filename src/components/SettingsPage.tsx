@@ -456,24 +456,60 @@ export function SettingsPage({
     }
   };
 
-  const handleRemoveDuplicates = (group: DuplicateGroup, keepModelId: string) => {
-    const updatedModels = removeDuplicates(models, group, keepModelId);
-    onModelsUpdate(updatedModels);
-    
-    // Update duplicate groups
-    const updatedGroups = duplicateGroups.filter(g => g.hash !== group.hash);
-    setDuplicateGroups(updatedGroups);
-    setSelectedDuplicateGroup(null);
-    setIsRemoveDuplicateDialogOpen(false);
-    
-    const removedCount = group.models.length - 1;
-    setSaveStatus('saved');
-    setStatusMessage(`Removed ${removedCount} duplicate file${removedCount > 1 ? 's' : ''}`);
-    
-    setTimeout(() => {
-      setSaveStatus('idle');
-      setStatusMessage('');
-    }, 3000);
+  const handleRemoveDuplicates = async (group: DuplicateGroup, keepModelId: string) => {
+    // Find models to remove (all except the one to keep)
+    const modelsToRemove = group.models.filter(model => model.id !== keepModelId);
+    // Collect .3mf and -munchie.json file names for each
+    const filesToDelete = [];
+    modelsToRemove.forEach(model => {
+      if (model.modelUrl) {
+        // modelUrl is like /models/Foo.3mf
+        const threeMF = model.modelUrl.replace(/^\/models\//, '');
+        filesToDelete.push(threeMF);
+        // Add corresponding -munchie.json
+        const base = threeMF.replace(/\.3mf$/i, '');
+        filesToDelete.push(base + '-munchie.json');
+      }
+    });
+    if (filesToDelete.length === 0) {
+      setSaveStatus('error');
+      setStatusMessage('No files to delete.');
+      return;
+    }
+    setSaveStatus('saving');
+    setStatusMessage('Deleting duplicate files...');
+    try {
+      const resp = await fetch('http://localhost:3001/api/delete-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: filesToDelete })
+      });
+      const data = await resp.json();
+      if (!data.success) {
+        setSaveStatus('error');
+        setStatusMessage('Failed to delete some files: ' + (data.errors?.map(e => e.file).join(', ') || 'Unknown error'));
+        return;
+      }
+      // Remove from UI
+      const updatedModels = removeDuplicates(models, group, keepModelId);
+      onModelsUpdate(updatedModels);
+      // Update duplicate groups
+      const updatedGroups = duplicateGroups.filter(g => g.hash !== group.hash);
+      setDuplicateGroups(updatedGroups);
+      setSelectedDuplicateGroup(null);
+      setIsRemoveDuplicateDialogOpen(false);
+      const removedCount = group.models.length - 1;
+      setSaveStatus('saved');
+      setStatusMessage(`Removed ${removedCount} duplicate file${removedCount > 1 ? 's' : ''}`);
+      setTimeout(() => {
+        setSaveStatus('idle');
+        setStatusMessage('');
+      }, 3000);
+    } catch (error) {
+      setSaveStatus('error');
+      setStatusMessage('Failed to delete files.');
+      console.error('Delete files error:', error);
+    }
   };
 
   const getTagStats = () => {

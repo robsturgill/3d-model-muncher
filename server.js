@@ -172,6 +172,28 @@ app.get('/api/hash-check', async (req, res) => {
   }
 });
 
+app.post('/api/delete-models', (req, res) => {
+  const { files } = req.body; // array of file paths relative to models dir
+  if (!Array.isArray(files)) {
+    return res.status(400).json({ success: false, error: 'No files provided' });
+  }
+  const modelsDir = path.join(__dirname, 'models');
+  let deleted = [];
+  let errors = [];
+  files.forEach(file => {
+    const filePath = path.join(modelsDir, file);
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        deleted.push(file);
+      }
+    } catch (err) {
+      errors.push({ file, error: err.message });
+    }
+  });
+  res.json({ success: errors.length === 0, deleted, errors });
+});
+
 app.listen(PORT, () => {
   console.log(`3D Model Muncher backend API running on port ${PORT}`);
 });
