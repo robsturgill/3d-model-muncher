@@ -309,15 +309,22 @@ function AppContent() {
 
   const handleRefreshModels = async () => {
     setIsRefreshing(true);
-    
     try {
       toast("Scanning model files...", {
-        description: "Checking for changes and updating metadata"
+        description: "Checking for new files and updating metadata"
       });
 
-      // Simulate scanning each model file
+      // 1. Get all *-munchie.json files in models/ directory
+      // This requires a backend API endpoint to list files, but for now, we'll fetch from the backend
+      const response = await fetch('http://localhost:3001/api/models');
+      if (!response.ok) {
+        throw new Error('Failed to fetch models');
+      }
+      const loadedModels = await response.json();
+
+      // 2. Scan each model file for updated metadata
       const updatedModels = await Promise.all(
-        models.map(async (model) => {
+        loadedModels.map(async (model: Model) => {
           const scannedData = await scanModelFile(model);
           return { ...model, ...scannedData };
         })
@@ -327,7 +334,7 @@ function AppContent() {
       setFilteredModels(updatedModels);
 
       toast("Models refreshed successfully", {
-        description: `Updated ${updatedModels.length} model files`
+        description: `Found and updated ${updatedModels.length} model files`
       });
     } catch (error) {
       console.error('Failed to refresh models:', error);
