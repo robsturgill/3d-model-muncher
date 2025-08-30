@@ -53,8 +53,8 @@
             "vaul": "^1.1.2"
       },
       "devDependencies": {
-                  "@react-three/drei": "^9.86.7",
-                  "@react-three/fiber": "^8.13.7",
+            "@react-three/drei": "^9.86.7",
+            "@react-three/fiber": "^8.13.7",
             "@types/node": "^20.10.0",
             "@types/react": "^19.1.12",
             "@types/react-dom": "^19.1.9",
