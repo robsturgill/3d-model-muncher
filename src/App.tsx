@@ -18,43 +18,16 @@ import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner@2.0.3";
 
-// Mock data for 3D printing models
-const mockModels: Model[] = [
-    {
-    id: "1",
-    name: "Dragon Miniature",
-    thumbnail: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=300&fit=crop",
-    images: [
-      "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=600&h=400&fit=crop",
-      "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=600&h=400&fit=crop",
-      "https://images.unsplash.com/photo-1632207691143-643e2a9a9361?w=600&h=400&fit=crop"
-    ],
-    tags: ["Miniature", "Fantasy", "Dragon"],
-    isPrinted: true,
-    printTime: "4h 30m",
-    filamentUsed: "125g",
-    category: "Miniatures",
-    description: "Detailed dragon miniature perfect for tabletop gaming. High detail model with intricate scales and wings.",
-    fileSize: "45.2 MB",
-    modelUrl: "/models/dragon_miniature.3mf",
-    license: "Creative Commons - Attribution",
-    notes: "Printed with 0.2mm layers using PLA+. Had to add supports for the wings. Consider scaling up to 150% for better detail visibility.",
-    source: "https://www.thingiverse.com/thing:123456",
-    price: 15.99,
-    printSettings: {
-      layerHeight: "0.2mm",
-      infill: "15%",
-      supports: "Yes"
-    }
-  }
-]
+// Function to load model data from JSON files
+// Initial type for view
+type ViewType = 'models' | 'settings' | 'demo';
 
 type ViewType = 'models' | 'settings' | 'demo';
 
 function AppContent() {
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
-  const [models, setModels] = useState<Model[]>(mockModels);
-  const [filteredModels, setFilteredModels] = useState<Model[]>(mockModels);
+  const [models, setModels] = useState<Model[]>([]);
+  const [filteredModels, setFilteredModels] = useState<Model[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [currentView, setCurrentView] = useState<ViewType>('models');
@@ -70,19 +43,32 @@ function AppContent() {
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
 
-  // Load configuration on app startup
+  // Load configuration and models on app startup
   useEffect(() => {
-    try {
-      const config = ConfigManager.loadConfig();
-      setAppConfig(config);
-      setCategories(config.categories);
-    } catch (error) {
-      console.error('Failed to load configuration:', error);
-      // Use default categories if config fails to load
-      const defaultConfig = ConfigManager.getDefaultConfig();
-      setAppConfig(defaultConfig);
-      setCategories(defaultConfig.categories);
+    async function loadInitialData() {
+      try {
+        const config = ConfigManager.loadConfig();
+        setAppConfig(config);
+        setCategories(config.categories);
+
+        // Load models from the backend API
+        const response = await fetch('http://localhost:3001/api/models');
+        if (!response.ok) {
+          throw new Error('Failed to fetch models');
+        }
+        const loadedModels = await response.json();
+        setModels(loadedModels);
+        setFilteredModels(loadedModels);
+      } catch (error) {
+        console.error('Failed to load configuration or models:', error);
+        // Use default categories if config fails to load
+        const defaultConfig = ConfigManager.getDefaultConfig();
+        setAppConfig(defaultConfig);
+        setCategories(defaultConfig.categories);
+      }
     }
+
+    loadInitialData();
   }, []);
 
   const handleModelClick = (model: Model) => {

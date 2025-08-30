@@ -9,7 +9,7 @@ const fast_xml_parser_1 = require("fast-xml-parser");
 function bytesToMB(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
-function parse3MF(filePath, id) {
+async function parse3MF(filePath, id) {
     const buffer = fs.readFileSync(filePath);
     const size = fs.statSync(filePath).size;
     const metadata = {
@@ -27,7 +27,7 @@ function parse3MF(filePath, id) {
         modelUrl: `/models/${path.basename(filePath)}`,
         license: "",
         notes: "",
-        source: "",
+        hash: "",
         printSettings: {
             layerHeight: "",
             infill: "",
@@ -64,6 +64,10 @@ function parse3MF(filePath, id) {
                 }
             }
         }
+        // ---- MD5 HASH ----
+        const crypto = await Promise.resolve().then(() => require("crypto"));
+        const hash = crypto.createHash("md5").update(buffer).digest("hex");
+        metadata.hash = hash;
         // ---- THUMBNAIL SELECTION ----
         if (unzipped["Metadata/plate_1.png"]) {
             const b64 = Buffer.from(unzipped["Metadata/plate_1.png"]).toString("base64");
@@ -86,9 +90,9 @@ function parse3MF(filePath, id) {
     }
     return metadata;
 }
-function scanDirectory(dir) {
+async function scanDirectory(dir) {
     let idCounter = 1;
-    function recurse(currentDir) {
+    async function recurse(currentDir) {
         console.log(`Scanning: ${currentDir}`);
         const entries = fs.readdirSync(currentDir, { withFileTypes: true });
         for (const entry of entries) {
@@ -99,7 +103,7 @@ function scanDirectory(dir) {
             else if (entry.isFile()) {
                 if (entry.name.endsWith(".3mf")) {
                     console.log(`Parsing 3MF: ${fullPath}`);
-                    const metadata = parse3MF(fullPath, idCounter++);
+                    const metadata = await parse3MF(fullPath, idCounter++);
                     const outPath = fullPath.replace(/\.3mf$/, "-munchie.json");
                     fs.writeFileSync(outPath, JSON.stringify(metadata, null, 2), "utf-8");
                     console.log(`✅ Created JSON for: ${outPath}`);

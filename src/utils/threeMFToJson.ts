@@ -24,7 +24,7 @@ interface ModelMetadata {
   modelUrl: string;
   license: string;
   notes: string;
-  source: string;
+  hash: string;
   printSettings: PrintSettings;
 }
 
@@ -32,7 +32,7 @@ function bytesToMB(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-export function parse3MF(filePath: string, id: number): ModelMetadata {
+export async function parse3MF(filePath: string, id: number): Promise<ModelMetadata> {
   const buffer = fs.readFileSync(filePath);
   const size = fs.statSync(filePath).size;
 
@@ -51,7 +51,7 @@ export function parse3MF(filePath: string, id: number): ModelMetadata {
     modelUrl: `/models/${path.basename(filePath)}`,
     license: "",
     notes: "",
-    source: "",
+    hash: "",
     printSettings: {
       layerHeight: "",
       infill: "",
@@ -92,6 +92,11 @@ export function parse3MF(filePath: string, id: number): ModelMetadata {
       }
     }
 
+    // ---- MD5 HASH ----
+    const crypto = await import("crypto");
+    const hash = crypto.createHash("md5").update(buffer).digest("hex");
+    metadata.hash = hash;
+
     // ---- THUMBNAIL SELECTION ----
     if (unzipped["Metadata/plate_1.png"]) {
       const b64 = Buffer.from(unzipped["Metadata/plate_1.png"]).toString("base64");
@@ -116,10 +121,10 @@ export function parse3MF(filePath: string, id: number): ModelMetadata {
 }
 
 
-export function scanDirectory(dir: string) {
+export async function scanDirectory(dir: string): Promise<void> {
   let idCounter = 1;
 
-  function recurse(currentDir: string) {
+  async function recurse(currentDir: string) {
     console.log(`Scanning: ${currentDir}`);
 
     const entries = fs.readdirSync(currentDir, { withFileTypes: true });
@@ -132,7 +137,7 @@ export function scanDirectory(dir: string) {
       } else if (entry.isFile()) {
         if (entry.name.endsWith(".3mf")) {
           console.log(`Parsing 3MF: ${fullPath}`);
-          const metadata = parse3MF(fullPath, idCounter++);
+          const metadata = await parse3MF(fullPath, idCounter++);
           const outPath = fullPath.replace(/\.3mf$/, "-munchie.json");
           fs.writeFileSync(outPath, JSON.stringify(metadata, null, 2), "utf-8");
           console.log(`✅ Created JSON for: ${outPath}`);
