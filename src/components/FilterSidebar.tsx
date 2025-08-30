@@ -150,7 +150,12 @@ export function FilterSidebar({
                 <Box className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h2 className="font-semibold text-white text-lg tracking-tight">3D Model Muncher</h2>
+                <h2
+                  className="font-semibold text-white text-lg tracking-tight cursor-pointer hover:underline"
+                  onClick={() => window.location.pathname = "/"}
+                >
+                  3D Model Muncher
+                </h2>
                 <p className="text-xs text-white/80 font-medium">Organize & Print</p>
               </div>
             </div>
