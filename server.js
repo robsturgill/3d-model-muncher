@@ -1,3 +1,4 @@
+// API endpoint to save a model to its munchie.json file
 // Simple Express server for 3D Model Muncher backend API
 const express = require('express');
 const cors = require('cors');
@@ -6,11 +7,36 @@ const fs = require('fs');
 const { scanDirectory } = require('./dist-backend/utils/threeMFToJson');
 const { ConfigManager } = require('./dist-backend/utils/configManager');
 
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '25mb' })); // Increased limit for large model payloads
+
+// API endpoint to save a model to its munchie.json file
+app.post('/api/save-model', (req, res) => {
+  const { filePath, id, ...changes } = req.body;
+  console.log('Save model request:', { filePath, changes });
+  if (!filePath) {
+    return res.status(400).json({ success: false, error: 'No filePath provided' });
+  }
+  try {
+    // Load existing model JSON
+    let existing = {};
+    if (fs.existsSync(filePath)) {
+      existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+    // Merge changes
+    const updated = { ...existing, ...changes };
+    fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8');
+    console.log('Model updated and saved to:', filePath);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving model:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // API endpoint to get all model data
 app.get('/api/models', async (req, res) => {

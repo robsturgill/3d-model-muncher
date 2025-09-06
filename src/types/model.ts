@@ -1,4 +1,5 @@
 export interface Model {
+  filePath: string;
   id: string;
   name: string;
   thumbnail: string;

@@ -48,7 +48,7 @@ async function parse3MF(filePath, id) {
             infill: "",
             supports: ""
         },
-        price: ""
+        price: null
     };
     try {
         const unzipped = (0, fflate_1.unzipSync)(new Uint8Array(buffer));

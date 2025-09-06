@@ -1,4 +1,5 @@
 import { useState, KeyboardEvent, useEffect } from "react";
+// Remove Node.js fs import; use backend API instead
 import { Model } from "../types/model";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "./ui/sheet";
 import { Badge } from "./ui/badge";
@@ -66,7 +67,19 @@ export function ModelDetailsDrawer({
   };
 
   const startEditing = () => {
-    setEditedModel({ ...model });
+    // Ensure filePath is present for saving
+    let filePath = model.filePath;
+    if (!filePath) {
+      // Try to reconstruct from modelUrl or name
+      const modelsDir = 'C:\\Users\\robst\\dev\\3d-model-muncher\\models';
+      let fileName = model.modelUrl?.replace('/models/', '') || `${model.name}-munchie.json`;
+      // If fileName doesn't end with -munchie.json, add it
+      if (!fileName.endsWith('-munchie.json')) {
+        fileName = `${model.name}-munchie.json`;
+      }
+      filePath = `${modelsDir}\\${fileName}`;
+    }
+    setEditedModel({ ...model, filePath });
     setIsEditing(true);
   };
 
@@ -76,9 +89,41 @@ export function ModelDetailsDrawer({
     setNewTag("");
   };
 
-  const saveChanges = () => {
+  // Helper to send only changed fields to backend
+  const saveModelToFile = async (edited: Model, original: Model) => {
+    if (!edited.filePath) {
+      console.error("No filePath specified for model");
+      return;
+    }
+    // Compute changed fields
+    const changes: any = { filePath: edited.filePath, id: edited.id };
+    Object.keys(edited).forEach(key => {
+      if (key === 'filePath' || key === 'id') return;
+      const editedValue = JSON.stringify((edited as any)[key]);
+      const originalValue = JSON.stringify((original as any)[key]);
+      if (editedValue !== originalValue) {
+        changes[key] = (edited as any)[key];
+      }
+    });
+    try {
+      const response = await fetch('http://localhost:3001/api/save-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes)
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save model');
+      }
+    } catch (err) {
+      console.error("Failed to save model to file:", err);
+    }
+  };
+
+  const saveChanges = async () => {
     if (editedModel) {
       onModelUpdate(editedModel);
+      await saveModelToFile(editedModel, model); // Only send changed fields
       setIsEditing(false);
       setEditedModel(null);
       setNewTag("");
@@ -327,7 +372,7 @@ export function ModelDetailsDrawer({
                     <Label htmlFor="edit-category">Category</Label>
                     <Select
                       value={editedModel?.category || ""}
-                      onValueChange={(value) => setEditedModel(prev => prev ? { ...prev, category: value } : null)}
+                      onValueChange={(value: string) => setEditedModel(prev => prev ? { ...prev, category: value } : null)}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -358,7 +403,7 @@ export function ModelDetailsDrawer({
                     <Label htmlFor="edit-license">License</Label>
                     <Select
                       value={editedModel?.license || ""}
-                      onValueChange={(value) => setEditedModel(prev => prev ? { ...prev, license: value } : null)}
+                      onValueChange={(value: string) => setEditedModel(prev => prev ? { ...prev, license: value } : null)}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -386,8 +431,14 @@ export function ModelDetailsDrawer({
                         step="0.01"
                         min="0"
                         placeholder="0.00"
-                        value={editedModel?.price || ""}
-                        onChange={(e) => setEditedModel(prev => prev ? { ...prev, price: e.target.value ? parseFloat(e.target.value) : undefined } : null)}
+                        value={editedModel?.price ?? ""}
+                        onChange={(e) =>
+                          setEditedModel(prev =>
+                            prev
+                              ? { ...prev, price: e.target.value === "" ? 0 : parseFloat(e.target.value) }
+                              : null
+                          )
+                        }
                         className="pl-9"
                       />
                     </div>
@@ -397,7 +448,7 @@ export function ModelDetailsDrawer({
                 <div className="flex items-center space-x-3">
                   <Switch
                     checked={editedModel?.isPrinted || false}
-                    onCheckedChange={(checked) => setEditedModel(prev => prev ? { ...prev, isPrinted: checked } : null)}
+                    onCheckedChange={(checked: boolean) => setEditedModel(prev => prev ? { ...prev, isPrinted: checked } : null)}
                     id="edit-printed"
                   />
                   <Label htmlFor="edit-printed">Mark as printed</Label>
