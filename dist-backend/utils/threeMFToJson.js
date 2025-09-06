@@ -47,7 +47,8 @@ async function parse3MF(filePath, id) {
             layerHeight: "",
             infill: "",
             supports: ""
-        }
+        },
+        price: ""
     };
     try {
         const unzipped = (0, fflate_1.unzipSync)(new Uint8Array(buffer));
@@ -118,6 +119,25 @@ async function scanDirectory(dir) {
                     console.log(`Parsing 3MF: ${fullPath}`);
                     const metadata = await parse3MF(fullPath, idCounter++);
                     const outPath = fullPath.replace(/\.3mf$/, "-munchie.json");
+                    // If munchie.json exists, preserve tags, isPrinted, category, notes, price
+                    if (fs.existsSync(outPath)) {
+                        try {
+                            const existing = JSON.parse(fs.readFileSync(outPath, "utf-8"));
+                            if (Array.isArray(existing.tags))
+                                metadata.tags = existing.tags;
+                            if (typeof existing.isPrinted === "boolean")
+                                metadata.isPrinted = existing.isPrinted;
+                            if (typeof existing.category === "string")
+                                metadata.category = existing.category;
+                            if (typeof existing.notes === "string")
+                                metadata.notes = existing.notes;
+                            if (typeof existing.price === "number")
+                                metadata.price = existing.price;
+                        }
+                        catch (e) {
+                            console.warn(`Could not preserve fields from ${outPath}:`, e);
+                        }
+                    }
                     fs.writeFileSync(outPath, JSON.stringify(metadata, null, 2), "utf-8");
                     console.log(`✅ Created JSON for: ${outPath}`);
                 }

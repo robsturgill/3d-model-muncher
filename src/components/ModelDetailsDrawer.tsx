@@ -556,7 +556,7 @@ export function ModelDetailsDrawer({
                     <div className="flex items-center gap-2 text-sm">
                       <DollarSign className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Price:</span>
-                      <span className="font-medium text-foreground">${currentModel.price.toFixed(2)}</span>
+                      <span className="font-medium text-foreground">${currentModel.price}</span>
                     </div>
                   )}
                 </div>
@@ -636,7 +636,7 @@ export function ModelDetailsDrawer({
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Selling Price</p>
-                    <p className="text-2xl font-semibold text-primary">${currentModel.price.toFixed(2)}</p>
+                    <p className="text-2xl font-semibold text-primary">${currentModel.price}</p>
                   </div>
                 </div>
               </div>
