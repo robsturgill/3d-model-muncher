@@ -1,0 +1,12 @@
+version: '3'
+services:
+  3d-model-muncher:
+    build: .
+    container_name: 3d-model-muncher
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./models:/app/models
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
