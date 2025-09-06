@@ -31,8 +31,17 @@ export function ModelCard({
 
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Handle download action
-    console.log('Download model:', model.name);
+    // Determine the file path (assume .3mf for this example)
+    // You may want to adjust this logic if you support multiple formats
+    const fileName = model.name.endsWith('.3mf') ? model.name : `${model.name}.3mf`;
+    const filePath = `/models/${fileName}`;
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = filePath;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (

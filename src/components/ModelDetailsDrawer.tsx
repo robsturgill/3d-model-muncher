@@ -14,6 +14,7 @@ import { AspectRatio } from "./ui/aspect-ratio";
 import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { Clock, Weight, HardDrive, Layers, Droplet, Shield, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign } from "lucide-react";
+import { Download } from "lucide-react";
 
 interface ModelDetailsDrawerProps {
   model: Model | null;
@@ -192,11 +193,30 @@ export function ModelDetailsDrawer({
     }
   };
 
+  // Download handler for model file
+  const handleDownloadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Prefer filePath, fallback to modelUrl or name
+      let fileName = currentModel.filePath
+        ? currentModel.filePath.split(/[/\\]/).pop() || `${currentModel.name}.3mf`
+        : currentModel.modelUrl?.replace('/models/', '') || `${currentModel.name}.3mf`;
+    let filePath = currentModel.filePath
+      ? `/models/${fileName}`
+      : currentModel.modelUrl || `/models/${fileName}`;
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = filePath;
+      link.download = fileName || "model.3mf";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
         {/* Sticky Header during editing */}
-        <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}>
+        <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}> 
           <div className="flex items-start justify-between">
             <div className="space-y-2 flex-1 min-w-0">
               <SheetTitle className="text-2xl font-semibold text-card-foreground pr-4">
@@ -206,8 +226,14 @@ export function ModelDetailsDrawer({
                 {currentModel.category} • {currentModel.isPrinted ? 'Printed' : 'Not Printed'}
               </SheetDescription>
             </div>
-            
+            {/* Download button only in non-editing mode */}
             <div className="flex items-center gap-2 shrink-0">
+              {!isEditing && (
+                <Button onClick={handleDownloadClick} variant="default" size="sm" className="gap-2" title="Download model file">
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
+              )}
               {isEditing ? (
                 <>
                   <Button onClick={saveChanges} size="sm" className="gap-2">
