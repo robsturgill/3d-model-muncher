@@ -14,6 +14,12 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json({ limit: '25mb' })); // Increased limit for large model payloads
 
+// Serve model files from the models directory
+const config = ConfigManager.loadConfig();
+const modelDir = (config.settings && config.settings.modelDirectory) || './models';
+const absoluteModelPath = path.isAbsolute(modelDir) ? modelDir : path.join(process.cwd(), modelDir);
+app.use('/models', express.static(absoluteModelPath));
+
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
   const { filePath, id, ...changes } = req.body;
@@ -46,18 +52,36 @@ app.get('/api/models', async (req, res) => {
     const dir = (config.settings && config.settings.modelDirectory) || './models';
     const absolutePath = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
     
-    // Read all files in the directory
-    const files = fs.readdirSync(absolutePath);
+    let models = [];
     
-    // Filter for JSON files ending with -munchie.json
-    const modelFiles = files.filter(file => file.endsWith('-munchie.json'));
+    // Function to recursively scan directories
+    function scanForModels(directory) {
+      const entries = fs.readdirSync(directory, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        
+        if (entry.isDirectory()) {
+          // Recursively scan subdirectories
+          scanForModels(fullPath);
+        } else if (entry.name.endsWith('-munchie.json')) {
+          // Load and parse each munchie file
+          try {
+            const fileContent = fs.readFileSync(fullPath, 'utf8');
+            const model = JSON.parse(fileContent);
+            // Add relative path information for proper URL construction
+            const relativePath = path.relative(absolutePath, fullPath);
+            model.modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
+            models.push(model);
+          } catch (error) {
+            console.error(`Error reading model file ${fullPath}:`, error);
+          }
+        }
+      }
+    }
     
-    // Load and parse each file
-    const models = modelFiles.map(file => {
-      const filePath = path.join(absolutePath, file);
-      const fileContent = fs.readFileSync(filePath, 'utf8');
-      return JSON.parse(fileContent);
-    });
+    // Start the recursive scan
+    scanForModels(absolutePath);
     
     res.json(models);
   } catch (error) {
@@ -86,27 +110,41 @@ app.post('/api/scan-models', async (req, res) => {
 app.get('/api/munchie-files', (req, res) => {
   const modelsDir = path.join(__dirname, 'models');
   let result = [];
-  try {
-    const files = fs.readdirSync(modelsDir);
-    files.forEach(file => {
-      if (file.toLowerCase().endsWith('-munchie.json')) {
-        const filePath = path.join(modelsDir, file);
-        try {
-          const data = fs.readFileSync(filePath, 'utf8');
-          const json = JSON.parse(data);
-          result.push({
-            fileName: file,
-            hash: json.hash,
-            modelUrl: '/models/' + file
-          });
-        } catch (e) {
-          // skip unreadable or invalid files
+  
+  function scanDirectory(dir) {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scanDirectory(fullPath);
+        } else if (entry.name.toLowerCase().endsWith('-munchie.json')) {
+          try {
+            const data = fs.readFileSync(fullPath, 'utf8');
+            const json = JSON.parse(data);
+            // Get path relative to models directory for the URL
+            const relativePath = path.relative(modelsDir, fullPath);
+            result.push({
+              fileName: entry.name,
+              hash: json.hash,
+              modelUrl: '/models/' + relativePath.replace(/\\/g, '/')
+            });
+          } catch (e) {
+            // skip unreadable or invalid files
+            console.error(`Error reading file ${fullPath}:`, e);
+          }
         }
       }
-    });
-    res.json({ success: true, munchies: result });
+    } catch (e) {
+      console.error(`Error scanning directory ${dir}:`, e);
+    }
+  }
+
+  try {
+    scanDirectory(modelsDir);
+    res.json(result);
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ error: 'Failed to read models directory' });
   }
 });
 
