@@ -193,15 +193,6 @@ export function ModelDetailsDrawer({
     setSelectedImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
   };
 
-  const isValidUrl = (string: string) => {
-    try {
-      new URL(string);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  };
-
   // Download handler for model file
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();

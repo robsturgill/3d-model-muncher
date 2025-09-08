@@ -50,6 +50,5 @@ export interface HashCheckResult {
   duplicateGroups: DuplicateGroup[];
   corruptedFiles: CorruptedFile[];
   corruptedFileDetails: CorruptedFile[];
-  duplicateGroups: DuplicateGroup[];
   lastCheck: string;
 }

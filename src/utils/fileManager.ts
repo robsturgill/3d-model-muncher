@@ -76,7 +76,6 @@ export function scanModelFile(model: Model): Promise<Partial<Model>> {
  * Performs hash check on all models
  */
 export async function performHashCheck(models: Model[]): Promise<HashCheckResult> {
-  const totalFiles = models.length;
   let checkedFiles = 0;
   let corruptedFiles = 0;
   const corruptedFileDetails: CorruptedFile[] = [];
@@ -134,12 +133,12 @@ export async function performHashCheck(models: Model[]): Promise<HashCheckResult
   const duplicateGroups = findDuplicates(updatedModels);
 
   return {
-    totalFiles,
-    checkedFiles,
-    corruptedFiles,
+    corruptedFiles: corruptedFileDetails,
     corruptedFileDetails,
     duplicateGroups,
-    lastCheck: new Date().toISOString()
+    lastCheck: new Date().toISOString(),
+    verified: checkedFiles - corruptedFiles,
+    corrupted: corruptedFiles
   };
 }
 

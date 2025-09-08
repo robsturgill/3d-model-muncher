@@ -72,7 +72,7 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
       infill: "",
       supports: ""
     },
-    price: null
+    price: 0
   };
 
   try {

@@ -16,12 +16,10 @@ import { scanModelFile } from "./utils/fileManager";
 import { Menu, Box, Palette, RefreshCw, CheckSquare, Square, Edit, Trash2, X, Heart } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 // Function to load model data from JSON files
 // Initial type for view
-type ViewType = 'models' | 'settings' | 'demo';
-
 type ViewType = 'models' | 'settings' | 'demo';
 
 function AppContent() {
@@ -680,7 +678,7 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="3d-model-muncher-theme">
+    <ThemeProvider defaultTheme="system">
       <AppContent />
     </ThemeProvider>
   );
