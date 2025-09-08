@@ -1,6 +1,7 @@
 import { AppConfig } from "../types/config";
 
 const CONFIG_FILENAME = "3d-model-muncher-config.json";
+const STORAGE_KEY = "3d-model-muncher-config";
 
 export class ConfigManager {
   private static defaultConfig: AppConfig = {
@@ -29,13 +30,104 @@ export class ConfigManager {
     lastModified: new Date().toISOString()
   };
 
+  private static validateTheme(theme: any): "light" | "dark" | "system" | undefined {
+    return ["light", "dark", "system"].includes(theme) ? theme as "light" | "dark" | "system" : undefined;
+  }
+
+  private static validateView(view: any): "grid" | "list" | undefined {
+    return ["grid", "list"].includes(view) ? view as "grid" | "list" : undefined;
+  }
+
+  private static validateModelView(view: any): "3d" | "images" | undefined {
+    return ["3d", "images"].includes(view) ? view as "3d" | "images" : undefined;
+  }
+
   /**
-   * Load configuration from localStorage (fallback) or return default config
+   * Validate and merge configuration with defaults
+   */
+  private static validateConfig(config: any): AppConfig {
+    const validatedConfig: AppConfig = {
+      version: config?.version || this.defaultConfig.version,
+      categories: Array.isArray(config?.categories) ? config.categories : this.defaultConfig.categories,
+      settings: {
+        defaultTheme: (() => {
+          const theme = config?.settings?.defaultTheme;
+          const validated = this.validateTheme(theme);
+          return validated !== undefined ? validated : this.defaultConfig.settings.defaultTheme;
+        })(),
+        defaultView: (() => {
+          const view = config?.settings?.defaultView;
+          const validated = this.validateView(view);
+          return validated !== undefined ? validated : this.defaultConfig.settings.defaultView;
+        })(),
+        defaultGridDensity: typeof config?.settings?.defaultGridDensity === 'number' && !isNaN(config.settings.defaultGridDensity) 
+          ? config.settings.defaultGridDensity 
+          : this.defaultConfig.settings.defaultGridDensity,
+        defaultModelView: (() => {
+          const modelView = config?.settings?.defaultModelView;
+          const validated = this.validateModelView(modelView);
+          return validated !== undefined ? validated : this.defaultConfig.settings.defaultModelView;
+        })(),
+        autoSave: config?.settings?.autoSave !== undefined && config.settings.autoSave !== null
+          ? Boolean(config.settings.autoSave)
+          : this.defaultConfig.settings.autoSave,
+        modelDirectory: typeof config?.settings?.modelDirectory === 'string' && config.settings.modelDirectory.trim() !== ''
+          ? config.settings.modelDirectory
+          : this.defaultConfig.settings.modelDirectory,
+        exportDirectory: typeof config?.settings?.exportDirectory === 'string' && config.settings.exportDirectory.trim() !== ''
+          ? config.settings.exportDirectory
+          : this.defaultConfig.settings.exportDirectory
+      },
+      filters: {
+        defaultCategory: typeof config?.filters?.defaultCategory === 'string' && config.filters.defaultCategory.trim() !== ''
+          ? config.filters.defaultCategory
+          : this.defaultConfig.filters.defaultCategory,
+        defaultPrintStatus: typeof config?.filters?.defaultPrintStatus === 'string' && config.filters.defaultPrintStatus.trim() !== ''
+          ? config.filters.defaultPrintStatus
+          : this.defaultConfig.filters.defaultPrintStatus,
+        defaultLicense: typeof config?.filters?.defaultLicense === 'string' && config.filters.defaultLicense.trim() !== ''
+          ? config.filters.defaultLicense
+          : this.defaultConfig.filters.defaultLicense
+      },
+      lastModified: config?.lastModified || new Date().toISOString()
+    };
+
+    // Validate categories have required fields
+    validatedConfig.categories = validatedConfig.categories.filter(cat => 
+      cat.id && cat.label && cat.icon
+    );
+
+    // Ensure we have at least the default categories
+    if (validatedConfig.categories.length === 0) {
+      validatedConfig.categories = [...this.defaultConfig.categories];
+    }
+
+    return validatedConfig;
+  }
+
+  /**
+   * Get a copy of the default configuration
+   */
+  static getDefaultConfig(): AppConfig {
+    return JSON.parse(JSON.stringify(this.defaultConfig));
+  }
+
+  /**
+   * Reset configuration to defaults
+   */
+  static resetConfig(): AppConfig {
+    const defaultConfig = this.getDefaultConfig();
+    this.saveConfig(defaultConfig);
+    return defaultConfig;
+  }
+
+  /**
+   * Load configuration from localStorage/file or return default config
    */
   static loadConfig(): AppConfig {
     const isNode = typeof window === 'undefined';
+
     if (isNode) {
-      // Node.js: use fs
       try {
         // @ts-ignore
         const fs = require('fs');
@@ -43,37 +135,39 @@ export class ConfigManager {
         const path = require('path');
         let configPath = path.join(__dirname, '../config/default-config.json');
         if (!fs.existsSync(configPath)) {
-          // fallback to src/config if not found in dist-backend/config
           configPath = path.join(process.cwd(), 'src/config/default-config.json');
         }
-        return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const validated = this.validateConfig(fileConfig);
+        return validated;
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn('Failed to load config from file:', e);
-        return {} as AppConfig;
+        return this.getDefaultConfig();
       }
-    } else {
-      // Browser: use localStorage
-      try {
-        const storedConfig = localStorage.getItem('3d-model-muncher-config');
-        if (storedConfig) {
-          const parsed = JSON.parse(storedConfig);
-          return this.validateConfig(parsed);
-        }
-      } catch (error) {
-        console.warn('Failed to load config from localStorage:', error);
-      }
-      try {
-        const stored = localStorage.getItem('appConfig');
-        if (stored) {
-          return JSON.parse(stored);
-        }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Failed to load config from localStorage:', e);
-      }
-      return {} as AppConfig;
     }
+
+    try {
+      const storedConfig = localStorage.getItem(STORAGE_KEY);
+      
+      if (storedConfig) {
+        try {
+          const parsed = JSON.parse(storedConfig);
+          const validatedConfig = this.validateConfig(parsed);
+          return validatedConfig;
+        } catch (parseError) {
+          console.warn('Failed to parse stored config, using default:', parseError);
+          const defaultConfig = this.getDefaultConfig();
+          this.saveConfig(defaultConfig); // Reset corrupt storage
+          return defaultConfig;
+        }
+      }
+      
+    } catch (error) {
+      console.warn('Failed to load config from localStorage:', error);
+    }
+    
+    const defaultConfig = this.getDefaultConfig();
+    return defaultConfig;
   }
 
   /**
@@ -81,42 +175,13 @@ export class ConfigManager {
    */
   static saveConfig(config: AppConfig): void {
     try {
-      const configToSave = {
-        ...config,
-        lastModified: new Date().toISOString()
-      };
-      localStorage.setItem('3d-model-muncher-config', JSON.stringify(configToSave, null, 2));
+      const validatedConfig = this.validateConfig(config);
+
+      const jsonString = JSON.stringify(validatedConfig, null, 2);
+      localStorage.setItem(STORAGE_KEY, jsonString);
     } catch (error) {
       console.error('Failed to save config to localStorage:', error);
-      throw new Error('Failed to save configuration');
-    }
-  }
-
-  /**
-   * Export configuration as downloadable JSON file
-   */
-  static exportConfig(config: AppConfig): void {
-    try {
-      const configToExport = {
-        ...config,
-        lastModified: new Date().toISOString()
-      };
-      
-      const blob = new Blob([JSON.stringify(configToExport, null, 2)], {
-        type: 'application/json'
-      });
-      
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = CONFIG_FILENAME;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to export config:', error);
-      throw new Error('Failed to export configuration');
+      throw error;
     }
   }
 
@@ -147,55 +212,60 @@ export class ConfigManager {
   }
 
   /**
-   * Validate and merge configuration with defaults
+   * Export configuration as downloadable JSON file
    */
-  private static validateConfig(config: any): AppConfig {
-    const validatedConfig: AppConfig = {
-      version: config.version || this.defaultConfig.version,
-      categories: Array.isArray(config.categories) ? config.categories : this.defaultConfig.categories,
-      settings: {
-        defaultTheme: config.settings?.defaultTheme || this.defaultConfig.settings.defaultTheme,
-        defaultView: config.settings?.defaultView || this.defaultConfig.settings.defaultView,
-        defaultGridDensity: config.settings?.defaultGridDensity || this.defaultConfig.settings.defaultGridDensity,
-        defaultModelView: config.settings?.defaultModelView || this.defaultConfig.settings.defaultModelView,
-        autoSave: config.settings?.autoSave !== undefined ? config.settings.autoSave : this.defaultConfig.settings.autoSave,
-        modelDirectory: config.settings?.modelDirectory || this.defaultConfig.settings.modelDirectory,
-        exportDirectory: config.settings?.exportDirectory || this.defaultConfig.settings.exportDirectory
-      },
-      filters: {
-        defaultCategory: config.filters?.defaultCategory || this.defaultConfig.filters.defaultCategory,
-        defaultPrintStatus: config.filters?.defaultPrintStatus || this.defaultConfig.filters.defaultPrintStatus,
-        defaultLicense: config.filters?.defaultLicense || this.defaultConfig.filters.defaultLicense
-      },
-      lastModified: config.lastModified || new Date().toISOString()
-    };
-
-    // Validate categories have required fields
-    validatedConfig.categories = validatedConfig.categories.filter(cat => 
-      cat.id && cat.label && cat.icon
-    );
-
-    // Ensure we have at least the default categories
-    if (validatedConfig.categories.length === 0) {
-      validatedConfig.categories = [...this.defaultConfig.categories];
+  static exportConfig(config: AppConfig): void {
+    try {
+      const configToExport = this.validateConfig(config);
+      const blob = new Blob([JSON.stringify(configToExport, null, 2)], {
+        type: 'application/json'
+      });
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = CONFIG_FILENAME;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export config:', error);
+      throw error;
     }
-
-    return validatedConfig;
   }
 
   /**
-   * Reset configuration to defaults
+   * Get a setting value from config
    */
-  static resetConfig(): AppConfig {
-    const resetConfig = { ...this.defaultConfig };
-    this.saveConfig(resetConfig);
-    return resetConfig;
+  static getSetting(key: string, defaultValue: any): any {
+    try {
+      const config = this.loadConfig();
+      if (key === "theme") {
+        return config.settings.defaultTheme;
+      }
+      return defaultValue;
+    } catch (error) {
+      console.warn('Failed to get setting:', key, error);
+      return defaultValue;
+    }
   }
 
   /**
-   * Get default configuration
+   * Set a setting value in config
    */
-  static getDefaultConfig(): AppConfig {
-    return { ...this.defaultConfig };
+  static setSetting(key: string, value: any): void {
+    try {
+      const config = this.loadConfig();
+      if (key === "theme") {
+        const validatedTheme = this.validateTheme(value);
+        if (validatedTheme) {
+          config.settings.defaultTheme = validatedTheme;
+          this.saveConfig(config);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to set setting:', key, error);
+    }
   }
 }

@@ -7,9 +7,25 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { useTheme } from "./ThemeProvider";
+import { ConfigManager } from "../utils/configManager";
 
 export function ThemeToggle() {
   const { setTheme, theme } = useTheme();
+
+  const handleThemeChange = (newTheme: "light" | "dark" | "system") => {
+    // Update the theme in the UI
+    setTheme(newTheme);
+
+    // Update the theme in the config
+    const currentConfig = ConfigManager.loadConfig();
+    ConfigManager.saveConfig({
+      ...currentConfig,
+      settings: {
+        ...currentConfig.settings,
+        defaultTheme: newTheme
+      }
+    });
+  };
 
   return (
     <DropdownMenu>
@@ -22,21 +38,21 @@ export function ThemeToggle() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem 
-          onClick={() => setTheme("light")}
+          onClick={() => handleThemeChange("light")}
           className={theme === "light" ? "bg-accent" : ""}
         >
           <Sun className="mr-2 h-4 w-4" />
           <span>Light</span>
         </DropdownMenuItem>
         <DropdownMenuItem 
-          onClick={() => setTheme("dark")}
+          onClick={() => handleThemeChange("dark")}
           className={theme === "dark" ? "bg-accent" : ""}
         >
           <Moon className="mr-2 h-4 w-4" />
           <span>Dark</span>
         </DropdownMenuItem>
         <DropdownMenuItem 
-          onClick={() => setTheme("system")}
+          onClick={() => handleThemeChange("system")}
           className={theme === "system" ? "bg-accent" : ""}
         >
           <Monitor className="mr-2 h-4 w-4" />

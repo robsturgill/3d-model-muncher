@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 // import { scanDirectory } from "../utils/threeMFToJson";
 // ...existing code...
 import { Category } from "../types/category";
@@ -83,9 +83,24 @@ export function SettingsPage({
   onDonationClick
 }: SettingsPageProps) {
   const [localCategories, setLocalCategories] = useState<Category[]>(categories);
-  const [localConfig, setLocalConfig] = useState<AppConfig>(
-    config || ConfigManager.loadConfig()
-  );
+  const [localConfig, setLocalConfig] = useState<AppConfig>(() => {
+    const initialConfig = config || ConfigManager.loadConfig();
+    return initialConfig;
+  });
+
+  // Keep localConfig in sync with parent config prop
+  useEffect(() => {
+    if (config) {
+      setLocalConfig(prevConfig => {
+        // Only update if the configs are different
+        if (JSON.stringify(prevConfig) !== JSON.stringify(config)) {
+          return config;
+        }
+        return prevConfig;
+      });
+    }
+  }, [config]);
+
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -139,22 +154,32 @@ export function SettingsPage({
   const getAllTags = (): TagInfo[] => {
     const tagMap = new Map<string, TagInfo>();
     
+    if (!models) {
+      return [];
+    }
+
     models.forEach(model => {
-      if (Array.isArray(model.tags)) {
-        model.tags.forEach(tag => {
-          if (tagMap.has(tag)) {
-            const existingTag = tagMap.get(tag)!;
-            existingTag.count++;
-            existingTag.models.push(model);
-          } else {
-            tagMap.set(tag, {
-              name: tag,
-              count: 1,
-              models: [model]
-            });
-          }
-        });
+      if (!model || !Array.isArray(model.tags)) {
+        return;
       }
+
+      model.tags.forEach(tag => {
+        if (!tag) {
+          return;
+        }
+
+        if (tagMap.has(tag)) {
+          const existingTag = tagMap.get(tag)!;
+          existingTag.count++;
+          existingTag.models.push(model);
+        } else {
+          tagMap.set(tag, {
+            name: tag,
+            count: 1,
+            models: [model]
+          });
+        }
+      });
     });
 
     const tags = Array.from(tagMap.values());
@@ -162,7 +187,7 @@ export function SettingsPage({
   };
 
   const filteredTags = getAllTags().filter(tag =>
-    tag.name.toLowerCase().includes(tagSearchTerm.toLowerCase())
+    tag && tag.name ? tag.name.toLowerCase().includes((tagSearchTerm || '').toLowerCase()) : false
   );
 
   const handleDragStart = (index: number) => {
@@ -297,17 +322,29 @@ export function SettingsPage({
     
     if (field.includes('.')) {
       const [section, key] = field.split('.');
-      updatedConfig[section as keyof AppConfig] = {
-        ...updatedConfig[section as keyof AppConfig],
-        [key]: value
-      };
+      
+      if (section === 'settings') {
+        updatedConfig.settings = {
+          ...updatedConfig.settings,
+          [key]: value
+        };
+      } else if (section === 'filters') {
+        updatedConfig.filters = {
+          ...updatedConfig.filters,
+          [key]: value
+        };
+      }
     } else {
       (updatedConfig as any)[field] = value;
     }
     
+    console.log('[SettingsPage] Updated config:', updatedConfig);
     setLocalConfig(updatedConfig);
     
-    // Auto-save if enabled
+    // Always notify parent of config changes
+    onConfigUpdate?.(updatedConfig);
+    
+    // If auto-save is enabled, also save locally
     if (localConfig.settings.autoSave) {
       handleSaveConfig(updatedConfig);
     }
@@ -592,7 +629,7 @@ export function SettingsPage({
               <Card>
                 <CardHeader>
                   <CardTitle>Application Settings</CardTitle>
-                  <CardDescription>Configure default behavior and preferences</CardDescription>
+                  <CardDescription>Configure default behavior and preferences. Changes are automatically saved to your browser&apos;s local storage.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1348,7 +1385,7 @@ export function SettingsPage({
               <Card>
                 <CardHeader>
                   <CardTitle>Configuration Management</CardTitle>
-                  <CardDescription>Import, export, and reset your configuration settings</CardDescription>
+                  <CardDescription>Import, export, and reset your configuration settings. Your settings are stored in your browser&apos;s local storage, not in the default-config.json file.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

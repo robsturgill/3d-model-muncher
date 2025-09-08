@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Model } from "../types/model";
 import { ModelCard } from "./ModelCard";
+import { ConfigManager } from "../utils/configManager";
 import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
 import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive } from "lucide-react";
 import { Badge } from "./ui/badge";
-import { Separator } from "./ui/separator";
 
 interface ModelGridProps {
   models: Model[];
@@ -26,8 +26,43 @@ export function ModelGrid({
   selectedModelIds = [],
   onModelSelection
 }: ModelGridProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [gridDensity, setGridDensity] = useState([4]); // Default to 4 columns
+  // Initialize from global config
+  const config = ConfigManager.loadConfig();
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    // Initialize from config, default to grid if invalid
+    return ['grid', 'list'].includes(config.settings.defaultView) ? config.settings.defaultView : 'grid';
+  });
+  
+  const [gridDensity, setGridDensity] = useState<number[]>(() => {
+    // Initialize from config, ensure it's within valid range
+    const density = config.settings.defaultGridDensity;
+    return [density >= 1 && density <= 6 ? density : 4];
+  });
+
+  // Save settings when they change
+  const handleViewModeChange = (newMode: ViewMode) => {
+    setViewMode(newMode);
+    const currentConfig = ConfigManager.loadConfig();
+    ConfigManager.saveConfig({
+      ...currentConfig,
+      settings: {
+        ...currentConfig.settings,
+        defaultView: newMode
+      }
+    });
+  };
+
+  const handleGridDensityChange = (newDensity: number[]) => {
+    setGridDensity(newDensity);
+    const currentConfig = ConfigManager.loadConfig();
+    ConfigManager.saveConfig({
+      ...currentConfig,
+      settings: {
+        ...currentConfig.settings,
+        defaultGridDensity: newDensity[0]
+      }
+    });
+  };
 
   // Map density slider value to grid classes
   const getGridClasses = (density: number) => {
@@ -50,7 +85,7 @@ export function ModelGrid({
     }
   };
 
-  const handleCheckboxClick = (e: React.MouseEvent, modelId: string) => {
+  const handleCheckboxClick = (e: React.MouseEvent<HTMLInputElement>, modelId: string) => {
     e.stopPropagation();
     if (onModelSelection) {
       onModelSelection(modelId);
@@ -78,7 +113,7 @@ export function ModelGrid({
                 <Button
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('grid')}
+                  onClick={() => handleViewModeChange('grid')}
                   className="h-8 px-3 transition-all"
                 >
                   <LayoutGrid className="h-4 w-4 mr-2" />
@@ -87,7 +122,7 @@ export function ModelGrid({
                 <Button
                   variant={viewMode === 'list' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('list')}
+                  onClick={() => handleViewModeChange('list')}
                   className="h-8 px-3 transition-all"
                 >
                   <List className="h-4 w-4 mr-2" />
@@ -108,7 +143,7 @@ export function ModelGrid({
                 <span className="text-xs text-muted-foreground w-3">1</span>
                 <Slider
                   value={gridDensity}
-                  onValueChange={setGridDensity}
+                  onValueChange={handleGridDensityChange}
                   min={1}
                   max={6}
                   step={1}

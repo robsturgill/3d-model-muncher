@@ -48,6 +48,7 @@ function AppContent() {
     async function loadInitialData() {
       try {
         const config = ConfigManager.loadConfig();
+
         setAppConfig(config);
         setCategories(config.categories);
 
@@ -369,8 +370,15 @@ function AppContent() {
   };
 
   const handleConfigUpdate = (updatedConfig: AppConfig) => {
-    setAppConfig(updatedConfig);
-    setCategories(updatedConfig.categories);
+    try {
+      // Save to localStorage first
+      ConfigManager.saveConfig(updatedConfig);
+      // Then update state
+      setAppConfig(updatedConfig);
+      setCategories(updatedConfig.categories);
+    } catch (error) {
+      console.error('Failed to save config:', error);
+    }
   };
 
   const toggleSidebar = () => {
