@@ -73,14 +73,21 @@ export function ModelDetailsDrawer({
     // Ensure filePath is present for saving
     let filePath = model.filePath;
     if (!filePath) {
-      // Try to reconstruct from modelUrl or name
-      const modelsDir = 'C:\\Users\\robst\\dev\\3d-model-muncher\\models';
-      let fileName = model.modelUrl?.replace('/models/', '') || `${model.name}-munchie.json`;
-      // If fileName doesn't end with -munchie.json, add it
-      if (!fileName.endsWith('-munchie.json')) {
-        fileName = `${model.name}-munchie.json`;
+      // Construct the path based on the modelUrl to match the actual JSON file location
+      if (model.modelUrl) {
+        // Convert from /models/path/file.3mf to models/path/file-munchie.json
+        let relativePath = model.modelUrl.replace('/models/', '');
+        // Replace .3mf extension with -munchie.json
+        if (relativePath.endsWith('.3mf')) {
+          relativePath = relativePath.replace('.3mf', '-munchie.json');
+        } else {
+          relativePath = `${relativePath}-munchie.json`;
+        }
+        filePath = `models/${relativePath}`;
+      } else {
+        // Fallback to using the model name
+        filePath = `models/${model.name}-munchie.json`;
       }
-      filePath = `${modelsDir}\\${fileName}`;
     }
     setEditedModel({ ...model, filePath });
     setIsEditing(true);

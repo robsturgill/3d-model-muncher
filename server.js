@@ -26,15 +26,30 @@ app.post('/api/save-model', (req, res) => {
     return res.status(400).json({ success: false, error: 'No filePath provided' });
   }
   try {
+    // Resolve relative paths to absolute paths
+    let absoluteFilePath;
+    if (path.isAbsolute(filePath)) {
+      absoluteFilePath = filePath;
+    } else {
+      // If relative path (like 'models/file.json'), resolve it relative to the models directory
+      if (filePath.startsWith('models/')) {
+        absoluteFilePath = path.join(absoluteModelPath, filePath.replace('models/', ''));
+      } else {
+        absoluteFilePath = path.join(absoluteModelPath, filePath);
+      }
+    }
+    
+    console.log('Resolved file path:', absoluteFilePath);
+    
     // Load existing model JSON
     let existing = {};
-    if (fs.existsSync(filePath)) {
-      existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (fs.existsSync(absoluteFilePath)) {
+      existing = JSON.parse(fs.readFileSync(absoluteFilePath, 'utf-8'));
     }
     // Merge changes
     const updated = { ...existing, ...changes };
-    fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8');
-    console.log('Model updated and saved to:', filePath);
+    fs.writeFileSync(absoluteFilePath, JSON.stringify(updated, null, 2), 'utf-8');
+    console.log('Model updated and saved to:', absoluteFilePath);
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving model:', err);

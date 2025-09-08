@@ -86,6 +86,7 @@ export function BulkEditDrawer({
       price: false,
     });
   const [newTag, setNewTag] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Available licenses
   const availableLicenses = [
@@ -254,65 +255,163 @@ export function BulkEditDrawer({
     });
   };
 
-  const handleSave = () => {
-    const updates: Partial<Model> = {};
-
-    // Apply selected fields
-    if (fieldSelection.category && editState.category) {
-      updates.category = editState.category;
+  // Helper to send only changed fields to backend
+  const saveModelToFile = async (edited: Model, original: Model) => {
+    if (!edited.filePath) {
+      console.error("No filePath specified for model");
+      return;
     }
-
-    if (fieldSelection.license && editState.license) {
-      updates.license = editState.license;
-    }
-
-    if (
-      fieldSelection.isPrinted &&
-      editState.isPrinted !== undefined
-    ) {
-      updates.isPrinted = editState.isPrinted;
-    }
-
-    if (fieldSelection.notes && editState.notes !== undefined) {
-      updates.notes = editState.notes;
-    }
-
-    if (
-      fieldSelection.source &&
-      editState.source !== undefined
-    ) {
-      updates.source = editState.source;
-    }
-
-    if (
-      fieldSelection.price &&
-      editState.price !== undefined
-    ) {
-      updates.price = editState.price;
-    }
-
-    // Handle tags separately since it requires special logic
-    if (fieldSelection.tags && editState.tags) {
-      // This will be handled in the parent component
-      (updates as any).bulkTagChanges = editState.tags;
-    }
-
-    onBulkUpdate(updates);
-  };
-
-  const handleCancel = () => {
-    setEditState({});
-    setFieldSelection({
-      category: false,
-      license: false,
-      isPrinted: false,
-      tags: false,
-      notes: false,
-      source: false,
-      price: false,
+    // Compute changed fields
+    const changes: any = { filePath: edited.filePath, id: edited.id };
+    Object.keys(edited).forEach(key => {
+      if (key === 'filePath' || key === 'id') return;
+      const editedValue = JSON.stringify((edited as any)[key]);
+      const originalValue = JSON.stringify((original as any)[key]);
+      if (editedValue !== originalValue) {
+        changes[key] = (edited as any)[key];
+      }
     });
-    onClose();
+    
+    console.log(`[BulkEdit] Saving model ${edited.name} with changes:`, changes);
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/save-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes)
+      });
+      const result = await response.json();
+      console.log(`[BulkEdit] Save result for ${edited.name}:`, result);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save model');
+      }
+    } catch (err) {
+      console.error(`[BulkEdit] Failed to save model ${edited.name} to file:`, err);
+    }
   };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    
+    try {
+      const updates: Partial<Model> = {};
+
+      // Apply selected fields
+      if (fieldSelection.category && editState.category) {
+        updates.category = editState.category;
+      }
+
+      if (fieldSelection.license && editState.license) {
+        updates.license = editState.license;
+      }
+
+      if (
+        fieldSelection.isPrinted &&
+        editState.isPrinted !== undefined
+      ) {
+        updates.isPrinted = editState.isPrinted;
+      }
+
+      if (fieldSelection.notes && editState.notes !== undefined) {
+        updates.notes = editState.notes;
+      }
+
+      if (
+        fieldSelection.source &&
+        editState.source !== undefined
+      ) {
+        updates.source = editState.source;
+      }
+
+      if (
+        fieldSelection.price &&
+        editState.price !== undefined
+      ) {
+        updates.price = editState.price;
+      }
+
+      // Handle tags separately since it requires special logic
+      if (fieldSelection.tags && editState.tags) {
+        // This will be handled in the parent component
+        (updates as any).bulkTagChanges = editState.tags;
+      }
+
+      // Update UI state
+      onBulkUpdate(updates);
+
+      // Save each model to its respective file
+      console.log(`[BulkEdit] Processing ${models.length} models for bulk save`);
+      
+      for (const model of models) {
+        // Ensure filePath is present for saving
+        let filePath = model.filePath;
+        if (!filePath) {
+          // Construct the path based on the modelUrl to match the actual JSON file location
+          if (model.modelUrl) {
+            // Convert from /models/path/file.3mf to models/path/file-munchie.json
+            let relativePath = model.modelUrl.replace('/models/', '');
+            // Replace .3mf extension with -munchie.json
+            if (relativePath.endsWith('.3mf')) {
+              relativePath = relativePath.replace('.3mf', '-munchie.json');
+            } else {
+              relativePath = `${relativePath}-munchie.json`;
+            }
+            filePath = `models/${relativePath}`;
+          } else {
+            // Fallback to using the model name
+            filePath = `models/${model.name}-munchie.json`;
+          }
+        }
+
+        console.log(`[BulkEdit] Processing model: ${model.name}, filePath: ${filePath}`);
+        console.log(`[BulkEdit] Model details:`, { id: model.id, name: model.name, modelUrl: model.modelUrl, category: model.category });
+
+        // Create updated model with changes applied
+        const updatedModel = { ...model, filePath };
+        
+        // Apply bulk tag changes if selected
+        if (fieldSelection.tags && editState.tags) {
+          let newTags = [...model.tags];
+          
+          // Remove tags
+          if (editState.tags?.remove) {
+            newTags = newTags.filter(tag => !editState.tags?.remove?.includes(tag));
+          }
+          
+          // Add new tags
+          if (editState.tags?.add) {
+            editState.tags.add.forEach(tag => {
+              if (!newTags.includes(tag)) {
+                newTags.push(tag);
+              }
+            });
+          }
+          
+          updatedModel.tags = newTags;
+        }
+
+        // Apply other field updates
+        Object.keys(updates).forEach(key => {
+          if (key !== 'bulkTagChanges') {
+            (updatedModel as any)[key] = (updates as any)[key];
+          }
+        });
+
+        // Save to file
+        await saveModelToFile(updatedModel, model);
+      }
+
+      // Close the drawer after successful save
+      onClose();
+    } catch (error) {
+      console.error('Failed to save bulk changes:', error);
+      // You might want to show a toast notification here
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+
 
   const hasChanges = Object.values(fieldSelection).some(
     (selected) => selected,
@@ -339,12 +438,12 @@ export function BulkEditDrawer({
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 onClick={handleSave}
-                disabled={!hasChanges}
+                disabled={!hasChanges || isSaving}
                 size="sm"
                 className="gap-2"
               >
                 <Save className="h-4 w-4" />
-                Save Changes
+                {isSaving ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
           </div>
@@ -765,11 +864,11 @@ export function BulkEditDrawer({
             </p>
             <Button
               onClick={handleSave}
-              disabled={!hasChanges}
+              disabled={!hasChanges || isSaving}
               className="gap-2"
             >
               <Save className="h-4 w-4" />
-              Apply Changes
+              {isSaving ? 'Saving...' : 'Apply Changes'}
             </Button>
           </div>
         </div>
