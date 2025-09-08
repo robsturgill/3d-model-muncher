@@ -53,7 +53,7 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
 
   const metadata: ModelMetadata = {
     id: id.toString(),
-    name: path.basename(filePath, ".3mf"),
+    name: "", // Will be set from metadata or fallback to filename
     thumbnail: "",
     images: [],
     tags: [],
@@ -105,10 +105,13 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
           const key = (m["@_name"] || "").toLowerCase();
           const value = m["#text"] || "";
 
+          if (key === "title") {
+            metadata.name = decodeHtmlEntities(value);
+          }
+
           if (key === "description") {
             // Double decode because the XML contains &amp;lt; which needs to be decoded twice
             metadata.description = decodeHtmlEntities(decodeHtmlEntities(value));
-            console.log("Found description:", metadata.description);
           }
           
           if (key === "profiletitle") {
@@ -116,14 +119,12 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
             const layerMatch = value.match(/([\d.]+)mm layer/);
             if (layerMatch) {
               metadata.printSettings.layerHeight = layerMatch[1];
-              console.log("Found layer height from profile title:", layerMatch[1]);
             }
 
             // Parse infill from title
             const infillMatch = value.match(/(\d+)% infill/);
             if (infillMatch) {
               metadata.printSettings.infill = infillMatch[1] + "%";
-              console.log("Found infill from profile title:", infillMatch[1] + "%");
             }
           }
 
@@ -141,10 +142,13 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
         const key = (metadataNodes["@_name"] || "").toLowerCase();
         const value = metadataNodes["#text"] || "";
         
+        if (key === "title") {
+          metadata.name = decodeHtmlEntities(value);
+        }
+
         if (key === "description") {
           // Double decode because the XML contains &amp;lt; which needs to be decoded twice
           metadata.description = decodeHtmlEntities(decodeHtmlEntities(value));
-          console.log("Found description:", metadata.description);
         }
 
         if (key === "profiletitle") {
@@ -152,14 +156,12 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
           const layerMatch = value.match(/([\d.]+)mm layer/);
           if (layerMatch) {
             metadata.printSettings.layerHeight = layerMatch[1];
-            console.log("Found layer height from profile title:", layerMatch[1]);
           }
 
           // Parse infill from title
           const infillMatch = value.match(/(\d+)% infill/);
           if (infillMatch) {
             metadata.printSettings.infill = infillMatch[1] + "%";
-            console.log("Found infill from profile title:", infillMatch[1] + "%");
           }
         }
 
@@ -167,6 +169,11 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
           metadata.license = value;
         }
       }
+    }
+
+    // If no title was found in metadata, fallback to filename
+    if (!metadata.name) {
+      metadata.name = path.basename(filePath, ".3mf");
     }
 
     // ---- MD5 HASH ----

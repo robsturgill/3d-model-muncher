@@ -951,7 +951,7 @@ export function SettingsPage({
                 <CardHeader>
                   <CardTitle>File Integrity Check</CardTitle>
                   <CardDescription>
-                    Verify your model files are intact and identify any corrupted files                
+                    Verify your model files are intact and identify any files with issues
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -1020,7 +1020,7 @@ export function SettingsPage({
                               <AlertTriangle className="h-5 w-5 text-red-600" />
                               <div>
                                 <p className="text-xl font-semibold">{hashCheckResult.corrupted}</p>
-                                <p className="text-sm text-muted-foreground">Corrupted</p>
+                                <p className="text-sm text-muted-foreground">Issues</p>
                               </div>
                             </div>
                           </CardContent>
@@ -1042,8 +1042,8 @@ export function SettingsPage({
                       {hashCheckResult.corruptedFiles.length > 0 && (
                         <Card>
                           <CardHeader>
-                            <CardTitle className="text-red-600">Corrupted Files</CardTitle>
-                            <CardDescription>These files may be damaged and should be reviewed</CardDescription>
+                            <CardTitle className="text-red-600">File Issues</CardTitle>
+                            <CardDescription>These files may have issues and should be reviewed</CardDescription>
                           </CardHeader>
                           <CardContent>
                             <div className="space-y-2">

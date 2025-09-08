@@ -29,7 +29,7 @@ async function parse3MF(filePath, id) {
     const size = fs.statSync(filePath).size;
     const metadata = {
         id: id.toString(),
-        name: path.basename(filePath, ".3mf"),
+        name: "", // Will be set from metadata or fallback to filename
         thumbnail: "",
         images: [],
         tags: [],
@@ -74,6 +74,9 @@ async function parse3MF(filePath, id) {
                 for (const m of metadataNodes) {
                     const key = (m["@_name"] || "").toLowerCase();
                     const value = m["#text"] || "";
+                    if (key === "title") {
+                        metadata.name = decodeHtmlEntities(value);
+                    }
                     if (key === "description") {
                         // Double decode because the XML contains &amp;lt; which needs to be decoded twice
                         metadata.description = decodeHtmlEntities(decodeHtmlEntities(value));
@@ -104,6 +107,9 @@ async function parse3MF(filePath, id) {
             else if (metadataNodes) {
                 const key = (metadataNodes["@_name"] || "").toLowerCase();
                 const value = metadataNodes["#text"] || "";
+                if (key === "title") {
+                    metadata.name = decodeHtmlEntities(value);
+                }
                 if (key === "description") {
                     // Double decode because the XML contains &amp;lt; which needs to be decoded twice
                     metadata.description = decodeHtmlEntities(decodeHtmlEntities(value));
@@ -124,6 +130,10 @@ async function parse3MF(filePath, id) {
                     metadata.license = value;
                 }
             }
+        }
+        // If no title was found in metadata, fallback to filename
+        if (!metadata.name) {
+            metadata.name = path.basename(filePath, ".3mf");
         }
         // ---- MD5 HASH ----
         metadata.hash = computeMD5(buffer);

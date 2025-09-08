@@ -1,4 +1,3 @@
-// API endpoint to save a model to its munchie.json file
 // Simple Express server for 3D Model Muncher backend API
 const express = require('express');
 const cors = require('cors');
@@ -6,7 +5,6 @@ const path = require('path');
 const fs = require('fs');
 const { scanDirectory } = require('./dist-backend/utils/threeMFToJson');
 const { ConfigManager } = require('./dist-backend/utils/configManager');
-
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -150,28 +148,41 @@ app.get('/api/munchie-files', (req, res) => {
 
 // --- API: Hash check for all .3mf files and their -munchie.json ---
 app.get('/api/hash-check', async (req, res) => {
-  const modelsDir = path.join(__dirname, 'models');
-  const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
-  let result = [];
-  let seenHashes = new Set();
-  let hashToFiles = {};
-  let errors = [];
   try {
-    const files = fs.readdirSync(modelsDir);
-    // Map .3mf base names to their .3mf and -munchie.json
-    const modelMap = {};
-    files.forEach(file => {
-      if (file.toLowerCase().endsWith('.3mf')) {
-        const base = file.replace(/\.3mf$/i, '');
-        modelMap[base] = modelMap[base] || {};
-        modelMap[base].threeMF = file;
-      } else if (file.toLowerCase().endsWith('-munchie.json')) {
-        const base = file.replace(/-munchie\.json$/i, '');
-        modelMap[base] = modelMap[base] || {};
-        modelMap[base].json = file;
-      }
-    });
+    const modelsDir = path.join(__dirname, 'models');
+    const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
+    let result = [];
+    let seenHashes = new Set();
+    let hashToFiles = {};
+    let errors = [];
+    let modelMap = {};
 
+    // Recursively scan directories
+    function scanDirectory(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scanDirectory(fullPath);
+        } else {
+          const relativePath = path.relative(modelsDir, fullPath);
+          if (relativePath.toLowerCase().endsWith('.3mf')) {
+            const base = relativePath.replace(/\.3mf$/i, '');
+            modelMap[base] = modelMap[base] || {};
+            modelMap[base].threeMF = relativePath;
+          } else if (relativePath.toLowerCase().endsWith('-munchie.json')) {
+            const base = relativePath.replace(/-munchie\.json$/i, '');
+            modelMap[base] = modelMap[base] || {};
+            modelMap[base].json = relativePath;
+          }
+        }
+      }
+    }
+
+    // Start recursive scan
+    scanDirectory(modelsDir);
+
+    // Process all found models
     for (const base in modelMap) {
       const entry = modelMap[base];
       const threeMFPath = entry.threeMF ? path.join(modelsDir, entry.threeMF) : null;
@@ -180,6 +191,7 @@ app.get('/api/hash-check', async (req, res) => {
       let details = '';
       let hash = null;
       let storedHash = null;
+
       if (!threeMFPath) {
         status = 'missing-3mf';
         details = 'Missing .3mf file';
@@ -203,6 +215,7 @@ app.get('/api/hash-check', async (req, res) => {
           details = e.message;
         }
       }
+
       // Check for duplicate hashes
       if (hash) {
         if (seenHashes.has(hash)) {
@@ -214,6 +227,7 @@ app.get('/api/hash-check', async (req, res) => {
           hashToFiles[hash] = [base];
         }
       }
+
       result.push({
         baseName: base,
         threeMF: entry.threeMF || null,
@@ -224,14 +238,17 @@ app.get('/api/hash-check', async (req, res) => {
         details
       });
     }
+
     // Add info about which files share duplicate hashes
     result.forEach(r => {
       if (r.hash && hashToFiles[r.hash] && hashToFiles[r.hash].length > 1) {
         r.duplicates = hashToFiles[r.hash].filter(b => b !== r.baseName);
       }
     });
+
     res.json({ success: true, results: result });
   } catch (e) {
+    console.error('Hash check error:', e);
     res.status(500).json({ success: false, error: e.message });
   }
 });

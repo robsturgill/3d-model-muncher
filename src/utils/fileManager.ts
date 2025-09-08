@@ -4,7 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 // Import the real parse3MF function for extracting metadata from a .3mf file
 // Note: parse3MF is not exported, so we need to export it from threeMFToJson.ts
-import { parse3MF as realParse3MF } from "./threeMFToJson";
+import { parse3MF as realParse3MF, computeMD5 } from "./threeMFToJson";
 
 /**
  * Scans a directory for .3mf files and generates JSON metadata for each.
@@ -17,17 +17,18 @@ export function generate3MFJsonForDirectory(dir: string) {
 import { Model, DuplicateGroup, HashCheckResult, CorruptedFile } from "../types/model";
 
 /**
- * Simulates generating a file hash for a model
- * In a real implementation, this would read the actual file and generate a hash
+ * Generates a real file hash for a model using MD5
  */
 export function generateFileHash(modelUrl: string): Promise<string> {
-  return new Promise((resolve) => {
-    // Simulate hash generation with a delay
-    setTimeout(() => {
-      // Generate a mock hash based on the URL for consistency
-      const mockHash = btoa(modelUrl).slice(0, 32);
-      resolve(mockHash);
-    }, Math.random() * 500 + 100);
+  return new Promise((resolve, reject) => {
+    try {
+      // Convert modelUrl to actual file path - remove leading /models/
+      const filePath = path.join(__dirname, '..', '..', modelUrl.replace('/models/', ''));
+      const hash = computeMD5(filePath);
+      resolve(hash);
+    } catch (error) {
+      reject(error);
+    }
   });
 }
 
@@ -81,25 +82,25 @@ export async function performHashCheck(models: Model[]): Promise<HashCheckResult
   const corruptedFileDetails: CorruptedFile[] = [];
   const updatedModels: Model[] = [];
 
-  // Simulate checking each file
+  // Check each file's hash against its stored hash
   for (const model of models) {
     try {
       const hash = await generateFileHash(model.modelUrl);
-      const isCorrupted = Math.random() < 0.05; // 5% chance of corruption for demo
+      const isCorrupted = model.hash && model.hash !== hash;
       
       if (isCorrupted) {
         corruptedFiles++;
         corruptedFileDetails.push({
           model,
           error: "File integrity check failed - hash mismatch detected",
-          expectedHash: "Expected valid hash",
-          actualHash: "CORRUPTED",
+          expectedHash: model.hash || "No hash stored",
+          actualHash: hash,
           filePath: model.modelUrl
         });
         
         updatedModels.push({
           ...model,
-          hash: 'CORRUPTED',
+          hash: hash,
           lastScanned: new Date().toISOString()
         });
       } else {
