@@ -59,24 +59,69 @@ async function parse3MF(filePath, id) {
             const json = parser.parse(xml);
             const modelNode = json === null || json === void 0 ? void 0 : json.model;
             const metadataNodes = modelNode === null || modelNode === void 0 ? void 0 : modelNode.metadata;
+            function decodeHtmlEntities(text) {
+                // First decode HTML entities
+                const decodedText = text
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#039;/g, "'");
+                // Then strip out any HTML tags
+                return decodedText.replace(/<[^>]*>/g, '');
+            }
             if (Array.isArray(metadataNodes)) {
                 for (const m of metadataNodes) {
                     const key = (m["@_name"] || "").toLowerCase();
+                    const value = m["#text"] || "";
+                    if (key === "description") {
+                        // Double decode because the XML contains &amp;lt; which needs to be decoded twice
+                        metadata.description = decodeHtmlEntities(decodeHtmlEntities(value));
+                    }
+                    if (key === "profiletitle") {
+                        // Parse layer height from title (e.g., "0.2mm layer, 8 walls, 25% infill")
+                        const layerMatch = value.match(/([\d.]+)mm layer/);
+                        if (layerMatch) {
+                            metadata.printSettings.layerHeight = layerMatch[1];
+                        }
+                        // Parse infill from title
+                        const infillMatch = value.match(/(\d+)% infill/);
+                        if (infillMatch) {
+                            metadata.printSettings.infill = infillMatch[1] + "%";
+                        }
+                    }
                     if (key.includes("license")) {
-                        metadata.license = m["#text"] || "";
+                        metadata.license = value;
                     }
                     if (key.includes("estimatedprinttime")) {
-                        metadata.printTime = m["#text"] + "s";
+                        metadata.printTime = value + "s";
                     }
                     if (key.includes("filamentweight")) {
-                        metadata.filamentUsed = m["#text"] + " g";
+                        metadata.filamentUsed = value + " g";
                     }
                 }
             }
             else if (metadataNodes) {
                 const key = (metadataNodes["@_name"] || "").toLowerCase();
+                const value = metadataNodes["#text"] || "";
+                if (key === "description") {
+                    // Double decode because the XML contains &amp;lt; which needs to be decoded twice
+                    metadata.description = decodeHtmlEntities(decodeHtmlEntities(value));
+                }
+                if (key === "profiletitle") {
+                    // Parse layer height from title
+                    const layerMatch = value.match(/([\d.]+)mm layer/);
+                    if (layerMatch) {
+                        metadata.printSettings.layerHeight = layerMatch[1];
+                    }
+                    // Parse infill from title
+                    const infillMatch = value.match(/(\d+)% infill/);
+                    if (infillMatch) {
+                        metadata.printSettings.infill = infillMatch[1] + "%";
+                    }
+                }
                 if (key.includes("license")) {
-                    metadata.license = metadataNodes["#text"] || "";
+                    metadata.license = value;
                 }
             }
         }
