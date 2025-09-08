@@ -253,6 +253,37 @@ app.get('/api/hash-check', async (req, res) => {
   }
 });
 
+// API endpoint to load a model from a munchie.json file
+app.get('/api/load-model', async (req, res) => {
+  try {
+    const { filePath } = req.query;
+    if (!filePath || typeof filePath !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing file path' });
+    }
+
+    // Resolve the path relative to the application root
+    const fullPath = path.resolve(filePath);
+
+    // Ensure the path is within the models directory for security
+    const modelsDir = path.resolve('models');
+    if (!fullPath.startsWith(modelsDir)) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+
+    // Read and parse the JSON file
+    const modelData = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+    res.json(modelData);
+  } catch (error) {
+    console.error('Error loading model:', error);
+    res.status(500).json({ success: false, error: 'Failed to load model data' });
+  }
+});
+
 app.post('/api/delete-models', (req, res) => {
   const { files } = req.body; // array of file paths relative to models dir
   if (!Array.isArray(files)) {

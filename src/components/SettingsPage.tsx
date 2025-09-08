@@ -53,6 +53,16 @@ import {
   Images
 } from "lucide-react";
 
+
+
+interface CorruptedFile {
+  model: Model;
+  error: string;
+  actualHash: string;
+  expectedHash: string;
+  filePath: string;
+}
+
 interface SettingsPageProps {
   onBack: () => void;
   categories: Category[];
@@ -115,12 +125,72 @@ export function SettingsPage({
     duplicateGroups: DuplicateGroup[];
     corruptedFiles: CorruptedFile[];
   };
-  const [hashCheckResult, setHashCheckResult] = useState<UIHashCheckResult | null>(null);
+  const [hashCheckResult, setHashCheckResult] = useState<HashCheckResult | null>(null);
   const [isHashChecking, setIsHashChecking] = useState(false);
   const [hashCheckProgress, setHashCheckProgress] = useState(0);
+  const [corruptedModels, setCorruptedModels] = useState<Record<string, Model>>({});
+
+  // Load corrupted model data when hash check results change
+  useEffect(() => {
+    if (!hashCheckResult?.corruptedFiles) return;
+    
+    const loadCorruptedModels = async () => {
+      const newModels: Record<string, Model> = {};
+      
+      for (const file of hashCheckResult.corruptedFiles) {
+        console.log('Processing file:', {
+          originalPath: file.filePath,
+          modelUrl: file.model?.modelUrl,
+          error: file.error
+        });
+        
+        try {
+          // Extract directory and filename, removing any leading /models or models/
+          const normalizedPath = file.filePath.replace(/^[/\\]?models[/\\]/, '');
+          const pathParts = normalizedPath.split(/[/\\]/);
+          const fileName = pathParts.pop() || '';
+          const directory = pathParts.join('/');
+          
+          console.log('Path parts:', {
+            normalizedPath,
+            directory,
+            fileName,
+            filePath: file.filePath
+          });
+          
+          // Convert .3mf to -munchie.json if needed
+          const munchieFileName = fileName.endsWith('-munchie.json')
+            ? fileName
+            : fileName.replace('.3mf', '-munchie.json');
+          
+          // Construct the final path, always starting with models/
+          const fullPath = directory 
+            ? `models/${directory}/${munchieFileName}`
+            : `models/${munchieFileName}`;
+          
+          console.log('Making request with path:', fullPath);
+          
+          const response = await fetch(`http://localhost:3001/api/load-model?filePath=${encodeURIComponent(fullPath)}`);
+          if (response.ok) {
+            const modelData = await response.json();
+            if (modelData.success) {
+                  newModels[file.filePath] = modelData.model;
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load model data:', error);
+        }
+      }
+      
+      setCorruptedModels(newModels);
+    };
+    
+    loadCorruptedModels();
+  }, [hashCheckResult?.corruptedFiles]);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [selectedDuplicateGroup, setSelectedDuplicateGroup] = useState<DuplicateGroup | null>(null);
   const [isRemoveDuplicateDialogOpen, setIsRemoveDuplicateDialogOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State and handler for generating model JSONs via backend API
@@ -401,13 +471,13 @@ export function SettingsPage({
   };
 
   // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
-  const handleRunHashCheck = async () => {
+  const handleRunHashCheck = () => {
     setIsHashChecking(true);
     setHashCheckProgress(0);
     setStatusMessage('Rescanning .3mf files and comparing hashes...');
-    try {
-      const resp = await fetch('http://localhost:3001/api/hash-check');
-      const data = await resp.json();
+    fetch('http://localhost:3001/api/hash-check')
+      .then(resp => resp.json())
+      .then(data => {
       if (!data.success) throw new Error(data.error || 'Hash check failed');
       // Map backend results to UIHashCheckResult
       let verified = 0;
@@ -454,13 +524,13 @@ export function SettingsPage({
           verified++;
         } else {
           corrupted++;
-          // Create a proper CorruptedFile object with the model data
+          // Add file info to corruptedFiles
+          const filePath = r.threeMF ? `/models/${r.threeMF}` : '';
           corruptedFiles.push({
-            model: mergedModel,
+            filePath: filePath,
             error: r.details || 'Unknown error',
             actualHash: r.hash || 'UNKNOWN',
-            expectedHash: r.storedHash || 'UNKNOWN',
-            filePath: mergedModel.modelUrl || ''
+            expectedHash: r.storedHash || 'UNKNOWN'
           });
         }
         if (r.hash) {
@@ -489,21 +559,23 @@ export function SettingsPage({
         setSaveStatus('idle');
         setStatusMessage('');
       }, 4000);
-    } catch (error) {
-      setSaveStatus('error');
-      setStatusMessage('Model scan failed');
-      console.error('Model scan error:', error);
-    } finally {
-      setIsHashChecking(false);
-      setHashCheckProgress(0);
-    }
+      })
+      .catch(error => {
+        setSaveStatus('error');
+        setStatusMessage('Model scan failed');
+        console.error('Model scan error:', error);
+      })
+      .finally(() => {
+        setIsHashChecking(false);
+        setHashCheckProgress(0);
+      });
   };
 
   const handleRemoveDuplicates = async (group: DuplicateGroup, keepModelId: string) => {
     // Find models to remove (all except the one to keep)
     const modelsToRemove = group.models.filter(model => model.id !== keepModelId);
     // Collect .3mf and -munchie.json file names for each
-    const filesToDelete = [];
+    const filesToDelete: string[] = [];
     modelsToRemove.forEach(model => {
       if (model.modelUrl) {
         // modelUrl is like /models/Foo.3mf
@@ -530,7 +602,7 @@ export function SettingsPage({
       const data = await resp.json();
       if (!data.success) {
         setSaveStatus('error');
-        setStatusMessage('Failed to delete some files: ' + (data.errors?.map(e => e.file).join(', ') || 'Unknown error'));
+        setStatusMessage('Failed to delete some files: ' + (data.errors?.map((e: { file: string }) => e.file).join(', ') || 'Unknown error'));
         return;
       }
       // Remove from UI
@@ -1091,47 +1163,34 @@ export function SettingsPage({
                           <CardContent>
                             <div className="space-y-2">
                               {hashCheckResult.corruptedFiles.map((file, idx) => {
-                                // Find the corresponding model from models array using filePath
-                                const model = models.find(m => m.modelUrl === file.filePath) || {
-                                  id: `corrupt-${idx}`,
-                                  name: file.filePath.split('/').pop() || 'Unknown file',
-                                  thumbnail: '',
-                                  images: [],
-                                  tags: [],
-                                  isPrinted: false,
-                                  printTime: '',
-                                  filamentUsed: '',
-                                  category: 'Unknown',
-                                  description: '',
-                                  fileSize: '',
-                                  modelUrl: file.filePath,
-                                  license: '',
-                                  notes: '',
-                                  printSettings: { layerHeight: '', infill: '', supports: '' },
-                                  hash: file.actualHash,
-                                  lastScanned: '',
-                                  source: '',
-                                  price: 0,
-                                  filePath: file.filePath
-                                };
+    const modelData = corruptedModels[file.filePath];
+    // Find a fallback model if we haven't loaded the data yet
+    const fallbackModel = models.find(m => m.modelUrl === file.filePath);
 
-                                return (
-                                  <div key={model.id || idx} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
-                                    <div>
-                                      <p className="font-medium text-red-900 dark:text-red-100">{model.name}</p>
-                                      <p className="text-sm text-red-600 dark:text-red-400">{file.error}</p>
-                                    </div>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => onModelClick?.(model)}
-                                      className="border-red-300 hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900"
-                                    >
-                                      View Details
-                                    </Button>
-                                  </div>
-                                );
-                              })}
+    return (
+      <div 
+        key={file.filePath || `corrupt-${idx}`} 
+        className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800"
+      >
+        <div>
+          <p className="font-medium text-red-900 dark:text-red-100">
+            {modelData?.name || fallbackModel?.name || file.filePath.split('/').pop()?.replace('.3mf', '')}
+          </p>
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {file.error || `Hash mismatch - Expected: ${file.expectedHash}, Got: ${file.actualHash}`}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onModelClick?.(modelData || fallbackModel)}
+          className="border-red-300 hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900"
+        >
+          View Details
+        </Button>
+      </div>
+    );
+})}
                             </div>
                           </CardContent>
                         </Card>

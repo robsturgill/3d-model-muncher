@@ -45,9 +45,10 @@ export interface CorruptedFile {
 
 // Result of a hash check operation
 export interface HashCheckResult {
-  totalFiles: number;
-  checkedFiles: number;
-  corruptedFiles: number;
+  verified: number;
+  corrupted: number;
+  duplicateGroups: DuplicateGroup[];
+  corruptedFiles: CorruptedFile[];
   corruptedFileDetails: CorruptedFile[];
   duplicateGroups: DuplicateGroup[];
   lastCheck: string;
