@@ -72,7 +72,7 @@ function AppContent() {
   }, []);
 
   const handleModelClick = (model: Model) => {
-    if (isSelectionMode) {
+    if (currentView === 'models' && isSelectionMode) {
       handleModelSelection(model.id);
     } else {
       setSelectedModel(model);
@@ -640,7 +640,7 @@ function AppContent() {
       </div>
 
       {/* Model Details Drawer - Show in models and settings view */}
-      {(currentView === 'models' || currentView === 'settings') && !isSelectionMode && (
+      {(currentView === 'models' && !isSelectionMode || currentView === 'settings') && (
         <ModelDetailsDrawer
           model={selectedModel}
           isOpen={isDrawerOpen}

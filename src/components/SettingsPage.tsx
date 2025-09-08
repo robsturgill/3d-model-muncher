@@ -98,7 +98,7 @@ export function SettingsPage({
     verified: number;
     corrupted: number;
     duplicateGroups: DuplicateGroup[];
-    corruptedFiles: (Model & { error: string })[];
+    corruptedFiles: CorruptedFile[];
   };
   const [hashCheckResult, setHashCheckResult] = useState<UIHashCheckResult | null>(null);
   const [isHashChecking, setIsHashChecking] = useState(false);
@@ -375,12 +375,12 @@ export function SettingsPage({
       // Map backend results to UIHashCheckResult
       let verified = 0;
       let corrupted = 0;
-      const corruptedFiles: any[] = [];
-      const duplicateGroups: any[] = [];
-      const hashToModels: Record<string, any[]> = {};
-      const updatedModels: any[] = [];
+      const corruptedFiles: Model[] = [];
+      const duplicateGroups: DuplicateGroup[] = [];
+      const hashToModels: Record<string, Model[]> = {};
+      const updatedModels: Model[] = [];
       // Default Model shape for missing fields
-      const defaultModel = {
+      const defaultModel: Model = {
         id: '',
         name: '',
         thumbnail: '',
@@ -389,7 +389,7 @@ export function SettingsPage({
         isPrinted: false,
         printTime: '',
         filamentUsed: '',
-        category: '',
+        category: 'Utility', // Set a default category
         description: '',
         fileSize: '',
         modelUrl: '',
@@ -397,7 +397,10 @@ export function SettingsPage({
         notes: '',
         printSettings: { layerHeight: '', infill: '', supports: '' },
         hash: '',
-        lastScanned: ''
+        lastScanned: '',
+        source: '',
+        price: 0,
+        filePath: '' // Add required filePath
       };
       for (const r of data.results) {
         // Try to find the full model in the current models array for images/thumbnails
@@ -414,10 +417,13 @@ export function SettingsPage({
           verified++;
         } else {
           corrupted++;
+          // Create a proper CorruptedFile object with the model data
           corruptedFiles.push({
-            ...mergedModel,
-            error: r.details,
-            storedHash: r.storedHash
+            model: mergedModel,
+            error: r.details || 'Unknown error',
+            actualHash: r.hash || 'UNKNOWN',
+            expectedHash: r.storedHash || 'UNKNOWN',
+            filePath: mergedModel.modelUrl || ''
           });
         }
         if (r.hash) {
@@ -1047,22 +1053,48 @@ export function SettingsPage({
                           </CardHeader>
                           <CardContent>
                             <div className="space-y-2">
-                              {hashCheckResult.corruptedFiles.map((file, idx) => (
-                                <div key={file.id || file.name || idx} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
-                                  <div>
-                                    <p className="font-medium text-red-900 dark:text-red-100">{file.name}</p>
-                                    <p className="text-sm text-red-600 dark:text-red-400">{file.error}</p>
+                              {hashCheckResult.corruptedFiles.map((file, idx) => {
+                                // Find the corresponding model from models array using filePath
+                                const model = models.find(m => m.modelUrl === file.filePath) || {
+                                  id: `corrupt-${idx}`,
+                                  name: file.filePath.split('/').pop() || 'Unknown file',
+                                  thumbnail: '',
+                                  images: [],
+                                  tags: [],
+                                  isPrinted: false,
+                                  printTime: '',
+                                  filamentUsed: '',
+                                  category: 'Unknown',
+                                  description: '',
+                                  fileSize: '',
+                                  modelUrl: file.filePath,
+                                  license: '',
+                                  notes: '',
+                                  printSettings: { layerHeight: '', infill: '', supports: '' },
+                                  hash: file.actualHash,
+                                  lastScanned: '',
+                                  source: '',
+                                  price: 0,
+                                  filePath: file.filePath
+                                };
+
+                                return (
+                                  <div key={model.id || idx} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                                    <div>
+                                      <p className="font-medium text-red-900 dark:text-red-100">{model.name}</p>
+                                      <p className="text-sm text-red-600 dark:text-red-400">{file.error}</p>
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => onModelClick?.(model)}
+                                      className="border-red-300 hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900"
+                                    >
+                                      View Details
+                                    </Button>
                                   </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => onModelClick?.(file)}
-                                    className="border-red-300 hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900"
-                                  >
-                                    View Details
-                                  </Button>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </CardContent>
                         </Card>
