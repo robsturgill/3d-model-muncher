@@ -54,6 +54,8 @@ export function ModelDetailsDrawer({
     }
   }, [isOpen, defaultModelView]);
 
+
+
   if (!model) return null;
 
   // Combine thumbnail with additional images for gallery view

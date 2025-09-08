@@ -158,25 +158,12 @@ export function SettingsPage({
       const newModels: Record<string, Model> = {};
       
       for (const file of hashCheckResult.corruptedFiles) {
-        console.log('Processing file:', {
-          originalPath: file.filePath,
-          modelUrl: file.model?.modelUrl,
-          error: file.error
-        });
-        
         try {
           // Extract directory and filename, removing any leading /models or models/
           const normalizedPath = file.filePath.replace(/^[/\\]?models[/\\]/, '');
           const pathParts = normalizedPath.split(/[/\\]/);
           const fileName = pathParts.pop() || '';
           const directory = pathParts.join('/');
-          
-          console.log('Path parts:', {
-            normalizedPath,
-            directory,
-            fileName,
-            filePath: file.filePath
-          });
           
           // Convert .3mf to -munchie.json if needed
           const munchieFileName = fileName.endsWith('-munchie.json')
@@ -188,13 +175,13 @@ export function SettingsPage({
             ? `models/${directory}/${munchieFileName}`
             : `models/${munchieFileName}`;
           
-          console.log('Making request with path:', fullPath);
-          
           const response = await fetch(`http://localhost:3001/api/load-model?filePath=${encodeURIComponent(fullPath)}`);
           if (response.ok) {
             const modelData = await response.json();
-            if (modelData.success) {
-                  newModels[file.filePath] = modelData.model;
+            // The API returns the model data directly, not wrapped in a success structure
+            if (modelData && typeof modelData === 'object') {
+              // Store with the original file path as key for reliable lookup
+              newModels[file.filePath] = modelData;
             }
           }
         } catch (error) {
@@ -208,8 +195,6 @@ export function SettingsPage({
     loadCorruptedModels();
   }, [hashCheckResult?.corruptedFiles]);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
-  const [selectedDuplicateGroup, setSelectedDuplicateGroup] = useState<DuplicateGroup | null>(null);
-  const [isRemoveDuplicateDialogOpen, setIsRemoveDuplicateDialogOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -531,15 +516,36 @@ export function SettingsPage({
       };
       for (const r of data.results) {
         // Try to find the full model in the current models array for images/thumbnails
-        const fullModel = models.find(m => m.name === r.baseName || m.modelUrl.endsWith(r.threeMF || ''));
+        const fullModel = models.find(m => {
+          // Try multiple matching strategies
+          if (m.name === r.baseName) return true;
+          if (r.threeMF && m.modelUrl.endsWith(r.threeMF)) return true;
+          // Try with /models/ prefix
+          if (r.threeMF && m.modelUrl === `/models/${r.threeMF}`) return true;
+          // Try comparing the full modelUrl path (handling backslashes)
+          const expectedUrl = r.threeMF ? `/models/${r.threeMF}` : '';
+          if (m.modelUrl === expectedUrl) return true;
+          // Try normalizing paths - convert backslashes to forward slashes
+          const normalizedModelUrl = m.modelUrl.replace(/\\/g, '/');
+          const normalizedExpectedUrl = expectedUrl.replace(/\\/g, '/');
+          if (normalizedModelUrl === normalizedExpectedUrl) return true;
+          // Try comparing just the filename
+          const modelFileName = m.modelUrl?.split(/[/\\]/).pop()?.replace('.3mf', '');
+          const hashFileName = r.threeMF?.replace('.3mf', '');
+          return modelFileName && hashFileName && modelFileName === hashFileName;
+        });
+        
         const mergedModel = {
           ...defaultModel,
           ...fullModel,
-          name: r.baseName,
+          id: fullModel?.id || `hash-${r.hash}-${r.baseName}`, // Ensure we always have an ID
+          name: fullModel?.name || r.baseName.split(/[/\\]/).pop()?.replace('.3mf', '') || r.baseName, // Use clean filename as name
           modelUrl: r.threeMF ? `/models/${r.threeMF}` : '',
           hash: r.hash,
           status: r.status
         };
+        
+
         if (r.status === 'ok') {
           verified++;
         } else {
@@ -631,8 +637,6 @@ export function SettingsPage({
       // Update duplicate groups
       const updatedGroups = duplicateGroups.filter(g => g.hash !== group.hash);
       setDuplicateGroups(updatedGroups);
-      setSelectedDuplicateGroup(null);
-      setIsRemoveDuplicateDialogOpen(false);
       const removedCount = group.models.length - 1;
       setSaveStatus('saved');
       setStatusMessage(`Removed ${removedCount} duplicate file${removedCount > 1 ? 's' : ''}`);
@@ -1167,7 +1171,20 @@ export function SettingsPage({
                         <div className="space-y-2">
                           {hashCheckResult.corruptedFiles.map((file, idx) => {
                             const modelData = corruptedModels[file.filePath];
-                            const fallbackModel = models.find(m => m.modelUrl === file.filePath);
+                            // Better fallback logic - try multiple ways to find the model
+                            const fallbackModel = models.find(m => {
+                              // Try exact match first
+                              if (m.modelUrl === file.filePath) return true;
+                              // Try with /models/ prefix
+                              if (m.modelUrl === `/models/${file.filePath}`) return true;
+                              // Try without /models/ prefix
+                              if (m.modelUrl === file.filePath.replace(/^[/\\]?models[/\\]/, '')) return true;
+                              // Try by comparing just the filename
+                              const fileBaseName = file.filePath.split(/[/\\]/).pop()?.replace('.3mf', '');
+                              const modelBaseName = m.modelUrl?.split(/[/\\]/).pop()?.replace('.3mf', '');
+                              return fileBaseName && modelBaseName && fileBaseName === modelBaseName;
+                            });
+                            
                             const model = modelData || fallbackModel;
                             const fileName = model?.name || file.filePath.split('/').pop()?.replace('.3mf', '');
                             
