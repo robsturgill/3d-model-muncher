@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-// import { scanDirectory } from "../utils/threeMFToJson";
+import { useState, useRef, useEffect } from "react";
+
 // ...existing code...
 import { Category } from "../types/category";
 import { AppConfig } from "../types/config";
 import { Model, DuplicateGroup, HashCheckResult, CorruptedFile } from "../types/model";
 import { ConfigManager } from "../utils/configManager";
-import { performHashCheck, findDuplicates, removeDuplicates, calculateSpaceSavings, scanModelFile } from "../utils/fileManager";
+import { removeDuplicates } from "../utils/fileManager";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -28,7 +28,6 @@ import {
   Save, 
   FolderOpen,
   Settings as SettingsIcon,
-  Info,
   CheckCircle,
   AlertCircle,
   Tag,
@@ -36,19 +35,13 @@ import {
   Trash2,
   Eye,
   BarChart3,
-  Plus,
   Search,
-  X,
-  Shield,
-  Copy,
   AlertTriangle,
-  HardDrive,
   FileCheck,
   Files,
   Heart,
   Star,
   Github,
-  Coffee,
   Box,
   Images
 } from "lucide-react";
@@ -74,13 +67,7 @@ const ModelThumbnail = ({ thumbnail, name }: { thumbnail: string | null | undefi
 
 
 
-interface CorruptedFile {
-  model: Model;
-  error: string;
-  actualHash: string;
-  expectedHash: string;
-  filePath: string;
-}
+
 
 interface SettingsPageProps {
   onBack: () => void;
@@ -147,12 +134,7 @@ export function SettingsPage({
   const [renameTagValue, setRenameTagValue] = useState('');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('general');
-  type UIHashCheckResult = {
-    verified: number;
-    corrupted: number;
-    duplicateGroups: DuplicateGroup[];
-    corruptedFiles: CorruptedFile[];
-  };
+
   const [hashCheckResult, setHashCheckResult] = useState<HashCheckResult | null>(null);
   const [isHashChecking, setIsHashChecking] = useState(false);
   const [hashCheckProgress, setHashCheckProgress] = useState(0);
@@ -492,10 +474,10 @@ export function SettingsPage({
       .then(resp => resp.json())
       .then(data => {
       if (!data.success) throw new Error(data.error || 'Hash check failed');
-      // Map backend results to UIHashCheckResult
+      // Map backend results to hash check result
       let verified = 0;
       let corrupted = 0;
-      const corruptedFiles: Model[] = [];
+      const corruptedFiles: CorruptedFile[] = [];
       const duplicateGroups: DuplicateGroup[] = [];
       const hashToModels: Record<string, Model[]> = {};
       const updatedModels: Model[] = [];
@@ -561,6 +543,7 @@ export function SettingsPage({
           // Add file info to corruptedFiles
           const filePath = r.threeMF ? `/models/${r.threeMF}` : '';
           corruptedFiles.push({
+            model: mergedModel,
             filePath: filePath,
             error: r.details || 'Unknown error',
             actualHash: r.hash || 'UNKNOWN',
@@ -584,7 +567,9 @@ export function SettingsPage({
         verified,
         corrupted,
         duplicateGroups,
-        corruptedFiles
+        corruptedFiles,
+        corruptedFileDetails: corruptedFiles,
+        lastCheck: new Date().toISOString()
       });
       onModelsUpdate(updatedModels);
       setSaveStatus('saved');
@@ -1193,7 +1178,6 @@ export function SettingsPage({
                             });
                             
                             const model = modelData || fallbackModel;
-                            const fileName = model?.name || file.filePath.split('/').pop()?.replace('.3mf', '');
                             
                             return (
                               <div 
@@ -1202,7 +1186,7 @@ export function SettingsPage({
                               >
                                 <div className="min-w-0 flex-1">
                                   <p className="font-medium text-red-900 dark:text-red-100 truncate">
-                                    {fileName}
+                                    {model ? getDisplayPath(model) : file.filePath.split('/').pop()?.replace('.3mf', '') || 'Unknown'}
                                   </p>
                                   <p className="text-sm text-red-600 dark:text-red-400">
                                     {file.error || `Missing metadata or hash mismatch`}
