@@ -111,6 +111,14 @@ export function SettingsPage({
   onModelClick,
   onDonationClick
 }: SettingsPageProps) {
+  // Helper function to get a clean file path for display
+  const getDisplayPath = (model: Model) => {
+    if (model.modelUrl) {
+      // Remove /models/ prefix and show the relative path
+      return model.modelUrl.replace(/^\/models\//, '');
+    }
+    return model.name || 'Unknown';
+  };
 
   const [localCategories, setLocalCategories] = useState<Category[]>(categories);
   const [localConfig, setLocalConfig] = useState<AppConfig>(() => {
@@ -714,7 +722,6 @@ export function SettingsPage({
               <TabsTrigger value="categories">Categories</TabsTrigger>
               <TabsTrigger value="tags">Tag Management</TabsTrigger>
               <TabsTrigger value="integrity">File Integrity</TabsTrigger>
-              {/* <TabsTrigger value="duplicates">Duplicates</TabsTrigger> */}
               <TabsTrigger value="support">Support</TabsTrigger>
               <TabsTrigger value="config">Configuration</TabsTrigger>
             </TabsList>
@@ -1268,7 +1275,7 @@ export function SettingsPage({
                                                 <Box className="h-4 w-4 text-muted-foreground" />
                                               </div>
                                             )}
-                                            <span className="text-sm truncate">{model.name}</span>
+                                            <span className="text-sm truncate">{getDisplayPath(model)}</span>
                                           </div>
                                           <Button
                                             variant="secondary"
@@ -1288,7 +1295,7 @@ export function SettingsPage({
                                   <div key={`dup-list-${group.hash}-${model.id}-${model.name}`} className="flex items-center justify-between">
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
                                       <ModelThumbnail thumbnail={model.thumbnail} name={model.name} />
-                                      <span className="text-sm truncate">{model.name}</span>
+                                      <span className="text-sm truncate">{getDisplayPath(model)}</span>
                                     </div>
                                     <Button
                                       variant="ghost"
