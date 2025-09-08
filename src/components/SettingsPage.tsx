@@ -53,6 +53,25 @@ import {
   Images
 } from "lucide-react";
 
+// Icon component for model thumbnails
+const ModelThumbnail = ({ thumbnail, name }: { thumbnail: string | null | undefined; name: string }) => {
+  if (thumbnail) {
+    return (
+      <img
+        src={thumbnail}
+        alt={name}
+        className="w-8 h-8 object-cover rounded border"
+        loading="lazy"
+      />
+    );
+  }
+  return (
+    <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
+      <Box className="h-4 w-4 text-muted-foreground" />
+    </div>
+  )
+};
+
 
 
 interface CorruptedFile {
@@ -92,17 +111,7 @@ export function SettingsPage({
   onModelClick,
   onDonationClick
 }: SettingsPageProps) {
-  const [placeholderKey, setPlaceholderKey] = useState<number>();
-  const placeholderUrl = `/assets/images/placeholder.png${placeholderKey ? `?v=${placeholderKey}` : ''}`;
-  
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const target = e.target as HTMLImageElement;
-    if (!target.src.includes('placeholder.png')) {
-      const newKey = Date.now();
-      setPlaceholderKey(newKey);
-      target.src = `/assets/images/placeholder.png?v=${newKey}`;
-    }
-  };
+
   const [localCategories, setLocalCategories] = useState<Category[]>(categories);
   const [localConfig, setLocalConfig] = useState<AppConfig>(() => {
     const initialConfig = config || ConfigManager.loadConfig();
@@ -1230,13 +1239,18 @@ export function SettingsPage({
                                       {group.models.map((model) => (
                                         <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            <img
-                                              src={model.thumbnail || `/assets/images/placeholder.png`}
-                                              alt={model.name}
-                                              className="w-8 h-8 object-cover rounded border"
-                                              loading="lazy"
-                                              onError={handleImageError}
-                                            />
+                                            {model.thumbnail ? (
+                                              <img
+                                                src={model.thumbnail}
+                                                alt={model.name}
+                                                className="w-8 h-8 object-cover rounded border"
+                                                loading="lazy"
+                                              />
+                                            ) : (
+                                              <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
+                                                <Box className="h-4 w-4 text-muted-foreground" />
+                                              </div>
+                                            )}
                                             <span className="text-sm truncate">{model.name}</span>
                                           </div>
                                           <Button
@@ -1256,13 +1270,7 @@ export function SettingsPage({
                                 {group.models.map((model) => (
                                   <div key={`dup-list-${group.hash}-${model.id}-${model.name}`} className="flex items-center justify-between">
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <img
-                                        src={model.thumbnail || `/assets/images/placeholder.png`}
-                                        alt={model.name}
-                                        className="w-8 h-8 object-cover rounded border"
-                                        loading="lazy"
-                                        onError={handleImageError}
-                                      />
+                                      <ModelThumbnail thumbnail={model.thumbnail} name={model.name} />
                                       <span className="text-sm truncate">{model.name}</span>
                                     </div>
                                     <Button
@@ -1331,13 +1339,9 @@ export function SettingsPage({
                                 {group.models.map((model, idx) => (
                                   <div key={model.id || idx} className="flex items-center justify-between p-2 bg-muted rounded">
                                     <div className="flex items-center gap-3">
-                                      <img
-                                        src={model.thumbnail || `/assets/images/placeholder.png`}
-                                        alt={model.name || 'Model thumbnail'}
-                                        className="w-10 h-10 object-cover rounded border"
-                                        loading="lazy"
-                                        onError={handleImageError}
-                                      />
+                                      <div className="w-10 h-10">
+                                        <ModelThumbnail thumbnail={model.thumbnail} name={model.name || 'Model thumbnail'} />
+                                      </div>
                                       <div>
                                         <p className="font-medium">{model.name}</p>
                                         <p className="text-sm text-muted-foreground">{model.fileSize}</p>
