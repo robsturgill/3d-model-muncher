@@ -710,7 +710,7 @@ export function SettingsPage({
               <TabsTrigger value="categories">Categories</TabsTrigger>
               <TabsTrigger value="tags">Tag Management</TabsTrigger>
               <TabsTrigger value="integrity">File Integrity</TabsTrigger>
-              <TabsTrigger value="duplicates">Duplicates</TabsTrigger>
+              {/* <TabsTrigger value="duplicates">Duplicates</TabsTrigger> */}
               <TabsTrigger value="support">Support</TabsTrigger>
               <TabsTrigger value="config">Configuration</TabsTrigger>
             </TabsList>
@@ -1286,125 +1286,6 @@ export function SettingsPage({
                             </div>
                           ))}
                         </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Duplicates Tab */}
-            <TabsContent value="duplicates" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Duplicate Management</CardTitle>
-                  <CardDescription>
-                    Find and remove duplicate files to save storage space
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {duplicateGroups.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Files className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <h3 className="font-medium mb-2">No Duplicates Found</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Run a hash check first to find duplicate files
-                      </p>
-                      <Button onClick={handleRunHashCheck} className="gap-2">
-                        <FileCheck className="h-4 w-4" />
-                        Run Hash Check
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-medium">Found {duplicateGroups.length} duplicate groups</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Potential space savings: {calculateSpaceSavings(duplicateGroups)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        {duplicateGroups.map((group, index) => (
-                          <Card key={group.hash || index}>
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="font-medium">Duplicate Group {index + 1}</h4>
-                                <Badge variant="outline">{group.models.length} files</Badge>
-                              </div>
-                              
-                              <div className="space-y-2">
-                                {group.models.map((model, idx) => (
-                                  <div key={model.id || idx} className="flex items-center justify-between p-2 bg-muted rounded">
-                                    <div className="flex items-center gap-3">
-                                      <div className="w-10 h-10">
-                                        <ModelThumbnail thumbnail={model.thumbnail} name={model.name || 'Model thumbnail'} />
-                                      </div>
-                                      <div>
-                                        <p className="font-medium">{model.name}</p>
-                                        <p className="text-sm text-muted-foreground">{model.fileSize}</p>
-                                      </div>
-                                    </div>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => onModelClick?.(model)}
-                                    >
-                                      View
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                              
-                              <div className="flex justify-end mt-3">
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive border bg-background text-foreground hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                      Remove Duplicates
-                                    </button>
-                                  </DialogTrigger>
-                                  <DialogContent>
-                                    <DialogHeader>
-                                      <DialogTitle>Remove Duplicate Files</DialogTitle>
-                                      <DialogDescription>
-                                        Choose which file to keep. All other duplicates will be removed.
-                                      </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="space-y-2">
-                                      {group.models.map((model, idx) => (
-                                        <div key={model.id || idx} className="flex items-center justify-between p-3 border rounded">
-                                          <div className="flex items-center gap-3">
-                                            <img
-                                              src={model.thumbnail}
-                                              alt={model.name}
-                                              className="w-8 h-8 object-cover rounded"
-                                            />
-                                            <div>
-                                              <p className="font-medium">{model.name}</p>
-                                              <p className="text-sm text-muted-foreground">{model.category}</p>
-                                            </div>
-                                          </div>
-                                          <Button
-                                            onClick={() => handleRemoveDuplicates(group, model.id)}
-                                            size="sm"
-                                          >
-                                            Keep This
-                                          </Button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
                       </div>
                     </div>
                   )}
