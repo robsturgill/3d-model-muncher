@@ -431,7 +431,7 @@ export function DemoPage({ onBack }: DemoPageProps) {
                   </AlertDescription>
                 </Alert>
 
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="border-red-500 text-red-700 dark:text-red-400">
                   <X className="h-4 w-4" />
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>

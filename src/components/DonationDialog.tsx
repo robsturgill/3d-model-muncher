@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -20,7 +19,7 @@ interface DonationPlatform {
 }
 
 export function DonationDialog({ isOpen, onClose }: DonationDialogProps) {
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  // Removed unused selectedPlatform state
 
   const donationPlatforms: DonationPlatform[] = [
     {
@@ -55,7 +54,6 @@ export function DonationDialog({ isOpen, onClose }: DonationDialogProps) {
   ];
 
   const handlePlatformClick = (platform: DonationPlatform) => {
-    setSelectedPlatform(platform.name);
     // In a real app, this would open the donation URL
     window.open(platform.url, '_blank', 'noopener,noreferrer');
   };

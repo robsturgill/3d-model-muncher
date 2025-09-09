@@ -1,4 +1,5 @@
-import React, { Component, ReactNode } from 'react';
+import * as React from 'react';
+import { Component, ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
@@ -92,7 +93,7 @@ export function ModelViewerErrorBoundary({ children }: { children: ReactNode }) 
           </div>
         </div>
       }
-      onError={(error, errorInfo) => {
+      onError={(error) => {
         // Log Three.js specific errors
         console.warn('3D Viewer Error:', error.message);
         if (error.message.includes('Three') || error.message.includes('WebGL')) {
