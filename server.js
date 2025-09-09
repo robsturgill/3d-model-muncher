@@ -12,6 +12,16 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json({ limit: '25mb' })); // Increased limit for large model payloads
 
+// Health check endpoint for Docker/Unraid
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: '0.1.0'
+  });
+});
+
 // Serve model files from the models directory
 const config = ConfigManager.loadConfig();
 const modelDir = (config.settings && config.settings.modelDirectory) || './models';

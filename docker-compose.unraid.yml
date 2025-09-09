@@ -1,0 +1,31 @@
+# Unraid-optimized docker-compose.yml
+version: '3.8'
+
+services:
+  3d-model-muncher:
+    build:
+      context: .
+      dockerfile: Dockerfile.unraid
+    container_name: 3d-model-muncher
+    hostname: 3d-model-muncher
+    ports:
+      - "3001:3001"
+    volumes:
+      # Map to your Unraid shares
+      - /mnt/user/3d-models:/app/models:rw
+      - /mnt/user/appdata/3d-model-muncher:/app/data:rw
+    environment:
+      - NODE_ENV=production
+      - PUID=99
+      - PGID=100
+      - TZ=America/New_York  # Change to your timezone
+    restart: unless-stopped
+    networks:
+      - default
+    labels:
+      - "com.unraid.docker.managed=dockerman"
+      - "com.unraid.docker.icon=https://raw.githubusercontent.com/robsturgill/3d-model-muncher/main/public/favicon.ico"
+
+networks:
+  default:
+    driver: bridge
