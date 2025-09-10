@@ -65,6 +65,7 @@
       "scripts": {
             "dev": "vite",
             "build": "vite build",
+            "preview": "vite preview",
             "build:backend": "tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts"
       }
 }
