@@ -51,9 +51,18 @@
     build: {
       target: 'esnext',
       outDir: 'build',
+      rollupOptions: {
+        external: ['fs', 'path', 'crypto'],
+      },
     },
     server: {
       port: 3000,
       open: true,
+    },
+    preview: {
+      port: 4173,
+    },
+    define: {
+      global: 'globalThis',
     },
   });

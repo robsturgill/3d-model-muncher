@@ -41,7 +41,10 @@ const Scene = memo(({ modelUrl, isWireframe }: { modelUrl?: string; isWireframe?
         {modelUrl ? (
           <Bounds fit clip observe margin={1.2}>
             <Center>
-              <ModelMesh modelUrl={modelUrl} isWireframe={isWireframe} />
+              <ModelMesh 
+                modelUrl={modelUrl} 
+                isWireframe={isWireframe} 
+              />
             </Center>
           </Bounds>
         ) : null}

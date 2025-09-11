@@ -5,7 +5,7 @@ import { Category } from "../types/category";
 import { AppConfig } from "../types/config";
 import { Model, DuplicateGroup, HashCheckResult, CorruptedFile } from "../types/model";
 import { ConfigManager } from "../utils/configManager";
-import { removeDuplicates } from "../utils/fileManager";
+import { removeDuplicates } from "../utils/clientUtils";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";

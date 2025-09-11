@@ -82,17 +82,40 @@ export class ErrorBoundary extends Component<Props, State> {
 
 // Specific error boundary for 3D viewer components
 export function ModelViewerErrorBoundary({ children }: { children: ReactNode }) {
+  const getErrorMessage = (error: Error) => {
+    const message = error.message;
+    
+    if (message.includes('rels') || message.includes('relationship')) {
+      return {
+        title: 'Invalid 3MF File',
+        description: 'This 3MF file appears to be corrupted or incomplete. It may have been exported incorrectly or damaged during transfer.'
+      };
+    } else if (message.includes('3MF') || message.includes('ThreeMF')) {
+      return {
+        title: '3MF Loading Error',
+        description: 'Unable to parse this 3MF file. The file format may be unsupported or corrupted.'
+      };
+    } else if (message.includes('WebGL') || message.includes('Three')) {
+      return {
+        title: 'WebGL Error',
+        description: 'A graphics rendering error occurred. Try refreshing the page or updating your browser.'
+      };
+    } else if (message.includes('timeout') || message.includes('Loading timeout')) {
+      return {
+        title: 'Loading Timeout',
+        description: 'The 3D model took too long to load. The file may be too large or the connection may be slow.'
+      };
+    } else {
+      return {
+        title: '3D Viewer Error',
+        description: 'Unable to load the 3D model viewer. Please try again.'
+      };
+    }
+  };
+
   return (
     <ErrorBoundary
-      fallback={
-        <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 rounded-lg overflow-hidden border border-border flex items-center justify-center">
-          <div className="text-center space-y-2 p-4">
-            <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">3D Viewer Error</p>
-            <p className="text-xs text-muted-foreground">Unable to load 3D model viewer</p>
-          </div>
-        </div>
-      }
+      fallback={null} // We'll handle the fallback in onError
       onError={(error) => {
         // Log Three.js specific errors
         console.warn('3D Viewer Error:', error.message);
@@ -101,7 +124,27 @@ export function ModelViewerErrorBoundary({ children }: { children: ReactNode }) 
         }
       }}
     >
-      {children}
+      <ErrorBoundary
+        fallback={
+          <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 rounded-lg overflow-hidden border border-border flex items-center justify-center">
+            <div className="text-center space-y-3 p-6 max-w-sm">
+              <AlertCircle className="h-10 w-10 mx-auto text-amber-500" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">3D Model Error</p>
+                <p className="text-xs text-muted-foreground">
+                  Unable to load this 3D model. The file may be corrupted or incompatible.
+                </p>
+              </div>
+            </div>
+          </div>
+        }
+        onError={(error) => {
+          const errorInfo = getErrorMessage(error);
+          console.warn(`${errorInfo.title}: ${errorInfo.description}`);
+        }}
+      >
+        {children}
+      </ErrorBoundary>
     </ErrorBoundary>
   );
 }

@@ -3,8 +3,6 @@ import { useMemo } from 'react';
 import '@react-three/fiber';
 // @ts-ignore
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader';
-
-
 import * as THREE from 'three';
 
 interface ModelMeshProps {
@@ -14,7 +12,7 @@ interface ModelMeshProps {
 }
 
 export function ModelMesh({ modelUrl, isWireframe, onBoundingBox }: ModelMeshProps) {
-  // Load the 3MF model as a Group
+  // Load the 3MF model as a Group - revert to original working approach
   const group = useLoader(ThreeMFLoader, modelUrl);
 
   // Recursively set wireframe on all mesh materials if needed

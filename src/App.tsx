@@ -12,7 +12,6 @@ import { Model } from "./types/model";
 import { Category } from "./types/category";
 import { AppConfig } from "./types/config";
 import { ConfigManager } from "./utils/configManager";
-import { scanModelFile } from "./utils/fileManager";
 import { Menu, Box, Palette, RefreshCw, CheckSquare, Square, Edit, Trash2, X, Heart } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
@@ -321,13 +320,24 @@ function AppContent() {
       }
       const loadedModels = await response.json();
 
-      // 2. Scan each model file for updated metadata
-      const updatedModels = await Promise.all(
-        loadedModels.map(async (model: Model) => {
-          const scannedData = await scanModelFile(model);
-          return { ...model, ...scannedData };
-        })
-      );
+      // 2. Trigger a scan of all models on the backend
+      const scanResponse = await fetch('http://localhost:3001/api/scan-models', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!scanResponse.ok) {
+        throw new Error('Failed to scan models');
+      }
+      
+      // 3. Fetch the updated models after scanning
+      const updatedResponse = await fetch('http://localhost:3001/api/models');
+      if (!updatedResponse.ok) {
+        throw new Error('Failed to fetch updated models');
+      }
+      const updatedModels = await updatedResponse.json();
 
       setModels(updatedModels);
       setFilteredModels(updatedModels);

@@ -24,9 +24,36 @@ app.get('/api/health', (req, res) => {
 
 // Serve model files from the models directory
 const config = ConfigManager.loadConfig();
-const modelDir = (config.settings && config.settings.modelDirectory) || './models';
+// Check if we're in preview mode (serving from build directory)
+const isPreviewMode = process.env.PREVIEW_MODE === 'true';
+let modelDir;
+
+if (isPreviewMode) {
+  // In preview mode, always use build/models regardless of config
+  modelDir = './build/models';
+} else {
+  // In dev mode, use config setting or default to ./models
+  modelDir = (config.settings && config.settings.modelDirectory) || './models';
+}
+
 const absoluteModelPath = path.isAbsolute(modelDir) ? modelDir : path.join(process.cwd(), modelDir);
+console.log(`Serving models from: ${absoluteModelPath} ${isPreviewMode ? '(preview mode)' : '(dev mode)'}`);
 app.use('/models', express.static(absoluteModelPath));
+
+// Helper function to get the correct models directory based on preview mode
+function getModelsDirectory() {
+  if (isPreviewMode) {
+    return './build/models';
+  } else {
+    const config = ConfigManager.loadConfig();
+    return (config.settings && config.settings.modelDirectory) || './models';
+  }
+}
+
+function getAbsoluteModelsPath() {
+  const dir = getModelsDirectory();
+  return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+}
 
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
@@ -70,31 +97,34 @@ app.post('/api/save-model', (req, res) => {
 // API endpoint to get all model data
 app.get('/api/models', async (req, res) => {
   try {
-    const config = ConfigManager.loadConfig();
-    // Ensure config.settings exists and fallback to './models' if not
-    const dir = (config.settings && config.settings.modelDirectory) || './models';
-    const absolutePath = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+    const absolutePath = getAbsoluteModelsPath();
+    console.log(`API /models scanning directory: ${absolutePath}`);
     
     let models = [];
     
     // Function to recursively scan directories
     function scanForModels(directory) {
+      console.log(`Scanning directory: ${directory}`);
       const entries = fs.readdirSync(directory, { withFileTypes: true });
+      console.log(`Found ${entries.length} entries in ${directory}`);
       
       for (const entry of entries) {
         const fullPath = path.join(directory, entry.name);
         
         if (entry.isDirectory()) {
           // Recursively scan subdirectories
+          console.log(`Scanning subdirectory: ${fullPath}`);
           scanForModels(fullPath);
         } else if (entry.name.endsWith('-munchie.json')) {
           // Load and parse each munchie file
+          console.log(`Found munchie file: ${fullPath}`);
           try {
             const fileContent = fs.readFileSync(fullPath, 'utf8');
             const model = JSON.parse(fileContent);
             // Add relative path information for proper URL construction
             const relativePath = path.relative(absolutePath, fullPath);
             model.modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
+            console.log(`Added model: ${model.name} with URL: ${model.modelUrl}`);
             models.push(model);
           } catch (error) {
             console.error(`Error reading model file ${fullPath}:`, error);
@@ -116,9 +146,7 @@ app.get('/api/models', async (req, res) => {
 // API endpoint to trigger model directory scan and JSON generation
 app.post('/api/scan-models', async (req, res) => {
   try {
-    // Use config or default directory
-    const config = ConfigManager.loadConfig();
-    const dir = config.settings.modelDirectory || './models';
+    const dir = getModelsDirectory();
     await scanDirectory(dir);
     res.json({ success: true, message: 'Model JSON files generated successfully.' });
   } catch (error) {
@@ -131,7 +159,7 @@ app.post('/api/scan-models', async (req, res) => {
 
 // --- API: Get all -munchie.json files and their hashes ---
 app.get('/api/munchie-files', (req, res) => {
-  const modelsDir = path.join(__dirname, 'models');
+  const modelsDir = getAbsoluteModelsPath();
   let result = [];
   
   function scanDirectory(dir) {
@@ -174,7 +202,7 @@ app.get('/api/munchie-files', (req, res) => {
 // --- API: Hash check for all .3mf files and their -munchie.json ---
 app.get('/api/hash-check', async (req, res) => {
   try {
-    const modelsDir = path.join(__dirname, 'models');
+    const modelsDir = getAbsoluteModelsPath();
     const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
     let result = [];
     let seenHashes = new Set();
@@ -290,7 +318,7 @@ app.get('/api/load-model', async (req, res) => {
     const fullPath = path.resolve(filePath);
 
     // Ensure the path is within the models directory for security
-    const modelsDir = path.resolve('models');
+    const modelsDir = path.resolve(getModelsDirectory());
     if (!fullPath.startsWith(modelsDir)) {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
@@ -314,7 +342,7 @@ app.post('/api/delete-models', (req, res) => {
   if (!Array.isArray(files)) {
     return res.status(400).json({ success: false, error: 'No files provided' });
   }
-  const modelsDir = path.join(__dirname, 'models');
+  const modelsDir = getAbsoluteModelsPath();
   let deleted = [];
   let errors = [];
   files.forEach(file => {
@@ -329,6 +357,48 @@ app.post('/api/delete-models', (req, res) => {
     }
   });
   res.json({ success: errors.length === 0, deleted, errors });
+});
+
+// API endpoint to validate a specific 3MF file
+app.get('/api/validate-3mf', async (req, res) => {
+  const { file } = req.query;
+  
+  if (!file) {
+    return res.status(400).json({ error: 'File path required' });
+  }
+
+  try {
+    const { parse3MF } = require('./dist-backend/utils/threeMFToJson');
+    const filePath = path.isAbsolute(file) ? file : path.join(absoluteModelPath, file);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Try to parse the 3MF file
+    const metadata = await parse3MF(filePath, 0);
+    
+    res.json({ 
+      valid: true, 
+      file: file,
+      size: fs.statSync(filePath).size,
+      metadata: {
+        name: metadata.name,
+        thumbnail: metadata.thumbnail ? 'present' : 'missing',
+        fileSize: metadata.fileSize
+      }
+    });
+  } catch (error) {
+    console.error('3MF validation error:', error.message);
+    res.json({ 
+      valid: false, 
+      file: file,
+      error: error.message,
+      suggestion: error.message.includes('rels') || error.message.includes('relationship') 
+        ? 'This 3MF file appears to be missing relationship files. Try re-exporting from your 3D software.'
+        : 'This 3MF file may be corrupted or in an unsupported format.'
+    });
+  }
 });
 
 app.listen(PORT, () => {
