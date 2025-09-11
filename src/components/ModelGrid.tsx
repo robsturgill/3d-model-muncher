@@ -196,7 +196,7 @@ export function ModelGrid({
                       <Checkbox
                         checked={selectedModelIds.includes(model.id)}
                         onCheckedChange={() => onModelSelection?.(model.id)}
-                        onClick={(e) => handleCheckboxClick(e, model.id)}
+                        onClick={(e: React.MouseEvent<HTMLInputElement>) => handleCheckboxClick(e, model.id)}
                         className="w-5 h-5"
                       />
                     </div>

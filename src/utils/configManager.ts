@@ -133,7 +133,7 @@ export class ConfigManager {
         const fs = require('fs');
         // @ts-ignore
         const path = require('path');
-        let configPath = path.join(__dirname, '../config/default-config.json');
+        let configPath = path.join(process.cwd(), CONFIG_FILENAME);
         if (!fs.existsSync(configPath)) {
           configPath = path.join(process.cwd(), 'src/config/default-config.json');
         }

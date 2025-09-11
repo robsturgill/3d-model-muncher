@@ -312,15 +312,7 @@ function AppContent() {
         description: "Checking for new files and updating metadata"
       });
 
-      // 1. Get all *-munchie.json files in models/ directory
-      // This requires a backend API endpoint to list files, but for now, we'll fetch from the backend
-      const response = await fetch('http://localhost:3001/api/models');
-      if (!response.ok) {
-        throw new Error('Failed to fetch models');
-      }
-      const loadedModels = await response.json();
-
-      // 2. Trigger a scan of all models on the backend
+      // 1. Trigger a scan of all models on the backend
       const scanResponse = await fetch('http://localhost:3001/api/scan-models', {
         method: 'POST',
         headers: {
@@ -332,7 +324,7 @@ function AppContent() {
         throw new Error('Failed to scan models');
       }
       
-      // 3. Fetch the updated models after scanning
+      // 2. Fetch the updated models after scanning
       const updatedResponse = await fetch('http://localhost:3001/api/models');
       if (!updatedResponse.ok) {
         throw new Error('Failed to fetch updated models');

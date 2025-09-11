@@ -20,10 +20,21 @@ export function findDuplicates(models: Model[]): DuplicateGroup[] {
   const duplicateGroups: DuplicateGroup[] = [];
   hashGroups.forEach((groupModels, hash) => {
     if (groupModels.length > 1) {
+      const totalSizeBytes = groupModels.reduce((sum, model) => {
+        const sizeStr = model.fileSize?.replace(/[^\d.]/g, '') || '0';
+        const size = parseFloat(sizeStr);
+        if (model.fileSize?.includes('GB')) return sum + (size * 1024 * 1024 * 1024);
+        if (model.fileSize?.includes('MB')) return sum + (size * 1024 * 1024);
+        if (model.fileSize?.includes('KB')) return sum + (size * 1024);
+        return sum + size;
+      }, 0);
+      
+      const totalSize = formatFileSize(totalSizeBytes);
+
       duplicateGroups.push({
         hash,
         models: groupModels,
-        count: groupModels.length
+        totalSize
       });
     }
   });

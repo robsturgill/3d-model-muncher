@@ -26,7 +26,6 @@ export function useSafeThreeMFLoader(url: string | undefined): LoaderState {
     setState({ data: null, error: null, loading: true });
 
     const loader = new ThreeMFLoader();
-    const manager = new THREE.LoadingManager();
 
     // Add timeout for loading
     const timeoutId = setTimeout(() => {
