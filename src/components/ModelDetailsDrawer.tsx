@@ -116,7 +116,7 @@ export function ModelDetailsDrawer({
       }
     });
     try {
-      const response = await fetch('http://localhost:3001/api/save-model', {
+      const response = await fetch('/api/save-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(changes)

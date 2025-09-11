@@ -9,13 +9,11 @@ A responsive 3D printing model management application built with React, TypeScri
 **Client-Server Architecture:**
 - **Frontend**: React app with Three.js 3D viewer
 - **Backend**: Express.js API for file operations and 3MF parsing
-- **File Storage**: 3MF files in `/models` directory with auto-generated JSON metadata
+- **File Storage**: Automatic JSON metadata generation from 3MF parsing with full portability
 
-**Development vs Production:**
-- **Dev Mode**: Files served from root `models/` directory
-- **Production**: Files copied to `build/models/` during build
-
-⚠️ **Important**: Production builds copy the entire models directory. Keep it under 1-2GB to avoid long build times.
+**Single Source of Truth:**
+- **All Modes**: Files served directly from source `models/` directory
+- **Docker/Unraid Friendly**: Easy volume mapping to shared storage
 
 ## Features
 
@@ -36,28 +34,26 @@ A responsive 3D printing model management application built with React, TypeScri
 ```bash
 npm install
 npm run build:backend
-npm run server:dev    # Terminal 1: Backend server
-npm run dev           # Terminal 2: Frontend server
+npm run server        # Terminal 1: Backend server
+npm run dev           # Terminal 2: Frontend dev server
+# Access: http://localhost:3000
 ```
 
-**Production:**
+**Preview (Test Production Build):**
 ```bash
-npm install
-npm run build:backend
-npm run build         # Copies models directory
-npm run server:preview  # Terminal 1: Backend (serves from build/models)
-npm run preview         # Terminal 2: Frontend preview
+npm run build         # Build frontend
+npm run server        # Terminal 1: Same backend server
+npm run preview       # Terminal 2: Frontend preview server
+# Access: http://localhost:4173
 ```
 
 ## Available Scripts
 
-- `npm run dev` - Start development server (Vite)
-- `npm run build` - Build for production and copy models directory
-- `npm run build:frontend-only` - Build frontend without copying models
+- `npm run dev` - Start development server with hot reload (port 3000)
+- `npm run build` - Build frontend for production
 - `npm run build:backend` - Compile TypeScript backend utilities
-- `npm run preview` - Preview production build
-- `npm run server:dev` - Backend server (development mode)
-- `npm run server:preview` - Backend server (production mode)
+- `npm run preview` - Preview production build (port 4173)
+- `npm run server` - Backend API server (port 3001)
 
 ## Configuration
 
@@ -66,7 +62,7 @@ The app includes configuration management through the Settings page:
 - **Categories**: Customize and reorder model categories
 - **Themes**: Light, dark, or system theme
 - **View Options**: Grid/list views with adjustable density
-- **Auto-save**: Settings stored in browser localStorage
+- **Auto-save**: Model data stored in individual `-munchie.json` files alongside each 3MF model
 
 ## Usage
 
@@ -84,7 +80,14 @@ docker-compose up -d
 
 # Manual Docker build
 docker build -t 3d-model-muncher .
-docker run -p 3001:3001 -v $(pwd)/models:/app/models 3d-model-muncher
+docker run -p 3001:3001 \
+  -v /path/to/your/models:/app/models \
+  -v /path/to/your/data:/app/data \
+  3d-model-muncher
+
+# For Unraid: Map your shares directly
+# Container Path: /app/models -> Host Path: /mnt/user/3d-models
+# Container Path: /app/data -> Host Path: /mnt/user/appdata/3d-model-muncher
 ```
 
 ## API Endpoints
@@ -95,11 +98,7 @@ docker run -p 3001:3001 -v $(pwd)/models:/app/models 3d-model-muncher
 - `POST /api/scan-models` - Scan models directory
 - `GET /api/validate-3mf` - Validate 3MF file integrity
 - `POST /api/delete-models` - Delete models and files
-
-**Error Handling:**
-- Graceful handling of corrupted 3MF files
-- User-friendly error messages for common issues
-- File validation with specific diagnostic information
+- `GET /models/*` - Static model files (3MF, images, etc.)
 
 ## File Structure
 
@@ -108,13 +107,12 @@ Each 3MF file gets a corresponding `-munchie.json` metadata file containing extr
 ## Troubleshooting
 
 **Common Issues:**
-1. **Models not loading**: Check backend server is running (`npm run server:dev`) and files are in `models/` directory
-2. **3D viewer issues**: Use `/api/validate-3mf?file=path/to/model.3mf` to check file integrity
-3. **"Cannot find relationship file `rels`" error**: Re-export the 3MF file from your 3D software
+1. **Models not loading**: Check backend server is running (`npm run server`) and files are in `models/` directory
+2. **Preview mode errors**: Ensure backend server is running before starting preview mode
+3. **3D viewer issues**: Use `/api/validate-3mf?file=path/to/model.3mf` to check file integrity
 4. **Build issues**: Run `npm run build:backend` before building frontend
 5. **Docker issues**: Check port 3001 availability and volume mounts
 
 **3MF File Requirements:**
-- `_rels/.rels` - Relationship definitions
 - `3D/3dmodel.model` - Main 3D model data
 - `[Content_Types].xml` - Content type definitions

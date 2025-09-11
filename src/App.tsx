@@ -50,7 +50,7 @@ function AppContent() {
         setCategories(config.categories);
 
         // Load models from the backend API
-        const response = await fetch('http://localhost:3001/api/models');
+        const response = await fetch('/api/models');
         if (!response.ok) {
           throw new Error('Failed to fetch models');
         }
@@ -313,7 +313,7 @@ function AppContent() {
       });
 
       // 1. Trigger a scan of all models on the backend
-      const scanResponse = await fetch('http://localhost:3001/api/scan-models', {
+      const scanResponse = await fetch('/api/scan-models', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -325,7 +325,7 @@ function AppContent() {
       }
       
       // 2. Fetch the updated models after scanning
-      const updatedResponse = await fetch('http://localhost:3001/api/models');
+      const updatedResponse = await fetch('/api/models');
       if (!updatedResponse.ok) {
         throw new Error('Failed to fetch updated models');
       }

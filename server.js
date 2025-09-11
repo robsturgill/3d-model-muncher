@@ -24,30 +24,17 @@ app.get('/api/health', (req, res) => {
 
 // Serve model files from the models directory
 const config = ConfigManager.loadConfig();
-// Check if we're in preview mode (serving from build directory)
-const isPreviewMode = process.env.PREVIEW_MODE === 'true';
-let modelDir;
-
-if (isPreviewMode) {
-  // In preview mode, always use build/models regardless of config
-  modelDir = './build/models';
-} else {
-  // In dev mode, use config setting or default to ./models
-  modelDir = (config.settings && config.settings.modelDirectory) || './models';
-}
+// Always serve from the source models directory for single source of truth
+const modelDir = (config.settings && config.settings.modelDirectory) || './models';
 
 const absoluteModelPath = path.isAbsolute(modelDir) ? modelDir : path.join(process.cwd(), modelDir);
-console.log(`Serving models from: ${absoluteModelPath} ${isPreviewMode ? '(preview mode)' : '(dev mode)'}`);
+console.log(`Serving models from: ${absoluteModelPath} (single source of truth)`);
 app.use('/models', express.static(absoluteModelPath));
 
-// Helper function to get the correct models directory based on preview mode
+// Helper function to get the models directory (always from source)
 function getModelsDirectory() {
-  if (isPreviewMode) {
-    return './build/models';
-  } else {
-    const config = ConfigManager.loadConfig();
-    return (config.settings && config.settings.modelDirectory) || './models';
-  }
+  const config = ConfigManager.loadConfig();
+  return (config.settings && config.settings.modelDirectory) || './models';
 }
 
 function getAbsoluteModelsPath() {

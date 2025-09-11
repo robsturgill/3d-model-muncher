@@ -58,10 +58,19 @@
     server: {
       port: 3000,
       open: true,
+      proxy: {
+        '/api': 'http://localhost:3001',
+        '/models': 'http://localhost:3001'
+      }
     },
     preview: {
       port: 4173,
+      proxy: {
+        '/api': 'http://localhost:3001',
+        '/models': 'http://localhost:3001'
+      }
     },
+    publicDir: false, // We'll serve models via backend API instead
     define: {
       global: 'globalThis',
     },

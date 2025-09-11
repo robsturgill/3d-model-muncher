@@ -165,7 +165,7 @@ export function SettingsPage({
             ? `models/${directory}/${munchieFileName}`
             : `models/${munchieFileName}`;
           
-          const response = await fetch(`http://localhost:3001/api/load-model?filePath=${encodeURIComponent(fullPath)}`);
+          const response = await fetch(`/api/load-model?filePath=${encodeURIComponent(fullPath)}`);
           if (response.ok) {
             const modelData = await response.json();
             // The API returns the model data directly, not wrapped in a success structure
@@ -194,7 +194,7 @@ export function SettingsPage({
     setIsGeneratingJson(true);
     setStatusMessage('Generating JSON for all .3mf files...');
     try {
-      const response = await fetch('http://localhost:3001/api/scan-models', {
+      const response = await fetch('/api/scan-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -470,7 +470,7 @@ export function SettingsPage({
     setIsHashChecking(true);
     setHashCheckProgress(0);
     setStatusMessage('Rescanning .3mf files and comparing hashes...');
-    fetch('http://localhost:3001/api/hash-check')
+    fetch('/api/hash-check')
       .then(resp => resp.json())
       .then(data => {
       if (!data.success) throw new Error(data.error || 'Hash check failed');
@@ -613,7 +613,7 @@ export function SettingsPage({
     setSaveStatus('saving');
     setStatusMessage('Deleting duplicate files...');
     try {
-      const resp = await fetch('http://localhost:3001/api/delete-models', {
+      const resp = await fetch('/api/delete-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: filesToDelete })

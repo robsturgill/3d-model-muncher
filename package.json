@@ -65,11 +65,10 @@
       },
       "scripts": {
             "dev": "vite",
-            "build": "vite build && node copy-models-to-build.js",
-            "build:frontend-only": "vite build",
+            "build": "vite build",
+            "build:with-models": "vite build && node copy-models-to-build.js",
             "preview": "vite preview",
-            "server:preview": "cross-env PREVIEW_MODE=true node server.js",
-            "server:dev": "node server.js",
+            "server": "node server.js",
             "build:backend": "tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts"
       }
 }
