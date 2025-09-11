@@ -164,7 +164,7 @@ export function ModelGrid({
               <h2 className="font-semibold text-lg">No models found</h2>
               <p className="text-muted-foreground text-sm">Try adjusting your search or filters</p>
               <img
-                src="/images/empty-munchie.png"
+                src="/images/munchie-front.png"
                 alt="No models found"
                 width="418"
               />

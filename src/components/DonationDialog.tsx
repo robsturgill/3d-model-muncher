@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
-import { Heart, Coffee, Github, CreditCard, Gift, ExternalLink, Star } from "lucide-react";
+import { Heart, Coffee, Github, Gift, ExternalLink, Star } from "lucide-react";
 
 interface DonationDialogProps {
   isOpen: boolean;
@@ -23,26 +23,11 @@ export function DonationDialog({ isOpen, onClose }: DonationDialogProps) {
 
   const donationPlatforms: DonationPlatform[] = [
     {
-      name: "GitHub Sponsors",
-      description: "Support ongoing development through GitHub's platform",
-      icon: <Github className="h-5 w-5" />,
-      url: "https://github.com/sponsors/3d-model-muncher",
-      suggested: "$5/month",
-      popular: true
-    },
-    {
       name: "Ko-fi",
       description: "Buy me a coffee to fuel late-night coding sessions",
       icon: <Coffee className="h-5 w-5" />,
-      url: "https://ko-fi.com/3dmodelmuncher",
-      suggested: "$3"
-    },
-    {
-      name: "PayPal",
-      description: "One-time donation via PayPal",
-      icon: <CreditCard className="h-5 w-5" />,
-      url: "https://paypal.me/3dmodelmuncher",
-      suggested: "$10"
+      url: "https://ko-fi.com/robsturgill",
+      suggested: "$5"
     },
     {
       name: "Buy Me a Coffee",
@@ -50,6 +35,13 @@ export function DonationDialog({ isOpen, onClose }: DonationDialogProps) {
       icon: <Gift className="h-5 w-5" />,
       url: "https://buymeacoffee.com/3dmodelmuncher",
       suggested: "$5"
+    },    
+    {
+      name: "GitHub",
+      description: "Support ongoing development",
+      icon: <Github className="h-5 w-5" />,
+      url: "https://github.com/robsturgill/3d-model-muncher",
+      popular: false
     }
   ];
 
@@ -83,6 +75,7 @@ export function DonationDialog({ isOpen, onClose }: DonationDialogProps) {
         <div className="flex-1 overflow-y-auto px-6 pb-4">
           <div className="space-y-6">
             {/* Project Stats */}
+            {/*}
             <div className="flex items-center justify-center gap-3 sm:gap-4 p-3 sm:p-4 bg-muted/30 rounded-lg border">
               <div className="text-center">
                 <div className="font-semibold text-base sm:text-lg text-primary">1.2k+</div>
@@ -99,6 +92,7 @@ export function DonationDialog({ isOpen, onClose }: DonationDialogProps) {
                 <div className="text-xs text-muted-foreground">Source</div>
               </div>
             </div>
+            */}
 
             {/* Donation Platforms */}
             <div className="space-y-3">

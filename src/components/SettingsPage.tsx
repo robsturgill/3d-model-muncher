@@ -1315,6 +1315,7 @@ export function SettingsPage({
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {/* Project Stats */}
+                  {/*
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Card>
                       <CardContent className="p-4 text-center">
@@ -1335,7 +1336,7 @@ export function SettingsPage({
                       </CardContent>
                     </Card>
                   </div>
-
+                  */}
                   {/* Ways to Support */}
                   <div className="space-y-4">
                     <h3 className="font-medium">Ways to Support</h3>
@@ -1368,7 +1369,7 @@ export function SettingsPage({
                           </p>
                         </div>
                         <Button variant="outline" className="gap-2" asChild>
-                          <a href="https://github.com/3d-model-muncher" target="_blank" rel="noopener noreferrer">
+                          <a href="https://github.com/robsturgill/3d-model-muncher" target="_blank" rel="noopener noreferrer">
                             <Github className="h-4 w-4" />
                             Star
                           </a>
@@ -1386,7 +1387,7 @@ export function SettingsPage({
                           </p>
                         </div>
                         <Button variant="outline" className="gap-2" asChild>
-                          <a href="https://github.com/3d-model-muncher/contribute" target="_blank" rel="noopener noreferrer">
+                          <a href="https://github.com/robsturgill/3d-model-muncher" target="_blank" rel="noopener noreferrer">
                             <Github className="h-4 w-4" />
                             Contribute
                           </a>
@@ -1396,13 +1397,21 @@ export function SettingsPage({
                   </div>
 
                   {/* Community */}
-                  <div className="space-y-4">
-                    <h3 className="font-medium">Join the Community</h3>
-                    <div className="text-sm text-muted-foreground space-y-2">
-                      <p>• Share your 3D printing projects and experiences</p>
-                      <p>• Get help from fellow makers and developers</p>
-                      <p>• Suggest new features and improvements</p>
-                      <p>• Stay updated on the latest releases</p>
+                  <div className="flex items-center gap-6">
+                    <img 
+                      src="/images/munchie-side.png"
+                      alt="Community mascot"
+                      width="200"
+                      className="w-[200px] h-auto flex-shrink-0"
+                    />                    
+                    <div className="flex-1 flex flex-col justify-center space-y-3">
+                      <h3 className="font-medium text-left">Join the Community</h3>
+                      <ul className="text-sm text-muted-foreground space-y-2 text-left list-disc list-inside">
+                        <li>• Share your 3D printing projects and experiences</li>
+                        <li>• Get help from fellow makers and developers</li>
+                        <li>• Suggest new features and improvements</li>
+                        <li>• Stay updated on the latest releases</li>
+                      </ul>
                     </div>
                   </div>
 
