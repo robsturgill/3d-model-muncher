@@ -3,11 +3,19 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const zlib = require('zlib');
+const multer = require('multer');
 const { scanDirectory } = require('./dist-backend/utils/threeMFToJson');
 const { ConfigManager } = require('./dist-backend/utils/configManager');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Configure multer for backup file uploads
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
 
 app.use(cors());
 app.use(express.json({ limit: '25mb' })); // Increased limit for large model payloads
@@ -513,6 +521,402 @@ app.delete('/api/models/delete', async (req, res) => {
     
   } catch (error) {
     console.error('Error deleting models:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to create a backup of all munchie.json files
+app.post('/api/backup-munchie-files', async (req, res) => {
+  try {
+    const modelsDir = getAbsoluteModelsPath();
+    const backup = {
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      files: []
+    };
+
+    // Recursively find all munchie.json files
+    function findMunchieFiles(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          findMunchieFiles(fullPath);
+        } else if (entry.name.endsWith('-munchie.json')) {
+          try {
+            const relativePath = path.relative(modelsDir, fullPath);
+            const content = fs.readFileSync(fullPath, 'utf8');
+            const jsonData = JSON.parse(content);
+            
+            backup.files.push({
+              relativePath: relativePath.replace(/\\/g, '/'), // Normalize path separators
+              originalPath: relativePath.replace(/\\/g, '/'), // Store original path for restoration
+              content: jsonData,
+              hash: jsonData.hash || null, // Use hash for matching during restore
+              size: Buffer.byteLength(content, 'utf8')
+            });
+          } catch (error) {
+            console.error(`Error reading munchie file ${fullPath}:`, error);
+          }
+        }
+      }
+    }
+
+    findMunchieFiles(modelsDir);
+
+    // Compress the backup data
+    const jsonString = JSON.stringify(backup, null, 2);
+    const compressed = zlib.gzipSync(Buffer.from(jsonString, 'utf8'));
+
+    // Set headers for file download
+    const timestamp = backup.timestamp.replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `munchie-backup-${timestamp}.gz`;
+    
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', compressed.length);
+    
+    res.send(compressed);
+    
+    console.log(`Backup created: ${backup.files.length} munchie.json files, ${(compressed.length / 1024).toFixed(2)} KB compressed`);
+    
+  } catch (error) {
+    console.error('Backup creation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to restore munchie.json files from backup
+app.post('/api/restore-munchie-files', async (req, res) => {
+  try {
+    const { backupData, strategy = 'hash-match' } = req.body;
+    
+    if (!backupData) {
+      return res.status(400).json({ success: false, error: 'No backup data provided' });
+    }
+
+    let backup;
+    try {
+      // Parse the backup data (should be uncompressed JSON)
+      backup = typeof backupData === 'string' ? JSON.parse(backupData) : backupData;
+    } catch (error) {
+      return res.status(400).json({ success: false, error: 'Invalid backup data format' });
+    }
+
+    if (!backup.files || !Array.isArray(backup.files)) {
+      return res.status(400).json({ success: false, error: 'Invalid backup structure' });
+    }
+
+    const modelsDir = getAbsoluteModelsPath();
+    const results = {
+      restored: [],
+      skipped: [],
+      errors: [],
+      strategy: strategy
+    };
+
+    // Create a map of existing 3MF files by their hashes for hash-based matching
+    const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
+    const existingFiles = new Map(); // hash -> { munchieJsonPath, threeMFPath, currentHash }
+    
+    function mapExistingFiles(dir) {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            mapExistingFiles(fullPath);
+          } else if (entry.name.endsWith('.3mf')) {
+            try {
+              // Calculate the current hash of the 3MF file
+              const currentHash = computeMD5(fullPath);
+              const relativePath = path.relative(modelsDir, fullPath);
+              
+              // Find the corresponding munchie.json file
+              const munchieJsonPath = fullPath.replace(/\.3mf$/i, '-munchie.json');
+              
+              if (fs.existsSync(munchieJsonPath)) {
+                existingFiles.set(currentHash, {
+                  munchieJsonPath: munchieJsonPath,
+                  threeMFPath: fullPath,
+                  relativeMunchieJsonPath: relativePath.replace(/\.3mf$/i, '-munchie.json').replace(/\\/g, '/'),
+                  currentHash: currentHash
+                });
+              }
+            } catch (error) {
+              console.error(`Error processing 3MF file ${fullPath}:`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error scanning directory ${dir}:`, error);
+      }
+    }
+
+    mapExistingFiles(modelsDir);
+
+    // Process each file in the backup
+    for (const backupFile of backup.files) {
+      try {
+        let targetPath;
+        let shouldRestore = false;
+        let reason = '';
+
+        if (strategy === 'hash-match' && backupFile.hash) {
+          // Try to match by 3MF file hash first
+          const existing = existingFiles.get(backupFile.hash);
+          if (existing) {
+            targetPath = existing.munchieJsonPath;
+            shouldRestore = true;
+            reason = `Hash match: ${backupFile.hash.substring(0, 8)}... -> ${path.basename(existing.threeMFPath)}`;
+          } else {
+            // If no hash match, try original path
+            const originalPath = path.join(modelsDir, backupFile.originalPath);
+            if (fs.existsSync(originalPath)) {
+              targetPath = originalPath;
+              shouldRestore = true;
+              reason = 'Path match (no hash match found)';
+            } else {
+              results.skipped.push({
+                originalPath: backupFile.originalPath,
+                reason: 'No matching file found (hash or path)'
+              });
+              continue;
+            }
+          }
+        } else if (strategy === 'path-match') {
+          // Match by original path
+          const originalPath = path.join(modelsDir, backupFile.originalPath);
+          if (fs.existsSync(originalPath)) {
+            targetPath = originalPath;
+            shouldRestore = true;
+            reason = 'Path match';
+          } else {
+            results.skipped.push({
+              originalPath: backupFile.originalPath,
+              reason: 'Original path not found'
+            });
+            continue;
+          }
+        } else {
+          // Force restore to original path (create if necessary)
+          targetPath = path.join(modelsDir, backupFile.originalPath);
+          
+          // Create directory if it doesn't exist
+          const dir = path.dirname(targetPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          
+          shouldRestore = true;
+          reason = 'Force restore to original path';
+        }
+
+        if (shouldRestore) {
+          // Write the restored file
+          const restoredContent = JSON.stringify(backupFile.content, null, 2);
+          fs.writeFileSync(targetPath, restoredContent, 'utf8');
+          
+          results.restored.push({
+            originalPath: backupFile.originalPath,
+            restoredPath: path.relative(modelsDir, targetPath).replace(/\\/g, '/'),
+            reason: reason,
+            size: backupFile.size
+          });
+        }
+        
+      } catch (error) {
+        results.errors.push({
+          originalPath: backupFile.originalPath,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      ...results,
+      summary: `Restored ${results.restored.length} files, skipped ${results.skipped.length}, ${results.errors.length} errors`
+    });
+
+    console.log(`Restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
+    
+  } catch (error) {
+    console.error('Restore error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to restore munchie.json files from uploaded backup file
+app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No backup file provided' });
+    }
+
+    const { strategy = 'hash-match' } = req.body;
+    let backupData;
+
+    // Check if file is gzipped
+    if (req.file.originalname.endsWith('.gz')) {
+      try {
+        const decompressed = zlib.gunzipSync(req.file.buffer);
+        backupData = decompressed.toString('utf8');
+      } catch (error) {
+        return res.status(400).json({ success: false, error: 'Failed to decompress backup file' });
+      }
+    } else {
+      backupData = req.file.buffer.toString('utf8');
+    }
+
+    let backup;
+    try {
+      backup = JSON.parse(backupData);
+    } catch (error) {
+      return res.status(400).json({ success: false, error: 'Invalid backup file format' });
+    }
+
+    if (!backup.files || !Array.isArray(backup.files)) {
+      return res.status(400).json({ success: false, error: 'Invalid backup structure' });
+    }
+
+    // Use the same restore logic as the JSON endpoint
+    const modelsDir = getAbsoluteModelsPath();
+    const results = {
+      restored: [],
+      skipped: [],
+      errors: [],
+      strategy: strategy
+    };
+
+    // Create a map of existing 3MF files by their hashes for hash-based matching
+    const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
+    const existingFiles = new Map(); // hash -> { munchieJsonPath, threeMFPath, currentHash }
+    
+    function mapExistingFiles(dir) {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            mapExistingFiles(fullPath);
+          } else if (entry.name.endsWith('.3mf')) {
+            try {
+              // Calculate the current hash of the 3MF file
+              const currentHash = computeMD5(fullPath);
+              const relativePath = path.relative(modelsDir, fullPath);
+              
+              // Find the corresponding munchie.json file
+              const munchieJsonPath = fullPath.replace(/\.3mf$/i, '-munchie.json');
+              
+              if (fs.existsSync(munchieJsonPath)) {
+                existingFiles.set(currentHash, {
+                  munchieJsonPath: munchieJsonPath,
+                  threeMFPath: fullPath,
+                  relativeMunchieJsonPath: relativePath.replace(/\.3mf$/i, '-munchie.json').replace(/\\/g, '/'),
+                  currentHash: currentHash
+                });
+              }
+            } catch (error) {
+              console.error(`Error processing 3MF file ${fullPath}:`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error scanning directory ${dir}:`, error);
+      }
+    }
+
+    mapExistingFiles(modelsDir);
+
+    // Process each file in the backup
+    for (const backupFile of backup.files) {
+      try {
+        let targetPath;
+        let shouldRestore = false;
+        let reason = '';
+
+        if (strategy === 'hash-match' && backupFile.hash) {
+          // Try to match by 3MF file hash first
+          const existing = existingFiles.get(backupFile.hash);
+          if (existing) {
+            targetPath = existing.munchieJsonPath;
+            shouldRestore = true;
+            reason = `Hash match: ${backupFile.hash.substring(0, 8)}... -> ${path.basename(existing.threeMFPath)}`;
+          } else {
+            // If no hash match, try original path
+            const originalPath = path.join(modelsDir, backupFile.originalPath);
+            if (fs.existsSync(originalPath)) {
+              targetPath = originalPath;
+              shouldRestore = true;
+              reason = 'Path match (no hash match found)';
+            } else {
+              results.skipped.push({
+                originalPath: backupFile.originalPath,
+                reason: 'No matching file found (hash or path)'
+              });
+              continue;
+            }
+          }
+        } else if (strategy === 'path-match') {
+          // Match by original path
+          const originalPath = path.join(modelsDir, backupFile.originalPath);
+          if (fs.existsSync(originalPath)) {
+            targetPath = originalPath;
+            shouldRestore = true;
+            reason = 'Path match';
+          } else {
+            results.skipped.push({
+              originalPath: backupFile.originalPath,
+              reason: 'Original path not found'
+            });
+            continue;
+          }
+        } else {
+          // Force restore to original path (create if necessary)
+          targetPath = path.join(modelsDir, backupFile.originalPath);
+          
+          // Create directory if it doesn't exist
+          const dir = path.dirname(targetPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          
+          shouldRestore = true;
+          reason = 'Force restore to original path';
+        }
+
+        if (shouldRestore) {
+          // Write the restored file
+          const restoredContent = JSON.stringify(backupFile.content, null, 2);
+          fs.writeFileSync(targetPath, restoredContent, 'utf8');
+          
+          results.restored.push({
+            originalPath: backupFile.originalPath,
+            restoredPath: path.relative(modelsDir, targetPath).replace(/\\/g, '/'),
+            reason: reason,
+            size: backupFile.size
+          });
+        }
+        
+      } catch (error) {
+        results.errors.push({
+          originalPath: backupFile.originalPath,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      ...results,
+      summary: `Restored ${results.restored.length} files, skipped ${results.skipped.length}, ${results.errors.length} errors`
+    });
+
+    console.log(`File upload restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
+    
+  } catch (error) {
+    console.error('File upload restore error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

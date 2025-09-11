@@ -43,7 +43,12 @@ import {
   Star,
   Github,
   Box,
-  Images
+  Images,
+  Archive,
+  FileText,
+  Clock,
+  HardDrive,
+  RotateCcw
 } from "lucide-react";
 
 // Icon component for model thumbnails
@@ -188,6 +193,18 @@ export function SettingsPage({
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
+
+  // State for backup and restore functionality
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [backupHistory, setBackupHistory] = useState<Array<{
+    name: string;
+    timestamp: string;
+    size: number;
+    fileCount: number;
+  }>>([]);
+  const [restoreStrategy, setRestoreStrategy] = useState<'hash-match' | 'path-match' | 'force'>('hash-match');
 
   // State and handler for generating model JSONs via backend API
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
@@ -764,6 +781,136 @@ export function SettingsPage({
 
   const stats = getTagStats();
 
+  // Backup and restore functions
+  const handleCreateBackup = async () => {
+    setIsCreatingBackup(true);
+    setSaveStatus('saving');
+    setStatusMessage('Creating backup of munchie.json files...');
+
+    try {
+      const response = await fetch('/api/backup-munchie-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create backup');
+      }
+
+      // Get the filename from the response headers
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || `munchie-backup-${new Date().toISOString().slice(0, 19)}.gz`;
+
+      // Download the backup file
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Update backup history
+      const newBackup = {
+        name: filename,
+        timestamp: new Date().toISOString(),
+        size: blob.size,
+        fileCount: 0 // Will be updated if we parse the backup
+      };
+      setBackupHistory(prev => [newBackup, ...prev].slice(0, 10)); // Keep last 10 backups
+
+      setSaveStatus('saved');
+      setStatusMessage(`Backup created successfully: ${filename}`);
+    } catch (error) {
+      setSaveStatus('error');
+      setStatusMessage('Failed to create backup');
+      console.error('Backup creation error:', error);
+    } finally {
+      setIsCreatingBackup(false);
+      setTimeout(() => {
+        setSaveStatus('idle');
+        setStatusMessage('');
+      }, 3000);
+    }
+  };
+
+  const handleRestoreFromFile = () => {
+    backupFileInputRef.current?.click();
+  };
+
+  const handleBackupFileRestore = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsRestoring(true);
+    setSaveStatus('saving');
+    setStatusMessage('Restoring from backup file...');
+
+    try {
+      if (file.name.endsWith('.gz')) {
+        // Use file upload for gzipped files
+        const formData = new FormData();
+        formData.append('backupFile', file);
+        formData.append('strategy', restoreStrategy);
+
+        const response = await fetch('/api/restore-munchie-files/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error || 'Restore failed');
+        }
+
+        setSaveStatus('saved');
+        setStatusMessage(`Restore completed: ${result.summary}`);
+        console.log('Restore results:', result);
+        
+      } else {
+        // Handle plain JSON files
+        const buffer = await file.arrayBuffer();
+        const backupData = new TextDecoder().decode(buffer);
+
+        // Send restore request to backend
+        const response = await fetch('/api/restore-munchie-files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            backupData,
+            strategy: restoreStrategy
+          })
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error || 'Restore failed');
+        }
+
+        setSaveStatus('saved');
+        setStatusMessage(`Restore completed: ${result.summary}`);
+        console.log('Restore results:', result);
+      }
+      
+    } catch (error) {
+      setSaveStatus('error');
+      setStatusMessage('Failed to restore from backup');
+      console.error('Restore error:', error);
+    } finally {
+      setIsRestoring(false);
+      // Clear the file input
+      event.target.value = '';
+      setTimeout(() => {
+        setSaveStatus('idle');
+        setStatusMessage('');
+      }, 3000);
+    }
+  };
+
   return (
     <div className="h-full bg-background">
       <ScrollArea className="h-full">
@@ -815,6 +962,7 @@ export function SettingsPage({
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="categories">Categories</TabsTrigger>
               <TabsTrigger value="tags">Tag Management</TabsTrigger>
+              <TabsTrigger value="backup">Backup & Restore</TabsTrigger>
               <TabsTrigger value="integrity">File Integrity</TabsTrigger>
               <TabsTrigger value="support">Support</TabsTrigger>
               <TabsTrigger value="config">Configuration</TabsTrigger>
@@ -1181,6 +1329,217 @@ export function SettingsPage({
                       </div>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Backup & Restore Tab */}
+            <TabsContent value="backup" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Archive className="h-5 w-5 text-primary" />
+                    Backup & Restore
+                  </CardTitle>
+                  <CardDescription>
+                    Create rolling backups of your model metadata and restore from previous backups. 
+                    Backups include all *-munchie.json files with model metadata, tags, and settings.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Backup Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h3 className="font-medium">Create Backup</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Backup all model metadata files to a compressed archive
+                        </p>
+                      </div>
+                      <Button 
+                        onClick={handleCreateBackup}
+                        disabled={isCreatingBackup}
+                        className="gap-2"
+                      >
+                        {isCreatingBackup ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Archive className="h-4 w-4" />
+                        )}
+                        {isCreatingBackup ? 'Creating...' : 'Create Backup'}
+                      </Button>
+                    </div>
+
+                    {/* Backup Statistics */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-primary" />
+                            <div>
+                              <p className="text-lg font-semibold">{models.length}</p>
+                              <p className="text-xs text-muted-foreground">JSON Files</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-primary" />
+                            <div>
+                              <p className="text-lg font-semibold">{backupHistory.length}</p>
+                              <p className="text-xs text-muted-foreground">Backups Created</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2">
+                            <HardDrive className="h-4 w-4 text-primary" />
+                            <div>
+                              <p className="text-lg font-semibold">
+                                {backupHistory.length > 0 
+                                  ? `${(backupHistory[0]?.size / 1024).toFixed(1)}KB`
+                                  : '0KB'
+                                }
+                              </p>
+                              <p className="text-xs text-muted-foreground">Last Backup Size</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Restore Section */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h3 className="font-medium">Restore from Backup</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Restore model metadata from a previous backup file. Choose your restore strategy carefully.
+                      </p>
+                    </div>
+
+                    {/* Restore Strategy Selection */}
+                    <div className="space-y-3">
+                      <Label>Restore Strategy</Label>
+                      <Select value={restoreStrategy} onValueChange={(value: 'hash-match' | 'path-match' | 'force') => setRestoreStrategy(value)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="hash-match">
+                            <div className="space-y-1">
+                              <div className="font-medium">Hash Match (Recommended)</div>
+                              <div className="text-xs text-muted-foreground">
+                                Match files by content hash, fallback to path if needed
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="path-match">
+                            <div className="space-y-1">
+                              <div className="font-medium">Path Match</div>
+                              <div className="text-xs text-muted-foreground">
+                                Only restore files that exist at their original paths
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="force">
+                            <div className="space-y-1">
+                              <div className="font-medium">Force Restore</div>
+                              <div className="text-xs text-muted-foreground">
+                                Restore all files to original paths, create directories if needed
+                              </div>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      {/* Strategy explanations */}
+                      <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-lg">
+                        {restoreStrategy === 'hash-match' && (
+                          <div>
+                            <strong>Hash Match:</strong> Compares 3MF file hashes from backup with current 3MF files, 
+                            then restores metadata to the matching model's munchie.json file. Falls back to path matching if no hash match found.
+                            <br />
+                            <em>Recommendation:</em> Safest option for most situations, handles moved/renamed files intelligently.
+                          </div>
+                        )}
+                        {restoreStrategy === 'path-match' && (
+                          <div>
+                            <strong>Path Match:</strong> Only restores files that currently exist at their 
+                            original backup locations. Safest option that won't create new files.
+                            <br />
+                            <em>Recommendation:</em> Use when you only want to update existing metadata.
+                          </div>
+                        )}
+                        {restoreStrategy === 'force' && (
+                          <div>
+                            <strong>Force Restore:</strong> Creates files at their original paths regardless 
+                            of current state. Use with caution as this can overwrite existing files.
+                            <br />
+                            <em>Warning:</em> Can create new files and overwrite existing metadata.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={handleRestoreFromFile}
+                        disabled={isRestoring}
+                        variant="outline"
+                        className="gap-2"
+                      >
+                        {isRestoring ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4" />
+                        )}
+                        {isRestoring ? 'Restoring...' : 'Restore from File'}
+                      </Button>
+                    </div>
+                    
+                    <div className="text-xs text-muted-foreground">
+                      <strong>Supported formats:</strong> .gz (compressed backup), .json (plain backup)
+                      <br />
+                      <strong>Note:</strong> Only model metadata (*-munchie.json) files are restored, not the actual 3MF files.
+                    </div>
+                  </div>
+
+                  {/* Backup History */}
+                  {backupHistory.length > 0 && (
+                    <>
+                      <Separator />
+                      <div className="space-y-3">
+                        <h3 className="font-medium">Recent Backups</h3>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {backupHistory.map((backup, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Archive className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <p className="font-medium text-sm">{backup.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(backup.timestamp).toLocaleString()} • {(backup.size / 1024).toFixed(1)}KB
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1583,6 +1942,15 @@ export function SettingsPage({
             ref={fileInputRef}
             onChange={handleFileImport}
             accept=".json"
+            style={{ display: 'none' }}
+          />
+
+          {/* Hidden file input for backup restore */}
+          <input
+            type="file"
+            ref={backupFileInputRef}
+            onChange={handleBackupFileRestore}
+            accept=".gz,.json"
             style={{ display: 'none' }}
           />
 
