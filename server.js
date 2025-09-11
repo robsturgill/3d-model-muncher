@@ -111,7 +111,11 @@ app.get('/api/models', async (req, res) => {
             // Add relative path information for proper URL construction
             const relativePath = path.relative(absolutePath, fullPath);
             model.modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
-            console.log(`Added model: ${model.name} with URL: ${model.modelUrl}`);
+            
+            // Set the filePath property for deletion purposes
+            model.filePath = relativePath.replace('-munchie.json', '.3mf');
+            
+            console.log(`Added model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
             models.push(model);
           } catch (error) {
             console.error(`Error reading model file ${fullPath}:`, error);
@@ -385,6 +389,135 @@ app.get('/api/validate-3mf', async (req, res) => {
         ? 'This 3MF file appears to be missing relationship files. Try re-exporting from your 3D software.'
         : 'This 3MF file may be corrupted or in an unsupported format.'
     });
+  }
+});
+
+// Helper function to get all models
+async function getAllModels(modelsDirectory) {
+  const absolutePath = modelsDirectory;
+  let models = [];
+  
+  // Function to recursively scan directories
+  function scanForModels(directory) {
+    const entries = fs.readdirSync(directory, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      
+      if (entry.isDirectory()) {
+        // Recursively scan subdirectories
+        scanForModels(fullPath);
+      } else if (entry.name.endsWith('-munchie.json')) {
+        // Load and parse each munchie file
+        try {
+          const fileContent = fs.readFileSync(fullPath, 'utf8');
+          const model = JSON.parse(fileContent);
+          // Add relative path information for proper URL construction
+          const relativePath = path.relative(absolutePath, fullPath);
+          model.modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
+          
+          // Set the filePath property for deletion purposes
+          model.filePath = relativePath.replace('-munchie.json', '.3mf');
+          
+          models.push(model);
+        } catch (error) {
+          console.error(`Error reading model file ${fullPath}:`, error);
+        }
+      }
+    }
+  }
+  
+  if (fs.existsSync(absolutePath)) {
+    scanForModels(absolutePath);
+  }
+  
+  return models;
+}
+
+// API endpoint to delete models by ID (deletes both .3mf and munchie.json files)
+app.delete('/api/models/delete', async (req, res) => {
+  const { modelIds } = req.body;
+  
+  if (!Array.isArray(modelIds) || modelIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'No model IDs provided' });
+  }
+
+  try {
+    const modelsDir = getAbsoluteModelsPath();
+    let deleted = [];
+    let errors = [];
+
+    // First, we need to get the current models to find their file paths
+    const allModels = await getAllModels(modelsDir);
+    
+    for (const modelId of modelIds) {
+      const model = allModels.find(m => m.id === modelId);
+      console.log(`Processing model ID: ${modelId}`);
+      
+      if (!model) {
+        console.log(`Model not found for ID: ${modelId}`);
+        errors.push({ modelId, error: 'Model not found' });
+        continue;
+      }
+
+      console.log(`Found model: ${model.name}, filePath: ${model.filePath}`);
+
+      const filesToDelete = [];
+      
+      // Check if model has a valid filePath
+      if (!model.filePath) {
+        console.log(`Model ${modelId} has no file path`);
+        errors.push({ modelId, error: 'Model has no file path' });
+        continue;
+      }
+      
+      // Add the .3mf file
+      const threeMfPath = path.isAbsolute(model.filePath) 
+        ? model.filePath 
+        : path.join(modelsDir, model.filePath);
+      filesToDelete.push({ type: '3mf', path: threeMfPath });
+      
+      // Add the corresponding munchie.json file
+      const jsonFileName = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+      const jsonPath = path.isAbsolute(jsonFileName)
+        ? jsonFileName
+        : path.join(modelsDir, jsonFileName);
+      filesToDelete.push({ type: 'json', path: jsonPath });
+
+      console.log(`Files to delete for ${modelId}:`, filesToDelete);
+
+      // Delete each file
+      for (const fileInfo of filesToDelete) {
+        try {
+          console.log(`Attempting to delete file: ${fileInfo.path}`);
+          if (fs.existsSync(fileInfo.path)) {
+            fs.unlinkSync(fileInfo.path);
+            console.log(`Successfully deleted: ${fileInfo.path}`);
+            deleted.push({ modelId, type: fileInfo.type, path: path.relative(modelsDir, fileInfo.path) });
+          } else {
+            console.log(`File does not exist: ${fileInfo.path}`);
+          }
+        } catch (err) {
+          console.error(`Error deleting file ${fileInfo.path}:`, err.message);
+          errors.push({ modelId, type: fileInfo.type, error: err.message });
+        }
+      }
+    }
+
+    console.log(`Deletion summary: ${deleted.length} files deleted, ${errors.length} errors`);
+    console.log('Deleted files:', deleted);
+    console.log('Errors:', errors);
+
+    res.json({ 
+      success: errors.length === 0, 
+      deleted, 
+      errors,
+      summary: `Deleted ${deleted.length} files for ${modelIds.length} models`
+    });
+    
+  } catch (error) {
+    console.error('Error deleting models:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

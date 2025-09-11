@@ -144,7 +144,7 @@ function AppContent() {
     setIsBulkEditOpen(true);
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedModelIds.length === 0) {
       toast("No models selected", {
         description: "Please select models first before deleting"
@@ -152,19 +152,77 @@ function AppContent() {
       return;
     }
 
-    const updatedModels = models.filter(model => !selectedModelIds.includes(model.id));
-    setModels(updatedModels);
-    
-    // Update filtered models
-    const updatedFilteredModels = filteredModels.filter(model => !selectedModelIds.includes(model.id));
-    setFilteredModels(updatedFilteredModels);
-    
-    // Clear selections
-    setSelectedModelIds([]);
-    
-    toast(`Deleted ${selectedModelIds.length} models`, {
-      description: "Selected models have been removed from your collection"
-    });
+    try {
+      toast("Deleting model files...", {
+        description: `Removing ${selectedModelIds.length} models and their files`
+      });
+
+      // Call API to delete the actual files
+      const deleteResponse = await fetch('/api/models/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ modelIds: selectedModelIds })
+      });
+
+      if (!deleteResponse.ok) {
+        throw new Error('Failed to delete model files');
+      }
+
+      const deleteResult = await deleteResponse.json();
+      console.log('Delete result:', deleteResult);
+
+      if (deleteResult.success) {
+        // Only remove models that were actually deleted successfully
+        // Get the model IDs that had successful deletions
+        const successfullyDeletedIds = selectedModelIds.filter(modelId => {
+          const model = models.find(m => m.id === modelId);
+          if (!model) return false;
+          
+          // Check if this model's files were actually deleted
+          const modelDeleted = deleteResult.deleted?.some((item: any) => 
+            item.modelId === modelId && item.type === '3mf'
+          );
+          
+          return modelDeleted;
+        });
+
+        const updatedModels = models.filter(model => !successfullyDeletedIds.includes(model.id));
+        setModels(updatedModels);
+        
+        const updatedFilteredModels = filteredModels.filter(model => !successfullyDeletedIds.includes(model.id));
+        setFilteredModels(updatedFilteredModels);
+        
+        // Clear selections
+        setSelectedModelIds([]);
+        
+        const successCount = successfullyDeletedIds.length;
+        const errorCount = deleteResult.errors?.length || 0;
+        
+        if (successCount > 0) {
+          toast(`Deleted ${successCount} models`, {
+            description: errorCount > 0 
+              ? `${successCount} models deleted successfully, ${errorCount} failed`
+              : "Models and their files have been permanently removed"
+          });
+        }
+        
+        if (errorCount > 0) {
+          console.error('Deletion errors:', deleteResult.errors);
+          toast(`${errorCount} models could not be deleted`, {
+            description: "Check console for details"
+          });
+        }
+      } else {
+        throw new Error(deleteResult.error || 'Unknown deletion error');
+      }
+    } catch (error) {
+      console.error('Failed to delete models:', error);
+      toast("Failed to delete models", {
+        description: "Files could not be deleted. Please try again."
+      });
+    }
   };
 
   const handleBulkUpdateModels = (updatedModelsData: Partial<Model> & { bulkTagChanges?: { add: string[]; remove: string[] } }) => {
