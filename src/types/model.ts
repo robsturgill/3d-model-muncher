@@ -16,6 +16,7 @@ export interface Model {
   notes?: string;
   source?: string;
   price?: number;
+  hidden?: boolean;
   printSettings: {
     layerHeight: string;
     infill: string;

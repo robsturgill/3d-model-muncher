@@ -57,7 +57,9 @@ function AppContent() {
         }
         const loadedModels = await response.json();
         setModels(loadedModels);
-        setFilteredModels(loadedModels);
+        // Filter out hidden models by default
+        const visibleModels = loadedModels.filter((model: Model) => !model.hidden);
+        setFilteredModels(visibleModels);
       } catch (error) {
         console.error('Failed to load configuration or models:', error);
         // Use default categories if config fails to load
@@ -241,8 +243,8 @@ function AppContent() {
         if (updatedModelsData.bulkTagChanges) {
           const { add, remove } = updatedModelsData.bulkTagChanges;
           
-          // Start with current tags
-          let newTags = [...updatedModel.tags];
+          // Start with current tags, ensure it's an array
+          let newTags = [...(updatedModel.tags || [])];
           
           // Remove specified tags
           if (remove && remove.length > 0) {
@@ -310,14 +312,20 @@ function AppContent() {
     printStatus: string;
     license: string;
     tags: string[];
+    showHidden: boolean;
   }) => {
     let filtered = models;
+
+    // Hidden filter - exclude hidden models unless showHidden is true
+    if (!filters.showHidden) {
+      filtered = filtered.filter(model => !model.hidden);
+    }
 
     // Search filter - check name and tags
     if (filters.search) {
       filtered = filtered.filter(model =>
         model.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        model.tags.some(tag => tag.toLowerCase().includes(filters.search.toLowerCase()))
+        (model.tags || []).some(tag => tag.toLowerCase().includes(filters.search.toLowerCase()))
       );
     }
 
@@ -346,7 +354,7 @@ function AppContent() {
     if (filters.tags && filters.tags.length > 0) {
       filtered = filtered.filter(model =>
         filters.tags.every(selectedTag =>
-          model.tags.some(modelTag => 
+          (model.tags || []).some(modelTag => 
             modelTag.toLowerCase() === selectedTag.toLowerCase()
           )
         )

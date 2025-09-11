@@ -70,6 +70,24 @@ export function ModelCard({
             </div>
           )}
           
+          {/* Hidden Badge - Top Left (when not in selection mode) */}
+          {!isSelectionMode && model.hidden && (
+            <div className="absolute top-3 left-3">
+              <Badge variant="outline" className="text-xs bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300 shadow-sm">
+                Hidden
+              </Badge>
+            </div>
+          )}
+          
+          {/* Hidden Badge - Bottom Left (when in selection mode) */}
+          {isSelectionMode && model.hidden && (
+            <div className="absolute bottom-3 left-3">
+              <Badge variant="outline" className="text-xs bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300 shadow-sm">
+                Hidden
+              </Badge>
+            </div>
+          )}
+          
           {/* Print Status - Top Right */}
           <div className="absolute top-3 right-3">
             {model.isPrinted ? (
@@ -94,14 +112,14 @@ export function ModelCard({
           {model.name}
         </h3>
         <div className="flex flex-wrap gap-1 mb-3">
-          {model.tags.slice(0, 3).map((tag) => (
+          {(model.tags || []).slice(0, 3).map((tag) => (
             <Badge key={tag} variant="outline" className="text-xs">
               {tag}
             </Badge>
           ))}
-          {model.tags.length > 3 && (
+          {(model.tags || []).length > 3 && (
             <Badge variant="outline" className="text-xs">
-              +{model.tags.length - 3}
+              +{(model.tags || []).length - 3}
             </Badge>
           )}
         </div>

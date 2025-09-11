@@ -242,22 +242,27 @@ export function ModelGrid({
                         </p>
                         
                         {/* Category */}
-                        <div className="mt-2">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           <Badge variant="outline" className="text-xs font-medium">
                             {model.category}
                           </Badge>
+                          {model.hidden && (
+                            <Badge variant="outline" className="text-xs bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300">
+                              Hidden
+                            </Badge>
+                          )}
                         </div>
                         
                         {/* Tags */}
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {model.tags.slice(0, 4).map((tag) => (
+                          {(model.tags || []).slice(0, 4).map((tag) => (
                             <Badge key={tag} variant="secondary" className="text-xs">
                               {tag}
                             </Badge>
                           ))}
-                          {model.tags.length > 4 && (
+                          {(model.tags || []).length > 4 && (
                             <Badge variant="outline" className="text-xs">
-                              +{model.tags.length - 4}
+                              +{(model.tags || []).length - 4}
                             </Badge>
                           )}
                         </div>

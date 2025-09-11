@@ -93,7 +93,11 @@ export function ModelDetailsDrawer({
       // Fallback to using the model name
       jsonFilePath = `${model.name}-munchie.json`;
     }
-    setEditedModel({ ...model, filePath: jsonFilePath });
+    setEditedModel({ 
+      ...model, 
+      filePath: jsonFilePath,
+      tags: model.tags || [] // Ensure tags is always an array
+    });
     setIsEditing(true);
   };
 
@@ -148,10 +152,11 @@ export function ModelDetailsDrawer({
     if (!newTag.trim() || !editedModel) return;
     
     const trimmedTag = newTag.trim();
-    if (!editedModel.tags.includes(trimmedTag)) {
+    const currentTags = editedModel.tags || [];
+    if (!currentTags.includes(trimmedTag)) {
       setEditedModel({
         ...editedModel,
-        tags: [...editedModel.tags, trimmedTag]
+        tags: [...currentTags, trimmedTag]
       });
     }
     setNewTag("");
@@ -162,7 +167,7 @@ export function ModelDetailsDrawer({
     
     setEditedModel({
       ...editedModel,
-      tags: editedModel.tags.filter(tag => tag !== tagToRemove)
+      tags: (editedModel.tags || []).filter(tag => tag !== tagToRemove)
     });
   };
 
@@ -177,7 +182,7 @@ export function ModelDetailsDrawer({
     if (!editedModel || !editedModel.category) return [];
     
     const suggestedTags = CATEGORY_TAGS[editedModel.category] || [];
-    return suggestedTags.filter(tag => !editedModel.tags.includes(tag));
+    return suggestedTags.filter(tag => !(editedModel.tags || []).includes(tag));
   };
 
   const handleSuggestedTagClick = (tag: string) => {
@@ -185,7 +190,7 @@ export function ModelDetailsDrawer({
     
     setEditedModel({
       ...editedModel,
-      tags: [...editedModel.tags, tag]
+      tags: [...(editedModel.tags || []), tag]
     });
   };
 
@@ -228,6 +233,14 @@ export function ModelDetailsDrawer({
               </SheetTitle>
               <SheetDescription className="text-muted-foreground">
                 {currentModel.category} • {currentModel.isPrinted ? 'Printed' : 'Not Printed'}
+                {currentModel.hidden && (
+                  <>
+                    {" • "}
+                    <Badge variant="outline" className="text-xs bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300">
+                      Hidden
+                    </Badge>
+                  </>
+                )}
               </SheetDescription>
             </div>
             {/* Download button only in non-editing mode */}
@@ -484,6 +497,15 @@ export function ModelDetailsDrawer({
                   <Label htmlFor="edit-printed">Mark as printed</Label>
                 </div>
 
+                <div className="flex items-center space-x-3">
+                  <Switch
+                    checked={editedModel?.hidden || false}
+                    onCheckedChange={(checked: boolean) => setEditedModel(prev => prev ? { ...prev, hidden: checked } : null)}
+                    id="edit-hidden"
+                  />
+                  <Label htmlFor="edit-hidden">Hide model from view</Label>
+                </div>
+
                 {/* Tags Editing Section */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
@@ -513,11 +535,11 @@ export function ModelDetailsDrawer({
                   </div>
 
                   {/* Current Tags */}
-                  {editedModel && editedModel.tags.length > 0 && (
+                  {editedModel && (editedModel.tags || []).length > 0 && (
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">Current tags:</p>
                       <div className="flex flex-wrap gap-2">
-                        {editedModel.tags.map((tag, index) => (
+                        {(editedModel.tags || []).map((tag, index) => (
                           <Badge
                             key={`${tag}-${index}`}
                             variant="secondary"

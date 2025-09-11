@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Search, Filter, Layers, Package, Gamepad2, Wrench, Flower, X, Settings, Sword, FileText } from "lucide-react";
+import { Search, Filter, Layers, Package, Gamepad2, Wrench, Flower, X, Settings, Sword, FileText, Eye, EyeOff } from "lucide-react";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
 import { Button } from "./ui/button";
+import { Switch } from "./ui/switch";
 import { Category } from "../types/category";
 
 interface FilterSidebarProps {
@@ -14,6 +15,7 @@ interface FilterSidebarProps {
     printStatus: string;
     license: string;
     tags: string[];
+    showHidden: boolean;
   }) => void;
   isOpen: boolean;
   onClose: () => void;
@@ -42,6 +44,7 @@ export function FilterSidebar({
   const [selectedPrintStatus, setSelectedPrintStatus] = useState("all");
   const [selectedLicense, setSelectedLicense] = useState("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [showHidden, setShowHidden] = useState(false);
 
   // Available tags (in a real app, this might come from the API)
   const availableTags = [
@@ -72,6 +75,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       tags: selectedTags,
+      showHidden: showHidden,
     });
   };
 
@@ -83,6 +87,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       tags: selectedTags,
+      showHidden: showHidden,
     });
   };
 
@@ -94,6 +99,7 @@ export function FilterSidebar({
       printStatus: value,
       license: selectedLicense,
       tags: selectedTags,
+      showHidden: showHidden,
     });
   };
 
@@ -105,6 +111,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: value,
       tags: selectedTags,
+      showHidden: showHidden,
     });
   };
 
@@ -121,6 +128,19 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       tags: newSelectedTags,
+      showHidden: showHidden,
+    });
+  };
+
+  const handleShowHiddenChange = (checked: boolean) => {
+    setShowHidden(checked);
+    onFilterChange({
+      search: searchTerm,
+      category: selectedCategory,
+      printStatus: selectedPrintStatus,
+      license: selectedLicense,
+      tags: selectedTags,
+      showHidden: checked,
     });
   };
 
@@ -130,12 +150,14 @@ export function FilterSidebar({
     setSelectedPrintStatus("all");
     setSelectedLicense("all");
     setSelectedTags([]);
+    setShowHidden(false);
     onFilterChange({
       search: "",
       category: "all",
       printStatus: "all",
       license: "all",
       tags: [],
+      showHidden: false,
     });
   };
 
@@ -292,6 +314,21 @@ export function FilterSidebar({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Show Hidden Models */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <EyeOff className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">Show Hidden Models</label>
+              </div>
+              <Switch
+                checked={showHidden}
+                onCheckedChange={handleShowHiddenChange}
+                className="data-[state=checked]:bg-primary"
+              />
+            </div>
           </div>
 
           {/* Tags */}

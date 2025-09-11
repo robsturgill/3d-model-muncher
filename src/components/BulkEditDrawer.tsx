@@ -34,6 +34,8 @@ import {
   CheckCircle,
   XCircle,
   DollarSign,
+  EyeOff,
+  Eye,
 } from "lucide-react";
 
 interface BulkEditDrawerProps {
@@ -48,6 +50,7 @@ interface BulkEditState {
   category?: string;
   license?: string;
   isPrinted?: boolean;
+  hidden?: boolean;
   tags?: {
     add: string[];
     remove: string[];
@@ -61,6 +64,7 @@ interface FieldSelection {
   category: boolean;
   license: boolean;
   isPrinted: boolean;
+  hidden: boolean;
   tags: boolean;
   notes: boolean;
   source: boolean;
@@ -80,6 +84,7 @@ export function BulkEditDrawer({
       category: false,
       license: false,
       isPrinted: false,
+      hidden: false,
       tags: false,
       notes: false,
       source: false,
@@ -134,13 +139,22 @@ export function BulkEditDrawer({
       common.isPrinted = firstModel.isPrinted;
     }
 
+    // Check hidden status
+    if (
+      models.every(
+        (model) => model.hidden === firstModel.hidden,
+      )
+    ) {
+      common.hidden = firstModel.hidden;
+    }
+
     return common;
   };
 
   const getAllTags = () => {
     const allTags = new Set<string>();
     models.forEach((model) => {
-      model.tags.forEach((tag) => allTags.add(tag));
+      (model.tags || []).forEach((tag) => allTags.add(tag));
     });
     return Array.from(allTags).sort();
   };
@@ -158,6 +172,7 @@ export function BulkEditDrawer({
         category: false,
         license: false,
         isPrinted: false,
+        hidden: false,
         tags: false,
         notes: false,
         source: false,
@@ -193,6 +208,10 @@ export function BulkEditDrawer({
 
   const handlePrintStatusChange = (checked: boolean) => {
     setEditState((prev) => ({ ...prev, isPrinted: checked }));
+  };
+
+  const handleHiddenChange = (checked: boolean) => {
+    setEditState((prev) => ({ ...prev, hidden: checked }));
   };
 
   const handleNotesChange = (value: string) => {
@@ -312,6 +331,13 @@ export function BulkEditDrawer({
         updates.isPrinted = editState.isPrinted;
       }
 
+      if (
+        fieldSelection.hidden &&
+        editState.hidden !== undefined
+      ) {
+        updates.hidden = editState.hidden;
+      }
+
       if (fieldSelection.notes && editState.notes !== undefined) {
         updates.notes = editState.notes;
       }
@@ -375,7 +401,7 @@ export function BulkEditDrawer({
         
         // Apply bulk tag changes if selected
         if (fieldSelection.tags && editState.tags) {
-          let newTags = [...model.tags];
+          let newTags = [...(model.tags || [])];
           
           // Remove tags
           if (editState.tags?.remove) {
@@ -618,6 +644,58 @@ export function BulkEditDrawer({
                     {commonValues.isPrinted
                       ? "Printed"
                       : "Not Printed"}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Hidden Status Field */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="hidden-status-field"
+                checked={fieldSelection.hidden}
+                onCheckedChange={() =>
+                  handleFieldToggle("hidden")
+                }
+              />
+              <Label
+                htmlFor="hidden-status-field"
+                className="font-medium"
+              >
+                Update Hidden Status
+              </Label>
+            </div>
+
+            {fieldSelection.hidden && (
+              <div className="ml-6 space-y-2">
+                <div className="flex items-center space-x-3">
+                  <Switch
+                    checked={editState.hidden || false}
+                    onCheckedChange={handleHiddenChange}
+                    id="bulk-hidden"
+                  />
+                  <Label
+                    htmlFor="bulk-hidden"
+                    className="flex items-center gap-2"
+                  >
+                    {editState.hidden ? (
+                      <EyeOff className="h-4 w-4 text-orange-600" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    {editState.hidden
+                      ? "Hide from view"
+                      : "Show in view"}
+                  </Label>
+                </div>
+                {commonValues.hidden !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    Currently:{" "}
+                    {commonValues.hidden
+                      ? "Hidden"
+                      : "Visible"}
                   </p>
                 )}
               </div>
