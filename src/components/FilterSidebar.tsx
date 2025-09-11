@@ -7,6 +7,7 @@ import { Separator } from "./ui/separator";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Category } from "../types/category";
+import { Model } from "../types/model";
 
 interface FilterSidebarProps {
   onFilterChange: (filters: {
@@ -21,6 +22,7 @@ interface FilterSidebarProps {
   onClose: () => void;
   onSettingsClick: () => void;
   categories: Category[];
+  models: Model[];
 }
 
 // Icon mapping for categories
@@ -37,7 +39,8 @@ export function FilterSidebar({
   isOpen,
   onClose,
   onSettingsClick,
-  categories
+  categories,
+  models
 }: FilterSidebarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -46,14 +49,31 @@ export function FilterSidebar({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showHidden, setShowHidden] = useState(false);
 
-  // Available tags (in a real app, this might come from the API)
-  const availableTags = [
-    "Miniature", "Fantasy", "Dragon", "Utility", "Phone", "Stand", 
-    "Decorative", "Vase", "Spiral", "Game", "Chess", "Gaming", 
-    "Organizer", "Tools", "Storage", "Planter", "Succulent", "Garden",
-    "Keyboard", "Keycap", "House", "Architecture", "Cable", "Desk",
-    "Sword", "Cosplay", "Frame", "Photo", "Lithophane", "Dice", "D&D"
-  ];
+  // Dynamically get all unique tags from the models
+  const getAllTags = (): string[] => {
+    const tagSet = new Set<string>();
+    
+    if (!models) {
+      return [];
+    }
+
+    models.forEach(model => {
+      if (!model || !Array.isArray(model.tags)) {
+        return;
+      }
+
+      model.tags.forEach(tag => {
+        if (tag && typeof tag === 'string') {
+          tagSet.add(tag);
+        }
+      });
+    });
+
+    // Sort tags alphabetically and return as array
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  };
+
+  const availableTags = getAllTags();
 
   // Available licenses
   const availableLicenses = [

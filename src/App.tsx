@@ -522,6 +522,7 @@ function AppContent() {
           onClose={() => setIsSidebarOpen(false)}
           onSettingsClick={handleSettingsClick}
           categories={categories}
+          models={models}
         />
       </div>
 
