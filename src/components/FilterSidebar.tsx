@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, Layers, Package, Gamepad2, Wrench, Flower, X, Settings, Sword, FileText, Eye, EyeOff } from "lucide-react";
+import { Search, Filter, Layers, Package, Gamepad2, Wrench, Flower, X, Settings, Sword, FileText, EyeOff } from "lucide-react";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
