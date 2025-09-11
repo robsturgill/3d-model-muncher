@@ -161,8 +161,13 @@ export function ModelGrid({
         <div className="p-4 lg:p-6 pb-8 lg:pb-12">
           {models.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="text-muted-foreground mb-2">No models found</div>
+              <h2 className="font-semibold text-lg">No models found</h2>
               <p className="text-muted-foreground text-sm">Try adjusting your search or filters</p>
+              <img
+                src="/images/empty-munchie.png"
+                alt="No models found"
+                width="418"
+              />
             </div>
           ) : viewMode === 'grid' ? (
             <div className={`grid ${getGridClasses(gridDensity[0])} gap-4 lg:gap-6`}>

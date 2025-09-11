@@ -1,5 +1,4 @@
-
-  import { defineConfig } from 'vite';
+import { defineConfig } from 'vite';
   import react from '@vitejs/plugin-react-swc';
   import path from 'path';
 
@@ -70,7 +69,7 @@
         '/models': 'http://localhost:3001'
       }
     },
-    publicDir: false, // We'll serve models via backend API instead
+    publicDir: 'public',
     define: {
       global: 'globalThis',
     },

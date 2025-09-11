@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, Layers, Package, Gamepad2, Wrench, Flower, X, Settings, Sword, Box, FileText } from "lucide-react";
+import { Search, Filter, Layers, Package, Gamepad2, Wrench, Flower, X, Settings, Sword, FileText } from "lucide-react";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
@@ -147,7 +147,10 @@ export function FilterSidebar({
           <>
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 shadow-lg">
-                <Box className="h-6 w-6 text-white" />
+                <img
+                  src="/images/favicon-32x32.png"
+                  alt="3D Model Muncher"
+                />
               </div>
               <div>
                 <h2
@@ -181,7 +184,10 @@ export function FilterSidebar({
         ) : (
           <div className="flex flex-col items-center gap-3 w-full">
             <div className="flex items-center justify-center w-8 h-8 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
-              <Box className="h-5 w-5 text-white" />
+              <img
+                src="/images/favicon-16x16.png"
+                alt="3D Model Muncher"
+              />
             </div>
             <Button
               variant="ghost"

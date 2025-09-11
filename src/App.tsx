@@ -12,7 +12,7 @@ import { Model } from "./types/model";
 import { Category } from "./types/category";
 import { AppConfig } from "./types/config";
 import { ConfigManager } from "./utils/configManager";
-import { Menu, Box, Palette, RefreshCw, CheckSquare, Square, Edit, Trash2, X, Heart } from "lucide-react";
+import { Menu, Palette, RefreshCw, CheckSquare, Square, Edit, Trash2, X, Heart } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
@@ -426,7 +426,11 @@ function AppContent() {
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-xl shadow-lg mx-auto">
-            <Box className="h-8 w-8 text-white animate-pulse" />
+            <img
+              src="/images/favicon-32x32.png"
+              alt="3D Model Muncher"
+              className="animate-pulse"
+            />
           </div>
           <div>
             <h2 className="text-lg font-semibold">Loading 3D Model Muncher</h2>
@@ -482,7 +486,10 @@ function AppContent() {
             {!isSidebarOpen && (
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center w-10 h-10 bg-gradient-primary rounded-xl shadow-lg">
-                  <Box className="h-6 w-6 text-white" />
+                  <img
+                    src="/images/favicon-32x32.png"
+                    alt="3D Model Muncher"
+                  />
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold text-foreground tracking-tight">
