@@ -130,6 +130,7 @@ export function SettingsPage({
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<TagInfo | null>(null);
+  const [viewTagModels, setViewTagModels] = useState<TagInfo | null>(null);
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameTagValue, setRenameTagValue] = useState('');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
@@ -415,21 +416,75 @@ export function SettingsPage({
     }
   };
 
-  const handleRenameTag = (oldTag: string, newTag: string) => {
+  const handleRenameTag = async (oldTag: string, newTag: string) => {
     if (!newTag.trim() || oldTag === newTag.trim()) return;
+
+    setSaveStatus('saving');
+    setStatusMessage(`Renaming tag "${oldTag}" to "${newTag.trim()}"...`);
 
     const updatedModels = models.map(model => ({
       ...model,
       tags: model.tags.map(tag => tag === oldTag ? newTag.trim() : tag)
     }));
 
+    // Save each updated model to its JSON file
+    let saveErrors = 0;
+    for (const model of updatedModels) {
+      // Only save models that had the tag changed
+      const originalModel = models.find(m => m.id === model.id);
+      if (originalModel && originalModel.tags.includes(oldTag)) {
+        try {
+          // Construct the munchie.json file path
+          let filePath;
+          if (model.modelUrl) {
+            // Convert modelUrl like "/models/Foo.3mf" to "Foo-munchie.json"
+            const threeMfPath = model.modelUrl.replace(/^\/models\//, '');
+            filePath = threeMfPath.replace(/\.3mf$/i, '-munchie.json');
+          } else if (model.filePath) {
+            // Use filePath if available, convert to munchie.json
+            filePath = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+          } else {
+            console.error('No file path available for model:', model.name);
+            saveErrors++;
+            continue;
+          }
+
+          const response = await fetch('/api/save-model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filePath,
+              id: model.id,
+              tags: model.tags
+            })
+          });
+
+          const result = await response.json();
+          if (!result.success) {
+            console.error('Failed to save model:', model.name, result.error);
+            saveErrors++;
+          }
+        } catch (error) {
+          console.error('Error saving model:', model.name, error);
+          saveErrors++;
+        }
+      }
+    }
+
+    // Update the UI state
     onModelsUpdate(updatedModels);
     setIsRenameDialogOpen(false);
     setRenameTagValue('');
     setSelectedTag(null);
+    setViewTagModels(null);
     
-    setSaveStatus('saved');
-    setStatusMessage(`Tag "${oldTag}" renamed to "${newTag.trim()}"`);
+    if (saveErrors === 0) {
+      setSaveStatus('saved');
+      setStatusMessage(`Tag "${oldTag}" renamed to "${newTag.trim()}" and saved to files`);
+    } else {
+      setSaveStatus('error');
+      setStatusMessage(`Tag renamed but ${saveErrors} file(s) failed to save`);
+    }
     
     setTimeout(() => {
       setSaveStatus('idle');
@@ -437,17 +492,71 @@ export function SettingsPage({
     }, 3000);
   };
 
-  const handleDeleteTag = (tagToDelete: string) => {
+  const handleDeleteTag = async (tagToDelete: string) => {
+    setSaveStatus('saving');
+    setStatusMessage(`Deleting tag "${tagToDelete}" from all models...`);
+
     const updatedModels = models.map(model => ({
       ...model,
       tags: model.tags.filter(tag => tag !== tagToDelete)
     }));
 
+    // Save each updated model to its JSON file
+    let saveErrors = 0;
+    for (const model of updatedModels) {
+      // Only save models that had the tag removed
+      const originalModel = models.find(m => m.id === model.id);
+      if (originalModel && originalModel.tags.includes(tagToDelete)) {
+        try {
+          // Construct the munchie.json file path
+          let filePath;
+          if (model.modelUrl) {
+            // Convert modelUrl like "/models/Foo.3mf" to "Foo-munchie.json"
+            const threeMfPath = model.modelUrl.replace(/^\/models\//, '');
+            filePath = threeMfPath.replace(/\.3mf$/i, '-munchie.json');
+          } else if (model.filePath) {
+            // Use filePath if available, convert to munchie.json
+            filePath = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+          } else {
+            console.error('No file path available for model:', model.name);
+            saveErrors++;
+            continue;
+          }
+
+          const response = await fetch('/api/save-model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filePath,
+              id: model.id,
+              tags: model.tags
+            })
+          });
+
+          const result = await response.json();
+          if (!result.success) {
+            console.error('Failed to save model:', model.name, result.error);
+            saveErrors++;
+          }
+        } catch (error) {
+          console.error('Error saving model:', model.name, error);
+          saveErrors++;
+        }
+      }
+    }
+
+    // Update the UI state
     onModelsUpdate(updatedModels);
     setSelectedTag(null);
+    setViewTagModels(null);
     
-    setSaveStatus('saved');
-    setStatusMessage(`Tag "${tagToDelete}" deleted from all models`);
+    if (saveErrors === 0) {
+      setSaveStatus('saved');
+      setStatusMessage(`Tag "${tagToDelete}" deleted from all models and saved to files`);
+    } else {
+      setSaveStatus('error');
+      setStatusMessage(`Tag deleted but ${saveErrors} file(s) failed to save`);
+    }
     
     setTimeout(() => {
       setSaveStatus('idle');
@@ -456,7 +565,7 @@ export function SettingsPage({
   };
 
   const handleViewTagModels = (tag: TagInfo) => {
-    setSelectedTag(tag);
+    setViewTagModels(tag);
   };
 
   const startRenameTag = (tag: TagInfo) => {
@@ -1512,23 +1621,23 @@ export function SettingsPage({
           </Dialog>
 
           {/* Tag Models View Dialog */}
-          <Dialog open={!!selectedTag} onOpenChange={() => setSelectedTag(null)}>
+          <Dialog open={!!viewTagModels} onOpenChange={() => setViewTagModels(null)}>
             <DialogContent className="max-w-4xl">
               <DialogHeader>
-                <DialogTitle>Models with tag: "{selectedTag?.name}"</DialogTitle>
+                <DialogTitle>Models with tag: "{viewTagModels?.name}"</DialogTitle>
                 <DialogDescription>
-                  {selectedTag?.count} model{selectedTag?.count !== 1 ? 's' : ''} found
+                  {viewTagModels?.count} model{viewTagModels?.count !== 1 ? 's' : ''} found
                 </DialogDescription>
               </DialogHeader>
               <div className="max-h-96 overflow-y-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {selectedTag?.models.map((model) => (
+                  {viewTagModels?.models.map((model) => (
                     <div
                       key={model.id}
                       className="flex items-center gap-3 p-3 border rounded-lg hover:bg-accent/50 cursor-pointer"
                       onClick={() => {
                         onModelClick?.(model);
-                        setSelectedTag(null);
+                        setViewTagModels(null);
                       }}
                     >
                       <img
