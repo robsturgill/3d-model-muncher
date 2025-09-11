@@ -70,26 +70,30 @@ export function ModelDetailsDrawer({
   };
 
   const startEditing = () => {
-    // Ensure filePath is present for saving
-    let filePath = model.filePath;
-    if (!filePath) {
-      // Construct the path based on the modelUrl to match the actual JSON file location
-      if (model.modelUrl) {
-        // Convert from /models/path/file.3mf to models/path/file-munchie.json
-        let relativePath = model.modelUrl.replace('/models/', '');
-        // Replace .3mf extension with -munchie.json
-        if (relativePath.endsWith('.3mf')) {
-          relativePath = relativePath.replace('.3mf', '-munchie.json');
-        } else {
-          relativePath = `${relativePath}-munchie.json`;
-        }
-        filePath = `models/${relativePath}`;
+    // Ensure filePath is present for saving - convert to JSON file path
+    let jsonFilePath;
+    if (model.filePath) {
+      // Convert from .3mf path to -munchie.json path
+      if (model.filePath.endsWith('.3mf')) {
+        jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
       } else {
-        // Fallback to using the model name
-        filePath = `models/${model.name}-munchie.json`;
+        jsonFilePath = `${model.filePath}-munchie.json`;
       }
+    } else if (model.modelUrl) {
+      // Construct the path based on the modelUrl to match the actual JSON file location
+      let relativePath = model.modelUrl.replace('/models/', '');
+      // Replace .3mf extension with -munchie.json
+      if (relativePath.endsWith('.3mf')) {
+        relativePath = relativePath.replace('.3mf', '-munchie.json');
+      } else {
+        relativePath = `${relativePath}-munchie.json`;
+      }
+      jsonFilePath = relativePath;
+    } else {
+      // Fallback to using the model name
+      jsonFilePath = `${model.name}-munchie.json`;
     }
-    setEditedModel({ ...model, filePath });
+    setEditedModel({ ...model, filePath: jsonFilePath });
     setIsEditing(true);
   };
 

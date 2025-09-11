@@ -55,15 +55,11 @@ app.post('/api/save-model', (req, res) => {
     if (path.isAbsolute(filePath)) {
       absoluteFilePath = filePath;
     } else {
-      // If relative path (like 'models/file.json'), resolve it relative to the models directory
-      if (filePath.startsWith('models/')) {
-        absoluteFilePath = path.join(absoluteModelPath, filePath.replace('models/', ''));
-      } else {
-        absoluteFilePath = path.join(absoluteModelPath, filePath);
-      }
+      // filePath should be relative to models directory (e.g., 'Munchie-munchie.json')
+      absoluteFilePath = path.join(absoluteModelPath, filePath);
     }
     
-    console.log('Resolved file path:', absoluteFilePath);
+    console.log('Resolved file path for saving:', absoluteFilePath);
     
     // Load existing model JSON
     let existing = {};
