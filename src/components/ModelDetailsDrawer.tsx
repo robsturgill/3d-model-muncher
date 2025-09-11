@@ -51,6 +51,11 @@ export function ModelDetailsDrawer({
     if (isOpen) {
       setViewMode(defaultModelView);
       setSelectedImageIndex(0);
+    } else {
+      // Reset editing state when drawer closes
+      setIsEditing(false);
+      setEditedModel(null);
+      setNewTag("");
     }
   }, [isOpen, defaultModelView]);
 
