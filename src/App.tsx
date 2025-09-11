@@ -15,6 +15,7 @@ import { ConfigManager } from "./utils/configManager";
 import { Menu, Palette, RefreshCw, CheckSquare, Square, Edit, Trash2, X, Heart } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
+import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
 
 // Function to load model data from JSON files
@@ -308,38 +309,26 @@ function AppContent() {
   const handleRefreshModels = async () => {
     setIsRefreshing(true);
     try {
-      toast("Scanning model files...", {
-        description: "Checking for new files and updating metadata"
+      toast("Reloading model metadata...", {
+        description: "Refreshing from existing JSON files"
       });
 
-      // 1. Trigger a scan of all models on the backend
-      const scanResponse = await fetch('/api/scan-models', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!scanResponse.ok) {
-        throw new Error('Failed to scan models');
+      // Only fetch existing models without triggering generation
+      const response = await fetch('/api/models');
+      if (!response.ok) {
+        throw new Error('Failed to fetch models');
       }
-      
-      // 2. Fetch the updated models after scanning
-      const updatedResponse = await fetch('/api/models');
-      if (!updatedResponse.ok) {
-        throw new Error('Failed to fetch updated models');
-      }
-      const updatedModels = await updatedResponse.json();
+      const updatedModels = await response.json();
 
       setModels(updatedModels);
       setFilteredModels(updatedModels);
 
-      toast("Models refreshed successfully", {
-        description: `Found and updated ${updatedModels.length} model files`
+      toast("Models reloaded successfully", {
+        description: `Loaded ${updatedModels.length} models from existing files`
       });
     } catch (error) {
       console.error('Failed to refresh models:', error);
-      toast("Failed to refresh models", {
+      toast("Failed to reload models", {
         description: "Please try again later"
       });
     } finally {
@@ -689,6 +678,7 @@ export default function App() {
   return (
     <ThemeProvider defaultTheme="system">
       <AppContent />
+      <Toaster />
     </ThemeProvider>
   );
 }
