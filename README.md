@@ -1,19 +1,11 @@
 # 3D Model Muncher
 
-A responsive 3D printing model management application built with React, TypeScript, and Three.js. Organize, search, and preview your 3D printing models with an intuitive interface featuring dark/light theme support.
+Organize, search, and preview your 3D printing models with an intuitive interface featuring dark/light theme support.
 
-**Tech Stack:** React 18, TypeScript, Vite, Three.js, Express.js, Docker
-
-## Architecture
-
-**Client-Server Architecture:**
+**Architecture:**
 - **Frontend**: React app with Three.js 3D viewer
 - **Backend**: Express.js API for file operations and 3MF parsing
-- **File Storage**: Automatic JSON metadata generation from 3MF parsing with full portability
-
-**Single Source of Truth:**
-- **All Modes**: Files served directly from source `models/` directory
-- **Docker/Unraid Friendly**: Easy volume mapping to shared storage
+- **File Storage**: Automatic JSON metadata generation or "Munchie" files from 3MF parsing with full portability.
 
 ## Features
 
@@ -25,9 +17,15 @@ A responsive 3D printing model management application built with React, TypeScri
 - **Bulk Editing**: Edit multiple models simultaneously
 - **Backup & Restore**: Protect your metadata with compressed backups and flexible restore options
 - **Configuration Management**: Export/import app settings
-- **Responsive Design**: Works on desktop and mobile with dark/light themes
 - **Docker Support**: Easy deployment with Docker Compose
 
+## Usage
+
+1. **Add Models**: Place `.3mf` files in the `models/` directory
+2. **Scan Models**: Use the scan feature to generate JSON metadata files
+3. **Browse & Search**: Filter by category, tags, print status, or license
+4. **3D Preview**: Click models to view in the built-in Three.js viewer
+5. **Manage**: Edit details, track print status, bulk edit multiple models
 
 ## Quick Start
 
@@ -56,22 +54,6 @@ npm run preview       # Terminal 2: Frontend preview server
 - `npm run preview` - Preview production build (port 4173)
 - `npm run server` - Backend API server (port 3001)
 
-## Configuration
-
-The app includes configuration management through the Settings page:
-- **Export/Import**: Save and restore settings as JSON files
-- **Categories**: Customize and reorder model categories
-- **Themes**: Light, dark, or system theme
-- **View Options**: Grid/list views with adjustable density
-- **Auto-save**: Model data stored in individual `-munchie.json` files alongside each 3MF model
-
-## Usage
-
-1. **Add Models**: Place `.3mf` files in the `models/` directory
-2. **Scan Models**: Use the scan feature to generate JSON metadata files
-3. **Browse & Search**: Filter by category, tags, print status, or license
-4. **3D Preview**: Click models to view in the built-in Three.js viewer
-5. **Manage**: Edit details, track print status, bulk edit multiple models
 
 ## Docker Deployment
 
@@ -92,6 +74,7 @@ docker-compose up -d
 **Detailed Instructions:**
 - **[Docker Deployment Guide](DOCKER-DEPLOYMENT.md)** - Complete Docker setup and configuration
 - **[Unraid Installation](UNRAID.md)** - Unraid-specific installation and setup
+- **[Backup & Restore](BACKUP-RESTORE.md)** - Backup and restore guide
 
 **Environment Templates:**
 - `.env.example` - Template with all configuration options

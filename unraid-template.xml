@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/robsturgill/3d-model-muncher</Support>
   <Project>https://github.com/robsturgill/3d-model-muncher</Project>
-  <Overview>A responsive 3D printing model management application built with React, TypeScript, and Three.js. Organize, search, and preview your 3D printing models with an intuitive interface featuring dark/light theme support. Includes advanced features like bulk editing, backup/restore, and comprehensive filtering. See UNRAID.md for installation guide.</Overview>
+  <Overview>A responsive 3D printing model management application built with React, TypeScript, and Three.js. Organize, search, and preview your 3D printing models. Includes advanced features like bulk editing, backup/restore, and comprehensive filtering.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:3001]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/robsturgill/3d-model-muncher/main/unraid-template.xml</TemplateURL>
