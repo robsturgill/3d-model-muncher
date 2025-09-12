@@ -23,6 +23,7 @@ A responsive 3D printing model management application built with React, TypeScri
 - **Automatic Scanning**: Auto-generate metadata JSON files from 3MF files
 - **Duplicate Detection**: MD5 hash-based duplicate identification
 - **Bulk Editing**: Edit multiple models simultaneously
+- **Backup & Restore**: Protect your metadata with compressed backups and flexible restore options
 - **Configuration Management**: Export/import app settings
 - **Responsive Design**: Works on desktop and mobile with dark/light themes
 - **Docker Support**: Easy deployment with Docker Compose
