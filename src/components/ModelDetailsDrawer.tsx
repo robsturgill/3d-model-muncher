@@ -1,6 +1,7 @@
 import { useState, KeyboardEvent, useEffect } from "react";
 // Remove Node.js fs import; use backend API instead
 import { Model } from "../types/model";
+import { Category } from "../types/category";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -22,29 +23,34 @@ interface ModelDetailsDrawerProps {
   onClose: () => void;
   onModelUpdate: (model: Model) => void;
   defaultModelView?: '3d' | 'images';
+  categories: Category[];
 }
-
-// Suggested tags for each category
-const CATEGORY_TAGS: Record<string, string[]> = {
-  Miniatures: ["Miniature", "Fantasy", "Sci-Fi", "Dragon", "Warrior", "Monster", "D&D", "Tabletop"],
-  Utility: ["Organizer", "Tool", "Stand", "Holder", "Clip", "Mount", "Storage", "Functional"],
-  Decorative: ["Vase", "Ornament", "Art", "Display", "Sculpture", "Modern", "Elegant", "Beautiful"],
-  Games: ["Chess", "Dice", "Board Game", "Puzzle", "Token", "Counter", "Gaming", "Entertainment"],
-  Props: ["Cosplay", "Weapon", "Armor", "Helmet", "Shield", "Fantasy", "Replica", "Convention"]
-};
 
 export function ModelDetailsDrawer({
   model,
   isOpen,
   onClose,
   onModelUpdate,
-  defaultModelView = 'images'
+  defaultModelView = 'images',
+  categories
 }: ModelDetailsDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedModel, setEditedModel] = useState<Model | null>(null);
   const [newTag, setNewTag] = useState("");
   const [viewMode, setViewMode] = useState<'3d' | 'images'>(defaultModelView);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
+  // Suggested tags for each category - now dynamically based on current categories
+  const getCategoryTags = (categoryLabel: string): string[] => {
+    const defaultTags: Record<string, string[]> = {
+      Miniatures: ["Miniature", "Fantasy", "Sci-Fi", "Dragon", "Warrior", "Monster", "D&D", "Tabletop"],
+      Utility: ["Organizer", "Tool", "Stand", "Holder", "Clip", "Mount", "Storage", "Functional"],
+      Decorative: ["Vase", "Ornament", "Art", "Display", "Sculpture", "Modern", "Elegant", "Beautiful"],
+      Games: ["Chess", "Dice", "Board Game", "Puzzle", "Token", "Counter", "Gaming", "Entertainment"],
+      Props: ["Cosplay", "Weapon", "Armor", "Helmet", "Shield", "Fantasy", "Replica", "Convention"]
+    };
+    return defaultTags[categoryLabel] || [];
+  };
 
   // Reset view mode to default when drawer opens or when defaultModelView changes
   useEffect(() => {
@@ -186,8 +192,8 @@ export function ModelDetailsDrawer({
   const getSuggestedTags = () => {
     if (!editedModel || !editedModel.category) return [];
     
-    const suggestedTags = CATEGORY_TAGS[editedModel.category] || [];
-    return suggestedTags.filter(tag => !(editedModel.tags || []).includes(tag));
+    const suggestedTags = getCategoryTags(editedModel.category);
+    return suggestedTags.filter((tag: string) => !(editedModel.tags || []).includes(tag));
   };
 
   const handleSuggestedTagClick = (tag: string) => {
@@ -426,11 +432,11 @@ export function ModelDetailsDrawer({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Miniatures">Miniatures</SelectItem>
-                        <SelectItem value="Utility">Utility</SelectItem>
-                        <SelectItem value="Decorative">Decorative</SelectItem>
-                        <SelectItem value="Games">Games</SelectItem>
-                        <SelectItem value="Props">Props</SelectItem>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.label}>
+                            {category.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -565,7 +571,7 @@ export function ModelDetailsDrawer({
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">Suggested tags for {currentModel.category}:</p>
                       <div className="flex flex-wrap gap-2">
-                        {getSuggestedTags().map((tag) => (
+                        {getSuggestedTags().map((tag: string) => (
                           <Badge
                             key={tag}
                             variant="outline"

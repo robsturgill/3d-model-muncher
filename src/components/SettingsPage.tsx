@@ -141,6 +141,11 @@ export function SettingsPage({
   const [tagSearchTerm, setTagSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('general');
 
+  // Category editing state
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [isCategoryRenameDialogOpen, setIsCategoryRenameDialogOpen] = useState(false);
+  const [renameCategoryValue, setRenameCategoryValue] = useState('');
+
   const [hashCheckResult, setHashCheckResult] = useState<HashCheckResult | null>(null);
   const [isHashChecking, setIsHashChecking] = useState(false);
   const [hashCheckProgress, setHashCheckProgress] = useState(0);
@@ -589,6 +594,118 @@ export function SettingsPage({
     setSelectedTag(tag);
     setRenameTagValue(tag.name);
     setIsRenameDialogOpen(true);
+  };
+
+  // Category management functions
+  const handleRenameCategory = async (oldCategoryId: string, newCategoryId: string, newCategoryLabel: string) => {
+    if (!newCategoryId.trim() || !newCategoryLabel.trim() || oldCategoryId === newCategoryId.trim()) return;
+
+    setSaveStatus('saving');
+    setStatusMessage(`Renaming category "${oldCategoryId}" to "${newCategoryId.trim()}"...`);
+    
+    // Find the old category to get its label (since models store category by label, not ID)
+    const oldCategory = localCategories.find(cat => cat.id === oldCategoryId);
+    const oldCategoryLabel = oldCategory?.label || oldCategoryId;
+    
+    console.log('Category rename details:', { 
+      oldCategoryId, 
+      oldCategoryLabel, 
+      newCategoryId: newCategoryId.trim(), 
+      newCategoryLabel: newCategoryLabel.trim() 
+    });
+
+    // Update the category in the local categories list
+    const updatedCategories = localCategories.map(cat => 
+      cat.id === oldCategoryId 
+        ? { ...cat, id: newCategoryId.trim(), label: newCategoryLabel.trim() }
+        : cat
+    );
+
+    // Update all models that use this category (by label, not ID)
+    const updatedModels = models.map(model => ({
+      ...model,
+      category: model.category === oldCategoryLabel ? newCategoryLabel.trim() : model.category
+    }));
+
+    console.log('Models to update:', models.filter(m => m.category === oldCategoryLabel).map(m => ({ name: m.name, id: m.id, oldCategory: m.category })));
+    console.log('Updated models:', updatedModels.filter(m => m.category === newCategoryLabel.trim()).map(m => ({ name: m.name, id: m.id, newCategory: m.category })));
+
+    // Save each updated model to its JSON file
+    let saveErrors = 0;
+    for (const model of updatedModels) {
+      // Only save models that had the category changed
+      const originalModel = models.find(m => m.id === model.id);
+      if (originalModel && originalModel.category === oldCategoryLabel) {
+        console.log('Processing model for category update:', { name: model.name, id: model.id, oldCategory: originalModel.category, newCategory: model.category });
+        try {
+          // Construct the munchie.json file path
+          let filePath;
+          if (model.modelUrl) {
+            // Convert modelUrl like "/models/Foo.3mf" to "Foo-munchie.json"
+            const threeMfPath = model.modelUrl.replace(/^\/models\//, '');
+            filePath = threeMfPath.replace(/\.3mf$/i, '-munchie.json');
+          } else if (model.filePath) {
+            // Use filePath if available, convert to munchie.json
+            filePath = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+          } else {
+            console.error('No file path available for model:', model.name);
+            saveErrors++;
+            continue;
+          }
+
+          // Prepare the request with the same structure as working components
+          const requestData = {
+            filePath,
+            id: model.id,
+            category: model.category
+          };
+
+          console.log('Category save request:', requestData);
+          const response = await fetch('/api/save-model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+          });
+
+          const result = await response.json();
+          console.log('Category save response:', result);
+          if (!result.success) {
+            console.error('Failed to save model:', model.name, result.error);
+            saveErrors++;
+          }
+        } catch (error) {
+          console.error('Error saving model:', model.name, error);
+          saveErrors++;
+        }
+      }
+    }
+
+    // Update the UI state
+    setLocalCategories(updatedCategories);
+    onCategoriesUpdate(updatedCategories);
+    onModelsUpdate(updatedModels);
+    setIsCategoryRenameDialogOpen(false);
+    setRenameCategoryValue('');
+    setSelectedCategory(null);
+    
+    if (saveErrors === 0) {
+      setSaveStatus('saved');
+      setStatusMessage(`Category "${oldCategoryLabel}" renamed to "${newCategoryLabel.trim()}" and saved to files`);
+    } else {
+      setSaveStatus('error');
+      setStatusMessage(`Category renamed but ${saveErrors} file(s) failed to save`);
+    }
+    
+    setTimeout(() => {
+      setSaveStatus('idle');
+      setStatusMessage('');
+    }, 3000);
+  };
+
+  const startRenameCategory = (category: Category) => {
+    setSelectedCategory(category);
+    setRenameCategoryValue(category.label);
+    setIsCategoryRenameDialogOpen(true);
   };
 
   // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
@@ -1169,7 +1286,7 @@ export function SettingsPage({
                 <CardHeader>
                   <CardTitle>Categories</CardTitle>
                   <CardDescription>
-                    Drag and drop to reorder categories. The order will be reflected in the sidebar.
+                    Drag and drop to reorder categories. Click edit to rename categories and update all associated models.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1194,6 +1311,20 @@ export function SettingsPage({
                         <span className="text-sm text-muted-foreground">
                           ID: {category.id}
                         </span>
+                        <div className="flex items-center gap-2 ml-auto">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              startRenameCategory(category);
+                            }}
+                            className="gap-2"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            Edit
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1969,6 +2100,46 @@ export function SettingsPage({
                   disabled={!renameTagValue.trim() || renameTagValue === selectedTag?.name}
                 >
                   Rename Tag
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Category Rename Dialog */}
+          <Dialog open={isCategoryRenameDialogOpen} onOpenChange={setIsCategoryRenameDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Rename Category</DialogTitle>
+                <DialogDescription>
+                  This will rename the category across all models that use it.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="rename-category">New category name</Label>
+                  <Input
+                    id="rename-category"
+                    value={renameCategoryValue}
+                    onChange={(e) => setRenameCategoryValue(e.target.value)}
+                    placeholder="Enter new category name"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCategoryRenameDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (selectedCategory && renameCategoryValue.trim()) {
+                      // Generate a new ID based on the label, or keep the same ID if it's just a label change
+                      const newId = renameCategoryValue.trim().toLowerCase().replace(/\s+/g, '-');
+                      handleRenameCategory(selectedCategory.id, newId, renameCategoryValue.trim());
+                    }
+                  }}
+                  disabled={!renameCategoryValue.trim() || renameCategoryValue === selectedCategory?.label}
+                >
+                  Rename Category
                 </Button>
               </DialogFooter>
             </DialogContent>
