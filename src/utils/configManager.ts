@@ -20,7 +20,6 @@ export class ConfigManager {
       defaultModelView: "3d",
       autoSave: true,
       modelDirectory: "./models",
-      exportDirectory: "./exports"
     },
     filters: {
       defaultCategory: "all",
@@ -74,9 +73,6 @@ export class ConfigManager {
         modelDirectory: typeof config?.settings?.modelDirectory === 'string' && config.settings.modelDirectory.trim() !== ''
           ? config.settings.modelDirectory
           : this.defaultConfig.settings.modelDirectory,
-        exportDirectory: typeof config?.settings?.exportDirectory === 'string' && config.settings.exportDirectory.trim() !== ''
-          ? config.settings.exportDirectory
-          : this.defaultConfig.settings.exportDirectory
       },
       filters: {
         defaultCategory: typeof config?.filters?.defaultCategory === 'string' && config.filters.defaultCategory.trim() !== ''

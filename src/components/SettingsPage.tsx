@@ -1088,20 +1088,6 @@ export function SettingsPage({
                           </Button>
                         </div>
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="export-dir">Export Directory</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            value={localConfig.settings.exportDirectory}
-                            onChange={(e) => handleConfigFieldChange('settings.exportDirectory', e.target.value)}
-                            placeholder="./exports"
-                          />
-                          <Button variant="outline" size="sm" className="px-3">
-                            <FolderOpen className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </CardContent>

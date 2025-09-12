@@ -10,7 +10,6 @@ export interface AppConfig {
     defaultModelView: "3d" | "images";
     autoSave: boolean;
     modelDirectory: string;
-    exportDirectory: string;
   };
   filters: {
     defaultCategory: string;
