@@ -1,4 +1,3 @@
-version: '3'
 services:
   3d-model-muncher:
     build: .
@@ -10,3 +9,4 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+      - PORT=3001

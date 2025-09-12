@@ -921,6 +921,15 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
   }
 });
 
+// Serve static files from the build directory
+app.use(express.static(path.join(__dirname, 'build')));
+
+// Handle React Router - catch all GET requests that aren't API or model routes
+app.get(/^(?!\/api|\/models).*$/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
+
 app.listen(PORT, () => {
   console.log(`3D Model Muncher backend API running on port ${PORT}`);
+  console.log(`Frontend served from build directory`);
 });
