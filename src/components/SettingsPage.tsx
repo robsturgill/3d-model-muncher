@@ -1344,7 +1344,7 @@ export function SettingsPage({
             {/* Tag Management Tab */}
             <TabsContent value="tags" className="space-y-6">
               {/* Tag Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <Card>
                   <CardContent className="p-6">
                     <div className="flex items-center gap-2">
@@ -1408,7 +1408,7 @@ export function SettingsPage({
                   <div className="space-y-2 max-h-96 overflow-y-auto">
                     {filteredTags.map((tag) => (
                       <div key={tag.name} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                           <Badge variant="secondary" className="font-medium">
                             {tag.name}
                           </Badge>
@@ -1421,28 +1421,31 @@ export function SettingsPage({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleViewTagModels(tag)}
+                            aria-label={`View ${tag.name}`}
                             className="gap-2"
                           >
                             <Eye className="h-4 w-4" />
-                            View
+                            <span className="hidden sm:inline">View</span>
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => startRenameTag(tag)}
+                            aria-label={`Rename ${tag.name}`}
                             className="gap-2"
                           >
                             <Edit2 className="h-4 w-4" />
-                            Rename
+                            <span className="hidden sm:inline">Rename</span>
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteTag(tag.name)}
+                            aria-label={`Delete ${tag.name}`}
                             className="gap-2 text-destructive hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
-                            Delete
+                            <span className="hidden sm:inline">Delete</span>
                           </Button>
                         </div>
                       </div>
@@ -1551,7 +1554,6 @@ export function SettingsPage({
                       <Select
                       value={restoreStrategy}
                       onValueChange={(value: 'hash-match' | 'path-match' | 'force') => setRestoreStrategy(value)}
-                      className="w-full"
                       >
                       <SelectTrigger>
                         <SelectValue />
@@ -1706,13 +1708,13 @@ export function SettingsPage({
                           ) : (
                             <Files className="h-4 w-4" />
                           )}
-                          {isGeneratingJson ? 'Generating...' : 'Generate Model JSONs'}
+                          {isGeneratingJson ? 'Generating...' : 'Generate'}
                         </Button>
                       </div>
                     </div>
 
                     {hashCheckResult && (
-                      <div className="flex gap-4 self-end">
+                      <div className="flex flex-wrap gap-4 mt-3 md:mt-0 md:self-end">
                         <div key="verified-count" className="flex items-center gap-2">
                           <FileCheck className="h-4 w-4 text-green-600" />
                           <span className="text-sm">{hashCheckResult.verified} verified</span>
@@ -1768,11 +1770,10 @@ export function SettingsPage({
                             const model = modelData || fallbackModel;
                             
                             return (
-                              <div 
-                                key={file.filePath || `corrupt-${idx}`} 
-                                className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800"
-                              >
-                                <div className="min-w-0 flex-1">
+                              <div key={file.filePath || `corrupt-${idx}`} 
+                                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800"
+                                >
+                                  <div className="min-w-0 flex-1">
                                   <p className="font-medium text-red-900 dark:text-red-100 truncate">
                                     {model ? getDisplayPath(model) : file.filePath.split('/').pop()?.replace('.3mf', '') || 'Unknown'}
                                   </p>
@@ -1784,8 +1785,8 @@ export function SettingsPage({
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => onModelClick?.(model)}
-                                    className="ml-4 shrink-0"
+                                      onClick={() => onModelClick?.(model)}
+                                      className="mt-3 sm:mt-0 ml-0 sm:ml-4 shrink-0"
                                   >
                                     View
                                   </Button>
@@ -1809,7 +1810,7 @@ export function SettingsPage({
                               key={`dup-${idx}`}
                               className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800"
                             >
-                              <div key={`header-${group.hash}`} className="flex items-center justify-between mb-2">
+                              <div key={`header-${group.hash}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-2">
                                 <span className="text-sm text-blue-600 dark:text-blue-400">
                                   {group.models.length} copies - {group.totalSize} total
                                 </span>
@@ -1833,7 +1834,7 @@ export function SettingsPage({
                                     </DialogHeader>
                                     <div className="space-y-2">
                                       {group.models.map((model) => (
-                                        <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                        <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 bg-muted rounded-md gap-2">
                                           <div className="flex items-center gap-2 min-w-0 flex-1">
                                             {model.thumbnail ? (
                                               <img
@@ -1864,7 +1865,7 @@ export function SettingsPage({
                               </div>
                               <div key={`models-${group.hash}`} className="space-y-2">
                                 {group.models.map((model) => (
-                                  <div key={`dup-list-${group.hash}-${model.id}-${model.name}`} className="flex items-center justify-between">
+                                  <div key={`dup-list-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
                                       <ModelThumbnail thumbnail={model.thumbnail} name={model.name} />
                                       <span className="text-sm truncate">{getDisplayPath(model)}</span>
@@ -1930,7 +1931,12 @@ export function SettingsPage({
                     <h3 className="font-medium">Ways to Support</h3>
                     
                     <div className="grid gap-4">
-                      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-lg border border-primary/20">
+                      <button
+                        type="button"
+                        onClick={onDonationClick}
+                        aria-label="Donate"
+                        className="w-full text-left flex items-center gap-4 p-4 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-lg border border-primary/20 cursor-pointer transform transition duration-150 ease-in-out hover:scale-105 hover:from-primary/10 hover:to-secondary/10 hover:border-2 hover:border-primary hover:bg-primary/6 dark:hover:border-primary dark: hover:bg-primary/900 hover:ring-2 hover:ring-primary/40 dark:hover:ring-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary/50 transition-colors"
+                      >
                         <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-lg">
                           <Heart className="h-6 w-6 text-primary" />
                         </div>
@@ -1940,13 +1946,19 @@ export function SettingsPage({
                             Buy me a coffee or sponsor development through various platforms
                           </p>
                         </div>
-                        <Button onClick={onDonationClick} className="gap-2">
+                        <span className="hidden sm:inline-flex items-center gap-2">
                           <Heart className="h-4 w-4" />
                           Donate
-                        </Button>
-                      </div>
+                        </span>
+                      </button>
 
-                      <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border">
+                      <a
+                        href="https://github.com/robsturgill/3d-model-muncher"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Star on GitHub"
+                        className="w-full text-left flex items-center gap-4 p-4 bg-muted/30 rounded-lg border cursor-pointer transform transition duration-150 ease-in-out hover:scale-105 hover:bg-muted/50 dark:hover:bg-muted/70 hover:border-2 hover:border-primary hover:ring-2 hover:ring-primary/40 dark:hover:ring-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary/50 transition-colors"
+                      >
                         <div className="flex items-center justify-center w-12 h-12 bg-muted rounded-lg">
                           <Star className="h-6 w-6 text-muted-foreground" />
                         </div>
@@ -1956,15 +1968,19 @@ export function SettingsPage({
                             Show your appreciation and help others discover the project
                           </p>
                         </div>
-                        <Button variant="outline" className="gap-2" asChild>
-                          <a href="https://github.com/robsturgill/3d-model-muncher" target="_blank" rel="noopener noreferrer">
-                            <Github className="h-4 w-4" />
-                            Star
-                          </a>
-                        </Button>
-                      </div>
+                        <span className="hidden sm:inline-flex items-center gap-2">
+                          <Github className="h-4 w-4" />
+                          Star
+                        </span>
+                      </a>
 
-                      <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border">
+                      <a
+                        href="https://github.com/robsturgill/3d-model-muncher"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Contribute on GitHub"
+                        className="w-full text-left flex items-center gap-4 p-4 bg-muted/30 rounded-lg border cursor-pointer transform transition duration-150 ease-in-out hover:scale-105 hover:bg-muted/50 dark:hover:bg-muted/70 hover:border-2 hover:border-primary hover:ring-2 hover:ring-primary/40 dark:hover:ring-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary/50 transition-colors"
+                      >
                         <div className="flex items-center justify-center w-12 h-12 bg-muted rounded-lg">
                           <Github className="h-6 w-6 text-muted-foreground" />
                         </div>
@@ -1974,26 +1990,24 @@ export function SettingsPage({
                             Help improve the project by contributing code, reporting bugs, or suggesting features
                           </p>
                         </div>
-                        <Button variant="outline" className="gap-2" asChild>
-                          <a href="https://github.com/robsturgill/3d-model-muncher" target="_blank" rel="noopener noreferrer">
-                            <Github className="h-4 w-4" />
-                            Contribute
-                          </a>
-                        </Button>
-                      </div>
+                        <span className="hidden sm:inline-flex items-center gap-2">
+                          <Github className="h-4 w-4" />
+                          Contribute
+                        </span>
+                      </a>
                     </div>
                   </div>
 
                   {/* Community */}
-                  <div className="flex items-center gap-6">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
                     <img 
                       src="/images/munchie-side.png"
                       alt="Community mascot"
                       width="200"
-                      className="w-[200px] h-auto flex-shrink-0"
+                      className="w-32 sm:w-[200px] h-auto flex-shrink-0 mx-auto sm:mx-0"
                     />                    
-                    <div className="flex-1 flex flex-col justify-center space-y-3">
-                      <h3 className="font-medium text-left">Join the Community</h3>
+                    <div className="flex-1 w-full flex flex-col justify-center space-y-3 text-left">
+                      <h3 className="font-medium">Join the Community</h3>
                       <ul className="text-sm text-muted-foreground space-y-2 text-left list-disc list-inside">
                         <li>• Share your 3D printing projects and experiences</li>
                         <li>• Get help from fellow makers and developers</li>
