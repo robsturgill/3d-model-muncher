@@ -1466,26 +1466,26 @@ export function SettingsPage({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Backup Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                    {/* Backup Section */}
+                    <div className="space-y-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div className="space-y-1">
-                        <h3 className="font-medium">Create Backup</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Backup all model metadata files to a compressed archive
-                        </p>
+                      <h3 className="font-medium">Create Backup</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Backup all model metadata files to a compressed archive
+                      </p>
                       </div>
                       <Button 
-                        onClick={handleCreateBackup}
-                        disabled={isCreatingBackup}
-                        className="gap-2"
+                      onClick={handleCreateBackup}
+                      disabled={isCreatingBackup}
+                      className="gap-2 md:ml-4"
                       >
-                        {isCreatingBackup ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Archive className="h-4 w-4" />
-                        )}
-                        {isCreatingBackup ? 'Creating...' : 'Create Backup'}
+                      {isCreatingBackup ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                      {isCreatingBackup ? 'Creating...' : 'Create Backup'}
                       </Button>
                     </div>
 
@@ -1548,64 +1548,65 @@ export function SettingsPage({
                     {/* Restore Strategy Selection */}
                     <div className="space-y-3">
                       <Label>Restore Strategy</Label>
-                      <Select value={restoreStrategy} onValueChange={(value: 'hash-match' | 'path-match' | 'force') => setRestoreStrategy(value)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="hash-match">
-                            <div className="space-y-1">
-                              <div className="font-medium">Hash Match (Recommended)</div>
-                              <div className="text-xs text-muted-foreground">
-                                Match files by content hash, fallback to path if needed
-                              </div>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="path-match">
-                            <div className="space-y-1">
-                              <div className="font-medium">Path Match</div>
-                              <div className="text-xs text-muted-foreground">
-                                Only restore files that exist at their original paths
-                              </div>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="force">
-                            <div className="space-y-1">
-                              <div className="font-medium">Force Restore</div>
-                              <div className="text-xs text-muted-foreground">
-                                Restore all files to original paths, create directories if needed
-                              </div>
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
+                      <Select
+                      value={restoreStrategy}
+                      onValueChange={(value: 'hash-match' | 'path-match' | 'force') => setRestoreStrategy(value)}
+                      className="w-full"
+                      >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hash-match">
+                        <div className="font-medium">Hash Match <span className="text-xs text-muted-foreground sm:hidden">(Recommended)</span></div>
+                        <div className="text-xs text-muted-foreground hidden sm:block">
+                          Match files by content hash, fallback to path if needed
+                        </div>
+                        </SelectItem>
+                        <SelectItem value="path-match">
+                        <div className="font-medium">Path Match</div>
+                        <div className="text-xs text-muted-foreground hidden sm:block">
+                          Only restore files that exist at their original paths
+                        </div>
+                        </SelectItem>
+                        <SelectItem value="force">
+                        <div className="font-medium">Force Restore</div>
+                        <div className="text-xs text-muted-foreground hidden sm:block">
+                          Restore all files to original paths, create directories if needed
+                        </div>
+                        </SelectItem>
+                      </SelectContent>
                       </Select>
-                      
-                      {/* Strategy explanations */}
-                      <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-lg">
-                        {restoreStrategy === 'hash-match' && (
-                          <div>
-                            <strong>Hash Match:</strong> Compares 3MF file hashes from backup with current 3MF files, 
-                            then restores metadata to the matching model's munchie.json file. Falls back to path matching if no hash match found.
-                            <br />
-                            <em>Recommendation:</em> Safest option for most situations, handles moved/renamed files intelligently.
-                          </div>
-                        )}
-                        {restoreStrategy === 'path-match' && (
-                          <div>
-                            <strong>Path Match:</strong> Only restores files that currently exist at their 
-                            original backup locations. Safest option that won't create new files.
-                            <br />
-                            <em>Recommendation:</em> Use when you only want to update existing metadata.
-                          </div>
-                        )}
-                        {restoreStrategy === 'force' && (
-                          <div>
-                            <strong>Force Restore:</strong> Creates files at their original paths regardless 
-                            of current state. Use with caution as this can overwrite existing files.
-                            <br />
-                            <em>Warning:</em> Can create new files and overwrite existing metadata.
-                          </div>
-                        )}
+
+                      {/* Strategy explanations - mobile friendly */}
+                      <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-lg break-words overflow-x-hidden">
+                      {restoreStrategy === 'hash-match' && (
+                        <div>
+                        <strong>Hash Match:</strong>
+                        <span className="block mt-1">
+                          Compares 3MF file hashes from backup with current files, then restores metadata to the matching munchie.json. Falls back to path matching if no hash match found.
+                        </span>
+                        <span className="block mt-1 text-primary font-semibold">Recommended for most users.</span>
+                        </div>
+                      )}
+                      {restoreStrategy === 'path-match' && (
+                        <div>
+                        <strong>Path Match:</strong>
+                        <span className="block mt-1">
+                          Only restores files that currently exist at their original backup locations. Does not create new files.
+                        </span>
+                        <span className="block mt-1 text-primary font-semibold">Use to update existing metadata only.</span>
+                        </div>
+                      )}
+                      {restoreStrategy === 'force' && (
+                        <div>
+                        <strong>Force Restore:</strong>
+                        <span className="block mt-1">
+                          Creates files at their original paths regardless of current state. Can overwrite existing files.
+                        </span>
+                        <span className="block mt-1 text-destructive font-semibold">Use with caution!</span>
+                        </div>
+                      )}
                       </div>
                     </div>
 
