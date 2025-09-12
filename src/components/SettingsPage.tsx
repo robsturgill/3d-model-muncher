@@ -2018,7 +2018,6 @@ export function SettingsPage({
                   </div>
 
                   <div className="text-center p-6 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-lg border border-primary/20">
-                    <Heart className="h-8 w-8 text-primary mx-auto mb-3" />
                     <p className="text-sm text-muted-foreground">
                       <strong className="text-primary">Thank you</strong> for using 3D Model Muncher! 
                       Your support helps keep this project free and open-source for the entire 3D printing community.
