@@ -3,6 +3,7 @@ import { useState, KeyboardEvent, useEffect } from "react";
 import { Model } from "../types/model";
 import { Category } from "../types/category";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "./ui/sheet";
+import { ScrollArea } from "./ui/scroll-area";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -234,7 +235,7 @@ export function ModelDetailsDrawer({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-2xl">
         {/* Sticky Header during editing */}
         <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}> 
           <div className="flex items-start justify-between">
@@ -282,7 +283,8 @@ export function ModelDetailsDrawer({
           </div>
         </SheetHeader>
 
-        <div className="p-6 space-y-8">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-6 space-y-8">
           {/* Model Viewer with Toggle */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -829,7 +831,8 @@ export function ModelDetailsDrawer({
               </div>
             )}
           </div>
-        </div>
+          </div>
+        </ScrollArea>
       </SheetContent>
     </Sheet>
   );

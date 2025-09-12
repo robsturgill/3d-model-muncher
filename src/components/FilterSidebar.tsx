@@ -8,6 +8,7 @@ import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Category } from "../types/category";
 import { Model } from "../types/model";
+import { ScrollArea } from "./ui/scroll-area";
 
 interface FilterSidebarProps {
   onFilterChange: (filters: {
@@ -244,160 +245,163 @@ export function FilterSidebar({
       </div>
 
       {isOpen && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {/* Search */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Search</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search models..."
-                value={searchTerm}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-10 bg-background border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
-          </div>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="h-full p-4 space-y-6">
 
-          {/* Categories */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-foreground" />
-              <label className="text-sm font-medium text-foreground">Categories</label>
+            {/* Search */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search models..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10 bg-background border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Button
-                variant={selectedCategory === "all" ? "default" : "ghost"}
-                onClick={() => handleCategoryChange("all")}
-                className={`w-full justify-start h-10 px-3 ${
-                  selectedCategory === "all" 
-                    ? "text-primary-foreground hover:text-primary-foreground" 
-                    : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-              >
-                <Filter className="h-4 w-4 mr-3" />
-                <span>All Categories</span>
-              </Button>
-              
-              {categories.map((category) => {
-                const Icon = iconMap[category.icon] || Package;
-                return (
-                  <Button
-                    key={category.id}
-                    variant={selectedCategory === category.id ? "default" : "ghost"}
-                    onClick={() => handleCategoryChange(category.id)}
-                    className={`w-full justify-start h-10 px-3 ${
-                      selectedCategory === category.id 
-                        ? "text-primary-foreground hover:text-primary-foreground" 
-                        : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 mr-3" />
-                    <span>{category.label}</span>
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
 
-          {/* Print Status */}
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">Print Status</label>
-            <Select value={selectedPrintStatus} onValueChange={handlePrintStatusChange}>
-              <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="printed">Printed</SelectItem>
-                <SelectItem value="not-printed">Not Printed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* License Filter */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-foreground" />
-              <label className="text-sm font-medium text-foreground">License</label>
-            </div>
-            <Select value={selectedLicense} onValueChange={handleLicenseChange}>
-              <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
-                <SelectValue placeholder="All Licenses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Licenses</SelectItem>
-                {availableLicenses.map((license) => (
-                  <SelectItem key={license} value={license}>
-                    {license}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Show Hidden Models */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            {/* Categories */}
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <EyeOff className="h-4 w-4 text-foreground" />
-                <label className="text-sm font-medium text-foreground">Show Hidden Models</label>
+                <Layers className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">Categories</label>
               </div>
-              <Switch
-                checked={showHidden}
-                onCheckedChange={handleShowHiddenChange}
-                className="data-[state=checked]:bg-primary"
-              />
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">Popular Tags</label>
-            <div className="flex flex-wrap gap-2">
-              {availableTags.slice(0, 12).map((tag) => (
-                <Badge
-                  key={tag}
-                  variant={selectedTags.includes(tag) ? "default" : "secondary"}
-                  className="cursor-pointer text-xs hover:bg-primary/90 transition-colors"
-                  onClick={() => handleTagToggle(tag)}
+              <div className="space-y-1">
+                <Button
+                  variant={selectedCategory === "all" ? "default" : "ghost"}
+                  onClick={() => handleCategoryChange("all")}
+                  className={`w-full justify-start h-10 px-3 ${
+                    selectedCategory === "all" 
+                      ? "text-primary-foreground hover:text-primary-foreground" 
+                      : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
                 >
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-            {selectedTags.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  {selectedTags.length} tag{selectedTags.length > 1 ? 's' : ''} selected
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {selectedTags.map((tag) => (
-                    <Badge
-                      key={`selected-${tag}`}
-                      variant="default"
-                      className="text-xs cursor-pointer hover:bg-primary/80"
-                      onClick={() => handleTagToggle(tag)}
+                  <Filter className="h-4 w-4 mr-3" />
+                  <span>All Categories</span>
+                </Button>
+                
+                {categories.map((category) => {
+                  const Icon = iconMap[category.icon] || Package;
+                  return (
+                    <Button
+                      key={category.id}
+                      variant={selectedCategory === category.id ? "default" : "ghost"}
+                      onClick={() => handleCategoryChange(category.id)}
+                      className={`w-full justify-start h-10 px-3 ${
+                        selectedCategory === category.id 
+                          ? "text-primary-foreground hover:text-primary-foreground" 
+                          : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                      }`}
                     >
-                      {tag} ×
-                    </Badge>
-                  ))}
-                </div>
+                      <Icon className="h-4 w-4 mr-3" />
+                      <span>{category.label}</span>
+                    </Button>
+                  );
+                })}
               </div>
-            )}
+            </div>
+
+            {/* Print Status */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground">Print Status</label>
+              <Select value={selectedPrintStatus} onValueChange={handlePrintStatusChange}>
+                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="printed">Printed</SelectItem>
+                  <SelectItem value="not-printed">Not Printed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* License Filter */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">License</label>
+              </div>
+              <Select value={selectedLicense} onValueChange={handleLicenseChange}>
+                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                  <SelectValue placeholder="All Licenses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Licenses</SelectItem>
+                  {availableLicenses.map((license) => (
+                    <SelectItem key={license} value={license}>
+                      {license}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Show Hidden Models */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <EyeOff className="h-4 w-4 text-foreground" />
+                  <label className="text-sm font-medium text-foreground">Show Hidden Models</label>
+                </div>
+                <Switch
+                  checked={showHidden}
+                  onCheckedChange={handleShowHiddenChange}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground">Popular Tags</label>
+              <div className="flex flex-wrap gap-2">
+                {availableTags.slice(0, 12).map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant={selectedTags.includes(tag) ? "default" : "secondary"}
+                    className="cursor-pointer text-xs hover:bg-primary/90 transition-colors"
+                    onClick={() => handleTagToggle(tag)}
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+              {selectedTags.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {selectedTags.length} tag{selectedTags.length > 1 ? 's' : ''} selected
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedTags.map((tag) => (
+                      <Badge
+                        key={`selected-${tag}`}
+                        variant="default"
+                        className="text-xs cursor-pointer hover:bg-primary/80"
+                        onClick={() => handleTagToggle(tag)}
+                      >
+                        {tag} ×
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Separator className="bg-border" />
+
+            {/* Clear Filters */}
+            <Button 
+              variant="outline" 
+              onClick={clearFilters}
+              className="w-full bg-background border-border text-foreground hover:bg-accent hover:text-accent-foreground hover:border-primary transition-colors"
+            >
+              Clear All Filters
+            </Button>
           </div>
-
-          <Separator className="bg-border" />
-
-          {/* Clear Filters */}
-          <Button 
-            variant="outline" 
-            onClick={clearFilters}
-            className="w-full bg-background border-border text-foreground hover:bg-accent hover:text-accent-foreground hover:border-primary transition-colors"
-          >
-            Clear All Filters
-          </Button>
-        </div>
+        </ScrollArea>
       )}
     </div>
   );

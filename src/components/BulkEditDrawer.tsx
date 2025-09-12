@@ -8,6 +8,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "./ui/sheet";
+import { ScrollArea } from "./ui/scroll-area";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -451,7 +452,7 @@ export function BulkEditDrawer({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+    <SheetContent className="w-full sm:max-w-2xl">
         <SheetHeader className="space-y-4 pb-6 border-b border-border">
           <div className="flex items-start justify-between">
             <div className="space-y-2 flex-1 min-w-0">
@@ -479,7 +480,8 @@ export function BulkEditDrawer({
           </div>
         </SheetHeader>
 
-        <div className="p-6 space-y-8">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-6 space-y-8">
           {/* Selected Models Preview */}
           <div className="space-y-4">
             <h3 className="font-semibold text-lg text-card-foreground">
@@ -950,10 +952,11 @@ export function BulkEditDrawer({
               className="gap-2"
             >
               <Save className="h-4 w-4" />
-              {isSaving ? 'Saving...' : 'Apply Changes'}
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
-        </div>
+          </div>
+        </ScrollArea>
       </SheetContent>
     </Sheet>
   );
