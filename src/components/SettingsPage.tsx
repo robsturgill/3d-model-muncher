@@ -1309,7 +1309,9 @@ export function SettingsPage({
                           {category.label}
                         </Badge>
                         <span className="text-sm text-muted-foreground">
-                          ID: {category.id}
+                          <span className="text-sm text-muted-foreground hidden sm:inline">
+                            ID: {category.id}
+                          </span>
                         </span>
                         <div className="flex items-center gap-2 ml-auto">
                           <Button
@@ -1329,12 +1331,12 @@ export function SettingsPage({
                     ))}
                   </div>
                   
-                  <div className="flex gap-3 pt-4">
-                    <Button onClick={handleSaveCategories} className="gap-2">
-                      <Save className="h-4 w-4" />
-                      Save Category Order
-                    </Button>
-                  </div>
+
+                  <Button onClick={handleSaveCategories} className="gap-2">
+                    <Save className="h-4 w-4" />
+                    Save Category Order
+                  </Button>
+
                 </CardContent>
               </Card>
             </TabsContent>
