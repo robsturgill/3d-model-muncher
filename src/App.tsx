@@ -17,6 +17,16 @@ import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./components/ui/alert-dialog";
 
 // Function to load model data from JSON files
 // Initial type for view
@@ -40,6 +50,7 @@ function AppContent() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Load configuration and models on app startup
   useEffect(() => {
@@ -146,6 +157,16 @@ function AppContent() {
     setIsBulkEditOpen(true);
   };
 
+  const handleBulkDeleteClick = () => {
+    if (selectedModelIds.length === 0) {
+      toast("No models selected", {
+        description: "Please select models first before deleting"
+      });
+      return;
+    }
+    setIsDeleteDialogOpen(true);
+  };
+
   const handleBulkDelete = async () => {
     if (selectedModelIds.length === 0) {
       toast("No models selected", {
@@ -153,6 +174,9 @@ function AppContent() {
       });
       return;
     }
+
+    // Close the dialog first
+    setIsDeleteDialogOpen(false);
 
     try {
       toast("Deleting model files...", {
@@ -585,7 +609,7 @@ function AppContent() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={handleBulkDelete}
+                          onClick={handleBulkDeleteClick}
                           className="gap-2 text-destructive hover:text-destructive"
                           title="Delete selected models"
                         >
@@ -737,6 +761,30 @@ function AppContent() {
         isOpen={isDonationDialogOpen}
         onClose={() => setIsDonationDialogOpen(false)}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Models</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedModelIds.length} model{selectedModelIds.length !== 1 ? 's' : ''}? 
+              This action will permanently remove both the 3MF files and their corresponding munchie.json metadata files from your system.
+              <br /><br />
+              <strong>This action cannot be undone.</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Files
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
