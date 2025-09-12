@@ -1,6 +1,6 @@
 services:
   3d-model-muncher:
-    image: yourusername/3d-model-muncher:latest  # Replace 'yourusername' with your DockerHub username
+    image: robsturgill/3d-model-muncher:latest
     container_name: 3d-model-muncher
     ports:
       - "3000:3001"
