@@ -695,7 +695,7 @@ function AppContent() {
               variant="ghost"
               size="sm"
               onClick={handleDemoClick}
-              className="p-2 hover:bg-accent transition-colors"
+              className="p-2 hover:bg-accent transition-colors hidden"
               title="UI Demo"
             >
               <Palette className="h-4 w-4" />
