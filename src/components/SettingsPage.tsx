@@ -1075,14 +1075,14 @@ export function SettingsPage({
 
           {/* Settings Tabs */}
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-            <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="categories">Categories</TabsTrigger>
-              <TabsTrigger value="tags">Tag Management</TabsTrigger>
-              <TabsTrigger value="backup">Backup & Restore</TabsTrigger>
-              <TabsTrigger value="integrity">File Integrity</TabsTrigger>
-              <TabsTrigger value="support">Support</TabsTrigger>
-              <TabsTrigger value="config">Configuration</TabsTrigger>
+            <TabsList className="flex flex-wrap w-full gap-1 h-auto p-1 justify-start">
+              <TabsTrigger value="general" className="flex-shrink-0">General</TabsTrigger>
+              <TabsTrigger value="categories" className="flex-shrink-0">Categories</TabsTrigger>
+              <TabsTrigger value="tags" className="flex-shrink-0">Tag Management</TabsTrigger>
+              <TabsTrigger value="backup" className="flex-shrink-0">Backup & Restore</TabsTrigger>
+              <TabsTrigger value="integrity" className="flex-shrink-0">File Integrity</TabsTrigger>
+              <TabsTrigger value="support" className="flex-shrink-0">Support</TabsTrigger>
+              <TabsTrigger value="config" className="flex-shrink-0">Configuration</TabsTrigger>
             </TabsList>
 
             {/* General Settings Tab */}
