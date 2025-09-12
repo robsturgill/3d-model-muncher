@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Separator } from "./ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { ScrollArea } from "./ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ArrowLeft, Search, Star, Download, Settings, AlertCircle, CheckCircle, Info, X } from "lucide-react";
 
 interface DemoPageProps {
@@ -438,6 +439,96 @@ export function DemoPage({ onBack }: DemoPageProps) {
                     Failed to load 3D model. Please check the file format.
                   </AlertDescription>
                 </Alert>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Tabs Section */}
+          <section className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Tabs</CardTitle>
+                <CardDescription>Tabbed navigation with hover and active states</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h4 className="mb-4">Tab States Demo</h4>
+                  <Tabs defaultValue="overview" className="w-full">
+                    <TabsList>
+                      <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsTrigger value="details">Details</TabsTrigger>
+                      <TabsTrigger value="settings">Settings</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="overview" className="mt-6">
+                      <div className="p-6 bg-muted/50 rounded-lg">
+                        <h5 className="font-medium mb-2">Overview Tab Content</h5>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          This tab is currently <strong>active</strong>. Try hovering over the other tabs to see the hover state.
+                        </p>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>Models:</span>
+                            <span>1,234</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Printed:</span>
+                            <span>856</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Categories:</span>
+                            <span>12</span>
+                          </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="details" className="mt-6">
+                      <div className="p-6 bg-muted/50 rounded-lg">
+                        <h5 className="font-medium mb-2">Details Tab Content</h5>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          The Details tab is now <strong>active</strong>. Notice how the tab styling changes to indicate the current selection.
+                        </p>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="font-medium">Storage Used:</span>
+                            <p className="text-muted-foreground">2.4 GB</p>
+                          </div>
+                          <div>
+                            <span className="font-medium">Last Sync:</span>
+                            <p className="text-muted-foreground">5 minutes ago</p>
+                          </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="settings" className="mt-6">
+                      <div className="p-6 bg-muted/50 rounded-lg">
+                        <h5 className="font-medium mb-2">Settings Tab Content</h5>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          The Settings tab demonstrates the <strong>active state</strong>. The cursor pointer and hover effects help users understand tab interactivity.
+                        </p>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="demo-notifications">Enable notifications</Label>
+                            <Switch id="demo-notifications" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="demo-auto-backup">Auto backup</Label>
+                            <Switch id="demo-auto-backup" defaultChecked />
+                          </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+
+                <div className="p-4 bg-accent/20 rounded-lg">
+                  <h4 className="font-medium mb-2">State Documentation</h4>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <div><strong>Normal:</strong> Default tab appearance with cursor pointer</div>
+                    <div><strong>Hover:</strong> Subtle background change when mouse hovers over inactive tabs</div>
+                    <div><strong>Active:</strong> Selected tab with distinct background and styling</div>
+                    <div><strong>Focus:</strong> Keyboard navigation support with visible focus rings</div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </section>
