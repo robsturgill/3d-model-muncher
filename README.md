@@ -75,21 +75,28 @@ The app includes configuration management through the Settings page:
 
 ## Docker Deployment
 
+**Quick Start:**
 ```bash
-# Using Docker Compose (recommended)
+# Local development
+docker-compose up -d --build
+
+# Production with published image
+cp .env.production .env
 docker-compose up -d
 
-# Manual Docker build
-docker build -t 3d-model-muncher .
-docker run -p 3001:3001 \
-  -v /path/to/your/models:/app/models \
-  -v /path/to/your/data:/app/data \
-  3d-model-muncher
-
-# For Unraid: Map your shares directly
-# Container Path: /app/models -> Host Path: /mnt/user/3d-models
-# Container Path: /app/data -> Host Path: /mnt/user/appdata/3d-model-muncher
+# Unraid deployment
+cp .env.unraid .env
+docker-compose up -d
 ```
+
+**Detailed Instructions:**
+- **[Docker Deployment Guide](DOCKER-DEPLOYMENT.md)** - Complete Docker setup and configuration
+- **[Unraid Installation](UNRAID.md)** - Unraid-specific installation and setup
+
+**Environment Templates:**
+- `.env.example` - Template with all configuration options
+- `.env.production` - Production deployment using DockerHub image
+- `.env.unraid` - Unraid-optimized settings
 
 ## API Endpoints
 

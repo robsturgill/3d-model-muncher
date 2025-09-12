@@ -1,12 +1,29 @@
 services:
   3d-model-muncher:
-    build: .
+    image: ${COMPOSE_IMAGE:-}
+    build: 
+      context: .
+      dockerfile: ${DOCKERFILE:-Dockerfile}
     container_name: 3d-model-muncher
+    hostname: 3d-model-muncher
     ports:
-      - "3000:3001"
+      - "${HOST_PORT:-3000}:3001"
     volumes:
-      - ./models:/app/models
-    restart: unless-stopped
+      - "${MODELS_PATH:-./models}:/app/models:rw"
+      - "${DATA_PATH:-./data}:/app/data:rw"
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-UTC}
+    restart: unless-stopped
+    labels:
+      - "com.unraid.docker.managed=dockerman"
+      - "com.unraid.docker.icon=https://raw.githubusercontent.com/robsturgill/3d-model-muncher/main/public/images/favicon.ico"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health", "||", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

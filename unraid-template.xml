@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>3D-Model-Muncher</Name>
-  <Repository>your-dockerhub-username/3d-model-muncher</Repository>
+  <Repository>robsturgill/3d-model-muncher</Repository>
   <Registry>https://hub.docker.com/</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -9,11 +9,11 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/robsturgill/3d-model-muncher</Support>
   <Project>https://github.com/robsturgill/3d-model-muncher</Project>
-  <Overview>A responsive 3D printing model management application built with React, TypeScript, and Three.js. Organize, search, and preview your 3D printing models with an intuitive interface featuring dark/light theme support.</Overview>
+  <Overview>A responsive 3D printing model management application built with React, TypeScript, and Three.js. Organize, search, and preview your 3D printing models with an intuitive interface featuring dark/light theme support. Includes advanced features like bulk editing, backup/restore, and comprehensive filtering. See UNRAID.md for installation guide.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:3001]/</WebUI>
-  <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/robsturgill/3d-model-muncher/main/public/favicon.ico</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/robsturgill/3d-model-muncher/main/unraid-template.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/robsturgill/3d-model-muncher/main/public/images/favicon.ico</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
@@ -25,6 +25,8 @@
   <Config Name="Models Directory" Target="/app/models" Default="/mnt/user/3d-models/" Mode="rw" Description="Directory containing your 3D model files" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/3d-models/</Config>
   <Config Name="Data Directory" Target="/app/data" Default="/mnt/user/appdata/3d-model-muncher/" Mode="rw" Description="Directory for application data and configurations" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/3d-model-muncher/</Config>
   <Config Name="NODE_ENV" Target="NODE_ENV" Default="production" Mode="" Description="Node.js environment" Type="Variable" Display="advanced" Required="false" Mask="false">production</Config>
+  <Config Name="PORT" Target="PORT" Default="3001" Mode="" Description="Application port (should match container port)" Type="Variable" Display="advanced" Required="false" Mask="false">3001</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID for file permissions" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID for file permissions" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="TZ" Target="TZ" Default="America/New_York" Mode="" Description="Timezone for the container" Type="Variable" Display="advanced" Required="false" Mask="false">America/New_York</Config>
 </Container>
