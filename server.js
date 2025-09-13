@@ -74,8 +74,12 @@ app.post('/api/save-model', (req, res) => {
     if (fs.existsSync(absoluteFilePath)) {
       existing = JSON.parse(fs.readFileSync(absoluteFilePath, 'utf-8'));
     }
-    // Merge changes
-    const updated = { ...existing, ...changes };
+    
+    // Remove filePath and other computed properties from changes to prevent them from being saved
+    const { filePath: _, modelUrl: __, ...cleanChanges } = changes;
+    
+    // Merge changes (excluding computed properties)
+    const updated = { ...existing, ...cleanChanges };
     fs.writeFileSync(absoluteFilePath, JSON.stringify(updated, null, 2), 'utf-8');
     console.log('Model updated and saved to:', absoluteFilePath);
     res.json({ success: true });

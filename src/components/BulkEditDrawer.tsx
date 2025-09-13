@@ -376,7 +376,11 @@ export function BulkEditDrawer({
           // Convert from .3mf path to -munchie.json path
           if (model.filePath.endsWith('.3mf')) {
             jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
+          } else if (model.filePath.endsWith('-munchie.json')) {
+            // Already a JSON path, use as-is
+            jsonFilePath = model.filePath;
           } else {
+            // Assume it's a base name and add the JSON extension
             jsonFilePath = `${model.filePath}-munchie.json`;
           }
         } else if (model.modelUrl) {
@@ -385,7 +389,11 @@ export function BulkEditDrawer({
           // Replace .3mf extension with -munchie.json
           if (relativePath.endsWith('.3mf')) {
             relativePath = relativePath.replace('.3mf', '-munchie.json');
+          } else if (relativePath.endsWith('-munchie.json')) {
+            // Already a JSON path, use as-is
+            relativePath = relativePath;
           } else {
+            // Assume it's a base name and add the JSON extension
             relativePath = `${relativePath}-munchie.json`;
           }
           jsonFilePath = relativePath;

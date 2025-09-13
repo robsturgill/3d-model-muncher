@@ -88,7 +88,11 @@ export function ModelDetailsDrawer({
       // Convert from .3mf path to -munchie.json path
       if (model.filePath.endsWith('.3mf')) {
         jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
+      } else if (model.filePath.endsWith('-munchie.json')) {
+        // Already a JSON path, use as-is
+        jsonFilePath = model.filePath;
       } else {
+        // Assume it's a base name and add the JSON extension
         jsonFilePath = `${model.filePath}-munchie.json`;
       }
     } else if (model.modelUrl) {
@@ -97,7 +101,11 @@ export function ModelDetailsDrawer({
       // Replace .3mf extension with -munchie.json
       if (relativePath.endsWith('.3mf')) {
         relativePath = relativePath.replace('.3mf', '-munchie.json');
+      } else if (relativePath.endsWith('-munchie.json')) {
+        // Already a JSON path, use as-is
+        relativePath = relativePath;
       } else {
+        // Assume it's a base name and add the JSON extension
         relativePath = `${relativePath}-munchie.json`;
       }
       jsonFilePath = relativePath;
@@ -125,10 +133,10 @@ export function ModelDetailsDrawer({
       console.error("No filePath specified for model");
       return;
     }
-    // Compute changed fields
+    // Compute changed fields (excluding computed properties like filePath and modelUrl)
     const changes: any = { filePath: edited.filePath, id: edited.id };
     Object.keys(edited).forEach(key => {
-      if (key === 'filePath' || key === 'id') return;
+      if (key === 'filePath' || key === 'id' || key === 'modelUrl') return;
       const editedValue = JSON.stringify((edited as any)[key]);
       const originalValue = JSON.stringify((original as any)[key]);
       if (editedValue !== originalValue) {
