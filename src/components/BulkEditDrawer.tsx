@@ -37,6 +37,8 @@ import {
   DollarSign,
   EyeOff,
   Eye,
+  Clock,
+  Weight,
 } from "lucide-react";
 
 interface BulkEditDrawerProps {
@@ -59,6 +61,8 @@ interface BulkEditState {
   notes?: string;
   source?: string;
   price?: number;
+  printTime?: string;
+  filamentUsed?: string;
 }
 
 interface FieldSelection {
@@ -70,6 +74,8 @@ interface FieldSelection {
   notes: boolean;
   source: boolean;
   price: boolean;
+  printTime: boolean;
+  filamentUsed: boolean;
 }
 
 export function BulkEditDrawer({
@@ -90,6 +96,8 @@ export function BulkEditDrawer({
       notes: false,
       source: false,
       price: false,
+      printTime: false,
+      filamentUsed: false,
     });
   const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -149,6 +157,20 @@ export function BulkEditDrawer({
       common.hidden = firstModel.hidden;
     }
 
+    // Check printTime
+    if (
+      models.every((model) => model.printTime === firstModel.printTime)
+    ) {
+      common.printTime = firstModel.printTime;
+    }
+
+    // Check filamentUsed
+    if (
+      models.every((model) => model.filamentUsed === firstModel.filamentUsed)
+    ) {
+      common.filamentUsed = firstModel.filamentUsed;
+    }
+
     return common;
   };
 
@@ -178,6 +200,8 @@ export function BulkEditDrawer({
         notes: false,
         source: false,
         price: false,
+        printTime: false,
+        filamentUsed: false,
       });
       setNewTag("");
     }
@@ -228,6 +252,14 @@ export function BulkEditDrawer({
       ...prev, 
       price: value ? parseFloat(value) : undefined 
     }));
+  };
+
+  const handlePrintTimeChange = (value: string) => {
+    setEditState((prev) => ({ ...prev, printTime: value }));
+  };
+
+  const handleFilamentChange = (value: string) => {
+    setEditState((prev) => ({ ...prev, filamentUsed: value }));
   };
 
   const handleAddTag = () => {
@@ -355,6 +387,20 @@ export function BulkEditDrawer({
         editState.price !== undefined
       ) {
         updates.price = editState.price;
+      }
+
+      if (
+        fieldSelection.printTime &&
+        editState.printTime !== undefined
+      ) {
+        updates.printTime = editState.printTime;
+      }
+
+      if (
+        fieldSelection.filamentUsed &&
+        editState.filamentUsed !== undefined
+      ) {
+        updates.filamentUsed = editState.filamentUsed;
       }
 
       // Handle tags separately since it requires special logic
@@ -947,6 +993,75 @@ export function BulkEditDrawer({
           </div>
 
           {/* Bottom Action Bar */}
+          {/* Print Time Field */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="print-time-field"
+                checked={fieldSelection.printTime}
+                onCheckedChange={() =>
+                  handleFieldToggle("printTime")
+                }
+              />
+              <Label
+                htmlFor="print-time-field"
+                className="font-medium flex items-center gap-2"
+              >
+                <Clock className="h-4 w-4" />
+                Update Print Time
+              </Label>
+            </div>
+
+            {fieldSelection.printTime && (
+              <div className="ml-6 space-y-2">
+                <Input
+                  placeholder="e.g. 1h 30m"
+                  value={editState.printTime || ""}
+                  onChange={(e) => handlePrintTimeChange(e.target.value)}
+                />
+                {commonValues.printTime && (
+                  <p className="text-xs text-muted-foreground">
+                    Current: {commonValues.printTime}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Filament Field */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="filament-field"
+                checked={fieldSelection.filamentUsed}
+                onCheckedChange={() =>
+                  handleFieldToggle("filamentUsed")
+                }
+              />
+              <Label
+                htmlFor="filament-field"
+                className="font-medium flex items-center gap-2"
+              >
+                <Weight className="h-4 w-4" />
+                Update Filament
+              </Label>
+            </div>
+
+            {fieldSelection.filamentUsed && (
+              <div className="ml-6 space-y-2">
+                <Input
+                  placeholder="e.g. 12g PLA"
+                  value={editState.filamentUsed || ""}
+                  onChange={(e) => handleFilamentChange(e.target.value)}
+                />
+                {commonValues.filamentUsed && (
+                  <p className="text-xs text-muted-foreground">
+                    Current: {commonValues.filamentUsed}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex items-center justify-between pt-6 border-t border-border bg-muted/30 -mx-6 px-6 py-4 mt-8 rounded-lg">
             <p className="text-sm text-muted-foreground">
               {hasChanges

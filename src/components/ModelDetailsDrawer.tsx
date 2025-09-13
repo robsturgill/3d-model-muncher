@@ -527,6 +527,31 @@ export function ModelDetailsDrawer({
                   <Label htmlFor="edit-hidden">Hide model from view</Label>
                 </div>
 
+                {/* Print Time & Filament Editing */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-print-time">Print Time</Label>
+                    <Input
+                      id="edit-print-time"
+                      placeholder="e.g. 1h 30m"
+                      value={editedModel?.printTime || ""}
+                      onChange={(e) => setEditedModel(prev => prev ? { ...prev, printTime: e.target.value } : null)}
+                    />
+                    <p className="text-xs text-muted-foreground">Friendly print time string (keeps existing formatting).</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-filament">Filament</Label>
+                    <Input
+                      id="edit-filament"
+                      placeholder="e.g. 12g PLA"
+                      value={editedModel?.filamentUsed || ""}
+                      onChange={(e) => setEditedModel(prev => prev ? { ...prev, filamentUsed: e.target.value } : null)}
+                    />
+                    <p className="text-xs text-muted-foreground">Amount/type of filament used.</p>
+                  </div>
+                </div>
+
                 {/* Tags Editing Section */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
