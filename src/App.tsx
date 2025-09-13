@@ -12,9 +12,8 @@ import { Model } from "./types/model";
 import { Category } from "./types/category";
 import { AppConfig } from "./types/config";
 import { ConfigManager } from "./utils/configManager";
-import { Menu, Palette, RefreshCw, CheckSquare, Square, Edit, Trash2, X, Heart } from "lucide-react";
+import { Menu, Palette, RefreshCw, Heart } from "lucide-react";
 import { Button } from "./components/ui/button";
-import { Badge } from "./components/ui/badge";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
 import {
@@ -572,10 +571,10 @@ function AppContent() {
                   />
                 </div>
                 <div>
-                  <h1 className="text-lg font-semibold text-foreground tracking-tight">
+                  <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">
                     3D Model Muncher
                   </h1>
-                  <p className="text-xs text-muted-foreground -mt-1 font-medium">
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">
                     {getViewTitle()}
                   </p>
                 </div>
@@ -584,87 +583,6 @@ function AppContent() {
           </div>
           
           <div className="flex items-center gap-2">
-            {/* Selection Mode Controls - Only show in models view */}
-            {currentView === 'models' && (
-              <>
-                {isSelectionMode ? (
-                  <div className="flex items-center gap-2 mr-2">
-                    <Badge variant="secondary" className="gap-1">
-                      {selectedModelIds.length} selected
-                    </Badge>
-                    
-                    {selectedModelIds.length > 0 && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleBulkEdit}
-                          className="gap-2"
-                          title="Bulk edit selected models"
-                        >
-                          <Edit className="h-4 w-4" />
-                          Edit
-                        </Button>
-                        
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleBulkDeleteClick}
-                          className="gap-2 text-destructive hover:text-destructive"
-                          title="Delete selected models"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </Button>
-                      </>
-                    )}
-                    
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={selectAllModels}
-                        title="Select all visible models"
-                      >
-                        <CheckSquare className="h-4 w-4" />
-                      </Button>
-                      
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={deselectAllModels}
-                        title="Deselect all models"
-                      >
-                        <Square className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={toggleSelectionMode}
-                      className="gap-2"
-                      title="Exit selection mode"
-                    >
-                      <X className="h-4 w-4" />
-                      Done
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleSelectionMode}
-                    className="gap-2"
-                    title="Enter selection mode"
-                  >
-                    <CheckSquare className="h-4 w-4" />
-                    Select
-                  </Button>
-                )}
-              </>
-            )}
-
             {/* Refresh Models Button - Only show in models view */}
             {currentView === 'models' && (
               <Button
@@ -715,6 +633,11 @@ function AppContent() {
               isSelectionMode={isSelectionMode}
               selectedModelIds={selectedModelIds}
               onModelSelection={handleModelSelection}
+              onToggleSelectionMode={toggleSelectionMode}
+              onSelectAll={selectAllModels}
+              onDeselectAll={deselectAllModels}
+              onBulkEdit={handleBulkEdit}
+              onBulkDelete={handleBulkDeleteClick}
             />
           ) : currentView === 'settings' ? (
             <SettingsPage 

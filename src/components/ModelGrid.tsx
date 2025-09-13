@@ -6,7 +6,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
-import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive } from "lucide-react";
+import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive, CheckSquare, Square, Edit, Trash2, X } from "lucide-react";
 import { Badge } from "./ui/badge";
 
 interface ModelGridProps {
@@ -15,6 +15,11 @@ interface ModelGridProps {
   isSelectionMode?: boolean;
   selectedModelIds?: string[];
   onModelSelection?: (modelId: string) => void;
+  onToggleSelectionMode?: () => void;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
+  onBulkEdit?: () => void;
+  onBulkDelete?: () => void;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -24,7 +29,12 @@ export function ModelGrid({
   onModelClick, 
   isSelectionMode = false,
   selectedModelIds = [],
-  onModelSelection
+  onModelSelection,
+  onToggleSelectionMode,
+  onSelectAll,
+  onDeselectAll,
+  onBulkEdit,
+  onBulkDelete
 }: ModelGridProps) {
   // Initialize from global config
   const config = ConfigManager.loadConfig();
@@ -100,11 +110,6 @@ export function ModelGrid({
           <div className="flex items-center gap-4 flex-wrap">
             <p className="text-muted-foreground text-sm font-medium">
               {models.length} model{models.length !== 1 ? 's' : ''} found
-              {isSelectionMode && selectedModelIds.length > 0 && (
-                <span className="ml-2 text-primary font-medium">
-                  ({selectedModelIds.length} selected)
-                </span>
-              )}
             </p>
             
             {/* View Mode Toggle - Hide in selection mode for cleaner UI */}
@@ -132,27 +137,106 @@ export function ModelGrid({
             )}
           </div>
 
-          {/* Grid Density Control - Only show in grid mode and not in selection mode */}
-          {viewMode === 'grid' && !isSelectionMode && (
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Sliders className="h-4 w-4" />
-                <span className="hidden sm:inline">Density</span>
+          <div className="flex items-center gap-2">
+            {/* Selection Mode Controls */}
+            {isSelectionMode ? (
+              <>
+                <Badge variant="secondary" className="gap-1">
+                  {selectedModelIds.length} selected
+                </Badge>
+                
+                {selectedModelIds.length > 0 && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onBulkEdit}
+                      className="gap-2"
+                      title="Bulk edit selected models"
+                    >
+                      <Edit className="h-4 w-4" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </Button>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onBulkDelete}
+                      className="gap-2 text-destructive hover:text-destructive"
+                      title="Delete selected models"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="hidden sm:inline">Delete</span>
+                    </Button>
+                  </>
+                )}
+                
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onSelectAll}
+                    title="Select all visible models"
+                  >
+                    <CheckSquare className="h-4 w-4" />
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onDeselectAll}
+                    title="Deselect all models"
+                  >
+                    <Square className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleSelectionMode}
+                  className="gap-2"
+                  title="Exit selection mode"
+                >
+                  <X className="h-4 w-4" />
+                  <span className="hidden sm:inline">Done</span>
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleSelectionMode}
+                className="gap-2"
+                title="Enter selection mode"
+              >
+                <CheckSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">Select</span>
+              </Button>
+            )}
+
+            {/* Grid Density Control - Only show in grid mode and not in selection mode */}
+            {viewMode === 'grid' && !isSelectionMode && (
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Sliders className="h-4 w-4" />
+                  <span className="hidden sm:inline">Density</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-3">1</span>
+                  <Slider
+                    value={gridDensity}
+                    onValueChange={handleGridDensityChange}
+                    min={1}
+                    max={6}
+                    step={1}
+                    className="w-20 sm:w-28"
+                  />
+                  <span className="text-xs text-muted-foreground w-3">6</span>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground w-3">1</span>
-                <Slider
-                  value={gridDensity}
-                  onValueChange={handleGridDensityChange}
-                  min={1}
-                  max={6}
-                  step={1}
-                  className="w-20 sm:w-28"
-                />
-                <span className="text-xs text-muted-foreground w-3">6</span>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
       
