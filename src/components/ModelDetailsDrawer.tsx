@@ -64,6 +64,7 @@ export function ModelDetailsDrawer({
       setIsEditing(false);
       setEditedModel(null);
       setNewTag("");
+      setSelectedImageIndexes([]);
     }
   }, [isOpen, defaultModelView]);
 
@@ -93,9 +94,20 @@ export function ModelDetailsDrawer({
       document.body.style.overflow = prev || '';
     };
   }, [isWindowFullscreen]);
-  // Combine thumbnail with additional images for gallery view (safe when model is null)
-  const safeImages = model && Array.isArray(model.images) ? model.images : [];
-  const allImages = model ? [model.thumbnail, ...safeImages] : [];
+
+    // Image selection state for edit mode (holds indexes into the gallery array)
+    const [selectedImageIndexes, setSelectedImageIndexes] = useState<number[]>([]);
+    // Drag state for reordering thumbnails in edit mode
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+    // Compute the full images array (thumbnail + additional images) from the currently-displayed model
+    // Use editedModel when editing so the gallery reflects pending changes immediately.
+    const allImages = (() => {
+      const src = editedModel || model;
+      if (!src) return [];
+      const imgs = Array.isArray(src.images) ? src.images : [];
+      return [src.thumbnail, ...imgs];
+    })();
 
   // Key handling for in-window fullscreen navigation (Escape, ArrowLeft, ArrowRight)
   useEffect(() => {
@@ -123,6 +135,73 @@ export function ModelDetailsDrawer({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [isWindowFullscreen, allImages.length]);
+
+  // Helper: is an image (by gallery index) selected for deletion
+  const isImageSelected = (index: number) => selectedImageIndexes.includes(index);
+
+  // Toggle selection (only in edit mode and not in fullscreen)
+  const toggleImageSelection = (index: number) => {
+    if (!isEditing || isWindowFullscreen) return;
+    setSelectedImageIndexes(prev => {
+      const set = new Set(prev);
+      if (set.has(index)) set.delete(index);
+      else set.add(index);
+      return Array.from(set).sort((a, b) => a - b);
+    });
+  };
+
+  // Drag handlers: only enable when editing and not fullscreen
+  const handleDragStart = (e: React.DragEvent, sourceIndex: number) => {
+    if (!isEditing || isWindowFullscreen) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData('text/plain', String(sourceIndex));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetIndex: number) => {
+    if (!isEditing || isWindowFullscreen) return;
+    e.preventDefault(); // allow drop
+    setDragOverIndex(targetIndex);
+  };
+
+  const handleDragLeave = (_e: React.DragEvent) => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    if (!isEditing || isWindowFullscreen) return;
+    e.preventDefault();
+    const src = e.dataTransfer.getData('text/plain');
+    if (!src) return setDragOverIndex(null);
+    const sourceIndex = parseInt(src, 10);
+    if (isNaN(sourceIndex)) return setDragOverIndex(null);
+    if (!editedModel) return setDragOverIndex(null);
+
+    // Build combined array and reorder
+    const imgs = Array.isArray(editedModel.images) ? editedModel.images.slice() : [];
+    const combined = [editedModel.thumbnail, ...imgs];
+    // bounds
+    if (sourceIndex < 0 || sourceIndex >= combined.length || targetIndex < 0 || targetIndex >= combined.length) {
+      setDragOverIndex(null);
+      return;
+    }
+    const item = combined.splice(sourceIndex, 1)[0];
+    combined.splice(targetIndex, 0, item);
+
+    // Apply new thumbnail and images to editedModel (do not persist yet)
+    const newThumbnail = combined[0] || '';
+    const newImages = combined.slice(1);
+    setEditedModel(prev => prev ? { ...prev, thumbnail: newThumbnail, images: newImages } as Model : prev);
+    // update preview index to the dropped location
+    setSelectedImageIndex(targetIndex);
+    // clear selection indexes because indexes changed
+    setSelectedImageIndexes([]);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => setDragOverIndex(null);
 
   // When entering fullscreen, move keyboard focus to the previous-image button
   useEffect(() => {
@@ -186,6 +265,8 @@ export function ModelDetailsDrawer({
       filePath: jsonFilePath,
       tags: model.tags || [] // Ensure tags is always an array
     });
+    // Clear any previous image selections when entering edit mode
+    setSelectedImageIndexes([]);
     setIsEditing(true);
   };
 
@@ -193,6 +274,7 @@ export function ModelDetailsDrawer({
     setEditedModel(null);
     setIsEditing(false);
     setNewTag("");
+    setSelectedImageIndexes([]);
   };
 
   // Helper to send only changed fields to backend
@@ -228,11 +310,26 @@ export function ModelDetailsDrawer({
 
   const saveChanges = async () => {
     if (editedModel) {
-      onModelUpdate(editedModel);
-      await saveModelToFile(editedModel, model); // Only send changed fields
+      // If any images are selected, remove them from the edited model before saving.
+      let finalModel = editedModel;
+      if (selectedImageIndexes.length > 0) {
+        const sel = new Set(selectedImageIndexes);
+        // Build remaining all images from the editedModel
+        const srcImgs = Array.isArray(editedModel.images) ? editedModel.images : [];
+        const combined = [editedModel.thumbnail, ...srcImgs];
+        const remaining = combined.filter((_, idx) => !sel.has(idx));
+        // New thumbnail is first remaining, images are the rest
+        const newThumbnail = remaining[0] || '';
+        const newImages = remaining.slice(1);
+        finalModel = { ...editedModel, thumbnail: newThumbnail, images: newImages } as Model;
+      }
+
+      onModelUpdate(finalModel);
+      await saveModelToFile(finalModel, model); // Only send changed fields
       setIsEditing(false);
       setEditedModel(null);
       setNewTag("");
+      setSelectedImageIndexes([]);
     }
   };
 
@@ -466,10 +563,34 @@ export function ModelDetailsDrawer({
 
                       {/* Thumbnail Strip (normal view) */}
                       {allImages.length > 1 && (
-                        <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                        <div className="mt-4 flex gap-2 overflow-x-auto pt-1 pb-2 pl-2">
                           {allImages.map((image, index) => (
-                            <button key={index} onClick={() => setSelectedImageIndex(index)} className={`relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${index === selectedImageIndex ? 'border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50 hover:scale-102'}`}>
+                            <button
+                              key={index}
+                              draggable={isEditing && !isWindowFullscreen}
+                              onDragStart={(e) => handleDragStart(e, index)}
+                              onDragOver={(e) => handleDragOver(e, index)}
+                              onDrop={(e) => handleDrop(e, index)}
+                              onDragLeave={handleDragLeave}
+                              onDragEnd={handleDragEnd}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isEditing && !isWindowFullscreen) {
+                                  // toggle selection and show preview
+                                  toggleImageSelection(index);
+                                  setSelectedImageIndex(index);
+                                } else {
+                                  setSelectedImageIndex(index);
+                                }
+                              }}
+                              className={`relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${isImageSelected(index) ? 'opacity-60 ring-2 ring-destructive scale-95' : index === selectedImageIndex ? 'border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50 hover:scale-102'} ${dragOverIndex === index ? 'ring-2 ring-primary/60' : ''}`}
+                            >
                               <img src={image} alt={`${currentModel.name} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                              {isImageSelected(index) && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-semibold">
+                                  Remove
+                                </div>
+                              )}
                               {index === 0 && (
                                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                                   <Badge variant="secondary" className="text-xs px-1 py-0">Main</Badge>
