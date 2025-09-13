@@ -1,4 +1,5 @@
-import { useState, KeyboardEvent, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 // Remove Node.js fs import; use backend API instead
 import { Model } from "../types/model";
 import { Category } from "../types/category";
@@ -68,11 +69,78 @@ export function ModelDetailsDrawer({
 
 
 
-  if (!model) return null;
+  // In-window "fullscreen" (cover the browser viewport) for image previews
+  const imageContainerRef = useRef<HTMLDivElement | null>(null);
+  const prevButtonRef = useRef<any>(null);
+  const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
 
-  // Combine thumbnail with additional images for gallery view
-  const safeImages = Array.isArray(model.images) ? model.images : [];
-  const allImages = [model.thumbnail, ...safeImages];
+  const handleToggleFullscreen = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsWindowFullscreen((prev) => !prev);
+  };
+
+  // Exit fullscreen on Escape (keydown handler moved later, after allImages is defined)
+
+  useEffect(() => {
+    // Prevent background scrolling when in-window fullscreen is active
+    const prev = document.body.style.overflow;
+    if (isWindowFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = prev || '';
+    }
+    return () => {
+      document.body.style.overflow = prev || '';
+    };
+  }, [isWindowFullscreen]);
+  // Combine thumbnail with additional images for gallery view (safe when model is null)
+  const safeImages = model && Array.isArray(model.images) ? model.images : [];
+  const allImages = model ? [model.thumbnail, ...safeImages] : [];
+
+  // Key handling for in-window fullscreen navigation (Escape, ArrowLeft, ArrowRight)
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (!isWindowFullscreen) return;
+
+      if (ev.key === 'Escape') {
+        setIsWindowFullscreen(false);
+        return;
+      }
+
+      if (ev.key === 'ArrowLeft') {
+        ev.preventDefault();
+        setSelectedImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
+        return;
+      }
+
+      if (ev.key === 'ArrowRight') {
+        ev.preventDefault();
+        setSelectedImageIndex((prev) => (prev + 1) % allImages.length);
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isWindowFullscreen, allImages.length]);
+
+  // When entering fullscreen, move keyboard focus to the previous-image button
+  useEffect(() => {
+    if (isWindowFullscreen) {
+      // wait for the DOM to render the button
+      const t = window.setTimeout(() => {
+        try {
+          prevButtonRef?.current?.focus?.();
+        } catch (e) {
+          // ignore
+        }
+      }, 0);
+      return () => window.clearTimeout(t);
+    }
+    return;
+  }, [isWindowFullscreen]);
+
+  if (!model) return null;
   const currentModel = editedModel || model;
   // Defensive: ensure printSettings is always an object with string fields
   const safePrintSettings = {
@@ -191,7 +259,7 @@ export function ModelDetailsDrawer({
     });
   };
 
-  const handleTagKeyPress = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleTagKeyPress = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       handleAddTag();
@@ -221,6 +289,7 @@ export function ModelDetailsDrawer({
   const handlePreviousImage = () => {
     setSelectedImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
   };
+
 
   // Download handler for model file
   const handleDownloadClick = (e: React.MouseEvent) => {
@@ -330,85 +399,86 @@ export function ModelDetailsDrawer({
                   />
                 </ModelViewerErrorBoundary>
               ) : (
-                <div className="relative">
-                  {/* Main Image Display */}
-                  <AspectRatio ratio={16 / 10} className="bg-muted">
-                    <img
-                      src={allImages[selectedImageIndex]}
-                      alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`}
-                      className="w-full h-full object-cover rounded-lg"
+                <div
+                  ref={imageContainerRef}
+                  className={isWindowFullscreen ? 'fixed inset-0 z-50 flex items-center justify-center p-6' : 'relative'}
+                >
+                  {isWindowFullscreen && (
+                    <div
+                      className="absolute inset-0 bg-black/50"
+                      onClick={() => setIsWindowFullscreen(false)}
+                      aria-hidden
                     />
-                    
-                    {/* Navigation Arrows */}
-                    {allImages.length > 1 && (
-                      <>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={handlePreviousImage}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 p-0 bg-background/80 hover:bg-background/90 border shadow-lg"
-                          aria-label="Previous image"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={handleNextImage}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 p-0 bg-background/80 hover:bg-background/90 border shadow-lg"
-                          aria-label="Next image"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                    
-                    {/* Image Counter */}
-                    <div className="absolute bottom-3 right-3 bg-background/80 backdrop-blur-sm rounded-lg px-2 py-1 text-sm font-medium border shadow-lg">
-                      {selectedImageIndex + 1} / {allImages.length}
-                    </div>
-                    
-                    {/* Fullscreen Button */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="absolute top-3 right-3 w-8 h-8 p-0 bg-background/80 hover:bg-background/90 border shadow-lg"
-                      aria-label="View fullscreen"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </Button>
-                  </AspectRatio>
-                  
-                  {/* Thumbnail Strip */}
-                  {allImages.length > 1 && (
-                    <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-                      {allImages.map((image, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setSelectedImageIndex(index)}
-                          className={`
-                            relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200
-                            ${index === selectedImageIndex 
-                              ? 'border-primary shadow-lg scale-105' 
-                              : 'border-border hover:border-primary/50 hover:scale-102'
-                            }
-                          `}
-                        >
-                          <img
-                            src={image}
-                            alt={`${currentModel.name} thumbnail ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                          {index === 0 && (
-                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                              <Badge variant="secondary" className="text-xs px-1 py-0">
-                                Main
-                              </Badge>
-                            </div>
+                  )}
+
+                  {/* Main Image Display */}
+                  {isWindowFullscreen ? (
+                    <div className="w-full flex items-center justify-center">
+                      <div className="relative z-10 w-full max-w-[90vw] max-h-[90vh] flex flex-col items-center justify-center">
+                        {/* thumbnails are hidden in fullscreen mode */}
+
+                        <div className="relative w-full flex items-center justify-center">
+                          {/* dark background for transparent images */}
+                          <div className="absolute inset-0 bg-gradient-dark rounded-lg" aria-hidden />
+                          <img src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className="relative max-w-full max-h-full object-contain rounded-lg" />
+
+                          {allImages.length > 1 && (
+                            <>
+                              <Button ref={prevButtonRef} variant="secondary" size="sm" onClick={handlePreviousImage} className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-background/80 hover:bg-background/90 border shadow-lg" aria-label="Previous image">
+                                <ChevronLeft className="h-5 w-5" />
+                              </Button>
+                              <Button variant="secondary" size="sm" onClick={handleNextImage} className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-background/80 hover:bg-background/90 border shadow-lg" aria-label="Next image">
+                                <ChevronRight className="h-5 w-5" />
+                              </Button>
+                            </>
                           )}
-                        </button>
-                      ))}
+
+                          <div className="absolute bottom-3 right-3 bg-background/80 backdrop-blur-sm rounded-lg px-2 py-1 text-sm font-medium border shadow-lg">{selectedImageIndex + 1} / {allImages.length}</div>
+
+                          <Button variant="secondary" size="sm" className="absolute top-3 right-3 w-8 h-8 p-0 bg-background/90 border shadow-lg" aria-label="Exit fullscreen" title="Exit fullscreen" onClick={handleToggleFullscreen}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <AspectRatio ratio={16 / 10} className={`bg-muted`}>
+                        <img src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className={`w-full h-full object-cover rounded-lg`} />
+
+                        {allImages.length > 1 && (
+                          <>
+                            <Button variant="secondary" size="sm" onClick={handlePreviousImage} className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 p-0 bg-background/80 hover:bg-background/90 border shadow-lg" aria-label="Previous image">
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={handleNextImage} className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 p-0 bg-background/80 hover:bg-background/90 border shadow-lg" aria-label="Next image">
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+
+                        <div className="absolute bottom-3 right-3 bg-background/80 backdrop-blur-sm rounded-lg px-2 py-1 text-sm font-medium border shadow-lg">{selectedImageIndex + 1} / {allImages.length}</div>
+
+                        <Button variant="secondary" size="sm" className={`absolute top-3 right-3 w-8 h-8 p-0 bg-background/80 hover:bg-background/90 border shadow-lg`} aria-label={"View fullscreen"} title={"View fullscreen"} onClick={handleToggleFullscreen}>
+                          <Maximize2 className="h-4 w-4" />
+                        </Button>
+                      </AspectRatio>
+
+                      {/* Thumbnail Strip (normal view) */}
+                      {allImages.length > 1 && (
+                        <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                          {allImages.map((image, index) => (
+                            <button key={index} onClick={() => setSelectedImageIndex(index)} className={`relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${index === selectedImageIndex ? 'border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50 hover:scale-102'}`}>
+                              <img src={image} alt={`${currentModel.name} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                              {index === 0 && (
+                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                  <Badge variant="secondary" className="text-xs px-1 py-0">Main</Badge>
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
