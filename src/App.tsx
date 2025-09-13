@@ -14,6 +14,7 @@ import { AppConfig } from "./types/config";
 import { ConfigManager } from "./utils/configManager";
 import { Menu, Palette, RefreshCw, Heart } from "lucide-react";
 import { Button } from "./components/ui/button";
+import { Checkbox } from "./components/ui/checkbox";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
 import {
@@ -50,6 +51,9 @@ function AppContent() {
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  
+  // Delete file type selection state
+  const [includeThreeMfFiles, setIncludeThreeMfFiles] = useState(false);
 
   // Load configuration and models on app startup
   useEffect(() => {
@@ -163,6 +167,8 @@ function AppContent() {
       });
       return;
     }
+    // Reset checkbox to default state when opening dialog (unchecked = only delete munchie.json)
+    setIncludeThreeMfFiles(false);
     setIsDeleteDialogOpen(true);
   };
 
@@ -178,8 +184,17 @@ function AppContent() {
     setIsDeleteDialogOpen(false);
 
     try {
+      const fileTypes = ['json']; // Always delete munchie.json files
+      if (includeThreeMfFiles) {
+        fileTypes.push('3mf'); // Only add 3mf if checkbox is checked
+      }
+
+      const fileTypeText = includeThreeMfFiles 
+        ? 'munchie.json and .3mf files' 
+        : 'munchie.json files';
+      
       toast("Deleting model files...", {
-        description: `Removing ${selectedModelIds.length} models and their files`
+        description: `Removing ${fileTypeText} for ${selectedModelIds.length} models`
       });
 
       // Call API to delete the actual files
@@ -188,7 +203,10 @@ function AppContent() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ modelIds: selectedModelIds })
+        body: JSON.stringify({ 
+          modelIds: selectedModelIds,
+          fileTypes: fileTypes
+        })
       });
 
       if (!deleteResponse.ok) {
@@ -226,10 +244,14 @@ function AppContent() {
         const errorCount = deleteResult.errors?.length || 0;
         
         if (successCount > 0) {
+          const fileTypeText = includeThreeMfFiles 
+            ? 'munchie.json and .3mf files' 
+            : 'munchie.json files';
+          
           toast(`Deleted ${successCount} models`, {
             description: errorCount > 0 
-              ? `${successCount} models deleted successfully, ${errorCount} failed`
-              : "Models and their files have been permanently removed"
+              ? `${successCount} models deleted successfully (${fileTypeText}), ${errorCount} failed`
+              : `${fileTypeText} have been permanently removed for ${successCount} models`
           });
         }
         
@@ -693,8 +715,22 @@ function AppContent() {
             <AlertDialogTitle>Delete Models</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete {selectedModelIds.length} model{selectedModelIds.length !== 1 ? 's' : ''}? 
-              This action will permanently remove both the 3MF files and their corresponding munchie.json metadata files from your system.
               <br /><br />
+              <div className="space-y-3 my-4 mb-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="include-3mf"
+                    checked={includeThreeMfFiles}
+                    onCheckedChange={setIncludeThreeMfFiles}
+                  />
+                  <label 
+                    htmlFor="include-3mf" 
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Include .3mf files (3D model files) when deleting
+                  </label>
+                </div>
+              </div>
               <strong>This action cannot be undone.</strong>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -704,7 +740,7 @@ function AppContent() {
               onClick={handleBulkDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete Files
+              {includeThreeMfFiles ? 'Delete All Files' : 'Delete Metadata Only'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

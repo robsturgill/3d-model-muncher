@@ -438,13 +438,17 @@ async function getAllModels(modelsDirectory) {
   return models;
 }
 
-// API endpoint to delete models by ID (deletes both .3mf and munchie.json files)
+// API endpoint to delete models by ID (deletes specified file types)
 app.delete('/api/models/delete', async (req, res) => {
-  const { modelIds } = req.body;
+  const { modelIds, fileTypes } = req.body;
   
   if (!Array.isArray(modelIds) || modelIds.length === 0) {
     return res.status(400).json({ success: false, error: 'No model IDs provided' });
   }
+
+  // Default to deleting both file types if not specified (backward compatibility)
+  const typesToDelete = Array.isArray(fileTypes) && fileTypes.length > 0 ? fileTypes : ['3mf', 'json'];
+  console.log(`File types to delete: ${typesToDelete.join(', ')}`);
 
   try {
     const modelsDir = getAbsoluteModelsPath();
@@ -475,18 +479,22 @@ app.delete('/api/models/delete', async (req, res) => {
         continue;
       }
       
-      // Add the .3mf file
-      const threeMfPath = path.isAbsolute(model.filePath) 
-        ? model.filePath 
-        : path.join(modelsDir, model.filePath);
-      filesToDelete.push({ type: '3mf', path: threeMfPath });
+      // Add the .3mf file only if requested
+      if (typesToDelete.includes('3mf')) {
+        const threeMfPath = path.isAbsolute(model.filePath) 
+          ? model.filePath 
+          : path.join(modelsDir, model.filePath);
+        filesToDelete.push({ type: '3mf', path: threeMfPath });
+      }
       
-      // Add the corresponding munchie.json file
-      const jsonFileName = model.filePath.replace(/\.3mf$/i, '-munchie.json');
-      const jsonPath = path.isAbsolute(jsonFileName)
-        ? jsonFileName
-        : path.join(modelsDir, jsonFileName);
-      filesToDelete.push({ type: 'json', path: jsonPath });
+      // Add the corresponding munchie.json file only if requested
+      if (typesToDelete.includes('json')) {
+        const jsonFileName = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+        const jsonPath = path.isAbsolute(jsonFileName)
+          ? jsonFileName
+          : path.join(modelsDir, jsonFileName);
+        filesToDelete.push({ type: 'json', path: jsonPath });
+      }
 
       console.log(`Files to delete for ${modelId}:`, filesToDelete);
 
