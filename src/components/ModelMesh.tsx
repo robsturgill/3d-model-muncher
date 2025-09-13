@@ -9,10 +9,12 @@ import * as THREE from 'three';
 interface ModelMeshProps {
   modelUrl: string;
   isWireframe?: boolean;
+  materialType?: 'standard' | 'normal';
+  customColor?: string;
   onBoundingBox?: (box: THREE.Box3 | null) => void;
 }
 
-export function ModelMesh({ modelUrl, isWireframe, onBoundingBox }: ModelMeshProps) {
+export function ModelMesh({ modelUrl, isWireframe, materialType = 'standard', customColor, onBoundingBox }: ModelMeshProps) {
   // Determine the file type from the URL
   const fileExtension = modelUrl.toLowerCase().split('.').pop();
   const isSTL = fileExtension === 'stl';
@@ -23,14 +25,17 @@ export function ModelMesh({ modelUrl, isWireframe, onBoundingBox }: ModelMeshPro
   // For STL files, we need to wrap the geometry in a mesh with a material
   // For 3MF files, we get a Group object that can be used directly
   const group = useMemo(() => {
+    const material = materialType === 'normal' 
+      ? new THREE.MeshNormalMaterial() 
+      : new THREE.MeshStandardMaterial({ 
+          color: customColor || 0xaaaaaa,
+          roughness: 0.4,
+          metalness: 0.1
+        });
+
     if (isSTL) {
       // STL loader returns a BufferGeometry, so we need to create a mesh
       const geometry = modelData as THREE.BufferGeometry;
-      const material = new THREE.MeshStandardMaterial({ 
-        color: 0xaaaaaa,
-        roughness: 0.4,
-        metalness: 0.1
-      });
       const mesh = new THREE.Mesh(geometry, material);
       
       // Create a group to contain the mesh (similar to 3MF structure)
@@ -42,11 +47,35 @@ export function ModelMesh({ modelUrl, isWireframe, onBoundingBox }: ModelMeshPro
     } else {
       // 3MF loader returns a Group object directly
       const group = modelData as THREE.Group;
+      if (materialType === 'normal') {
+        // Apply normal material to all meshes in the 3MF group
+        group.traverse((child: any) => {
+          if (child.isMesh) {
+            child.material = material;
+          }
+        });
+      } else if (customColor) {
+        // Tint existing materials with custom color
+        group.traverse((child: any) => {
+          if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((mat: any) => {
+                if (mat.color) {
+                  mat.color.set(customColor);
+                }
+              });
+            } else if (child.material.color) {
+              child.material.color.set(customColor);
+            }
+          }
+        });
+      }
+      // For 'standard' without customColor, keep original materials
       // Rotate the group to make the model upright (consistent with STL)
       group.rotation.x = -Math.PI / 2;
       return group;
     }
-  }, [modelData, isSTL]);
+  }, [modelData, isSTL, materialType, customColor]);
 
   // Recursively set wireframe on all mesh materials if needed
   useMemo(() => {

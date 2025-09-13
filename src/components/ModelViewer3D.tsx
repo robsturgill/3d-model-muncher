@@ -3,7 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment, Center, Bounds } from "@react-three/drei";
 import { Button } from "./ui/button";
-import { Eye, EyeOff, RotateCw } from "lucide-react";
+import { Eye, EyeOff, RotateCw, Palette } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { ThreeJSManager, disposeWebGLContext } from "../utils/threeJSManager";
 import { ModelMesh } from "./ModelMesh";
@@ -16,7 +16,7 @@ interface ModelViewer3DProps {
 
 // Memoized scene component
 
-const Scene = memo(({ modelUrl, isWireframe, autoRotate }: { modelUrl?: string; isWireframe?: boolean; autoRotate?: boolean }) => {
+const Scene = memo(({ modelUrl, isWireframe, autoRotate, materialType, customColor }: { modelUrl?: string; isWireframe?: boolean; autoRotate?: boolean; materialType?: 'standard' | 'normal'; customColor?: string }) => {
   return (
     <>
       <PerspectiveCamera makeDefault position={[-66, 79, 83]} rotation={[-0.76, -0.52, -0.44]} fov={20} />
@@ -42,7 +42,9 @@ const Scene = memo(({ modelUrl, isWireframe, autoRotate }: { modelUrl?: string; 
             <Center>
               <ModelMesh 
                 modelUrl={modelUrl} 
-                isWireframe={isWireframe} 
+                isWireframe={isWireframe}
+                materialType={materialType}
+                customColor={customColor}
               />
             </Center>
           </Bounds>
@@ -63,11 +65,15 @@ Scene.displayName = "Scene";
 export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
+  const [materialType, setMaterialType] = useState<'standard' | 'normal'>('standard');
+  const [customColor, setCustomColor] = useState<string | undefined>(undefined);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDestroyed, setIsDestroyed] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const instanceId = useRef(`viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const [isRegistered, setIsRegistered] = useState(false);
+
+  const is3MF = modelUrl?.toLowerCase().endsWith('.3mf');
 
   // Reset states when component unmounts or model changes
   useEffect(() => {
@@ -162,7 +168,7 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
             ref={canvasRef}
             {...canvasConfig}
           >
-            <Scene modelUrl={modelUrl} isWireframe={isWireframe} autoRotate={autoRotate} />
+            <Scene modelUrl={modelUrl} isWireframe={isWireframe} autoRotate={autoRotate} materialType={materialType} customColor={customColor} />
           </Canvas>
         </Suspense>
       </div>
@@ -189,8 +195,29 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
         >
           {isWireframe ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
         </Button>
-
+        {!is3MF && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => !isDestroyed && setMaterialType(materialType === 'standard' ? 'normal' : 'standard')}
+            className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+            disabled={isDestroyed}
+            aria-label={materialType === 'standard' ? "Switch to normal material" : "Switch to standard material"}
+          >
+            <Palette className="h-4 w-4" />
+          </Button>
+        )}
       </div>
+
+      {/* Color picker for models */}
+      <input
+        type="color"
+        value={customColor || '#aaaaaa'}
+        onChange={(e) => setCustomColor(e.target.value)}
+        className="w-8 h-8 rounded border border-border bg-background/90 backdrop-blur-sm"
+        disabled={isDestroyed}
+        title="Pick custom color for model"
+      />
 
       {/* Instructions */}
       <div className="mt-3 text-center">
