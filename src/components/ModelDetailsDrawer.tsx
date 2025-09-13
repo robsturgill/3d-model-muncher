@@ -369,10 +369,12 @@ export function ModelDetailsDrawer({
     // Ensure filePath is present for saving - convert to JSON file path
     let jsonFilePath;
     if (model.filePath) {
-      // Convert from .3mf path to -munchie.json path
+      // Convert from .3mf/.stl path to -munchie.json path
       if (model.filePath.endsWith('.3mf')) {
         jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
-      } else if (model.filePath.endsWith('-munchie.json')) {
+      } else if (model.filePath.endsWith('.stl')) {
+        jsonFilePath = model.filePath.replace('.stl', '-stl-munchie.json');
+      } else if (model.filePath.endsWith('-munchie.json') || model.filePath.endsWith('-stl-munchie.json')) {
         // Already a JSON path, use as-is
         jsonFilePath = model.filePath;
       } else {
@@ -382,10 +384,12 @@ export function ModelDetailsDrawer({
     } else if (model.modelUrl) {
       // Construct the path based on the modelUrl to match the actual JSON file location
       let relativePath = model.modelUrl.replace('/models/', '');
-      // Replace .3mf extension with -munchie.json
+      // Replace .3mf/.stl extension with appropriate -munchie.json
       if (relativePath.endsWith('.3mf')) {
         relativePath = relativePath.replace('.3mf', '-munchie.json');
-      } else if (relativePath.endsWith('-munchie.json')) {
+      } else if (relativePath.endsWith('.stl')) {
+        relativePath = relativePath.replace('.stl', '-stl-munchie.json');
+      } else if (relativePath.endsWith('-munchie.json') || relativePath.endsWith('-stl-munchie.json')) {
         // Already a JSON path, use as-is
         relativePath = relativePath;
       } else {
@@ -528,17 +532,19 @@ export function ModelDetailsDrawer({
   // Download handler for model file
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Determine default extension based on modelUrl if available
+    const defaultExtension = currentModel.modelUrl?.endsWith('.stl') ? '.stl' : '.3mf';
     // Prefer filePath, fallback to modelUrl or name
       let fileName = currentModel.filePath
-        ? currentModel.filePath.split(/[/\\]/).pop() || `${currentModel.name}.3mf`
-        : currentModel.modelUrl?.replace('/models/', '') || `${currentModel.name}.3mf`;
+        ? currentModel.filePath.split(/[/\\]/).pop() || `${currentModel.name}${defaultExtension}`
+        : currentModel.modelUrl?.replace('/models/', '') || `${currentModel.name}${defaultExtension}`;
     let filePath = currentModel.filePath
       ? `/models/${fileName}`
       : currentModel.modelUrl || `/models/${fileName}`;
     // Create a temporary link and trigger download
     const link = document.createElement('a');
     link.href = filePath;
-      link.download = fileName || "model.3mf";
+      link.download = fileName || `model${defaultExtension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

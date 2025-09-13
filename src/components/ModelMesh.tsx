@@ -1,8 +1,9 @@
 import { useLoader } from '@react-three/fiber';
-import { useMemo } from 'react';
-import '@react-three/fiber';
+import { useMemo, createElement } from 'react';
 // @ts-ignore
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader';
+// @ts-ignore
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import * as THREE from 'three';
 
 interface ModelMeshProps {
@@ -12,8 +13,35 @@ interface ModelMeshProps {
 }
 
 export function ModelMesh({ modelUrl, isWireframe, onBoundingBox }: ModelMeshProps) {
-  // Load the 3MF model as a Group - revert to original working approach
-  const group = useLoader(ThreeMFLoader, modelUrl);
+  // Determine the file type from the URL
+  const fileExtension = modelUrl.toLowerCase().split('.').pop();
+  const isSTL = fileExtension === 'stl';
+  
+  // Load the model with the appropriate loader
+  const modelData = useLoader(isSTL ? STLLoader : ThreeMFLoader, modelUrl);
+  
+  // For STL files, we need to wrap the geometry in a mesh with a material
+  // For 3MF files, we get a Group object that can be used directly
+  const group = useMemo(() => {
+    if (isSTL) {
+      // STL loader returns a BufferGeometry, so we need to create a mesh
+      const geometry = modelData as THREE.BufferGeometry;
+      const material = new THREE.MeshStandardMaterial({ 
+        color: 0xaaaaaa,
+        roughness: 0.4,
+        metalness: 0.1
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      
+      // Create a group to contain the mesh (similar to 3MF structure)
+      const group = new THREE.Group();
+      group.add(mesh);
+      return group;
+    } else {
+      // 3MF loader returns a Group object directly
+      return modelData as THREE.Group;
+    }
+  }, [modelData, isSTL]);
 
   // Recursively set wireframe on all mesh materials if needed
   useMemo(() => {
@@ -49,6 +77,6 @@ export function ModelMesh({ modelUrl, isWireframe, onBoundingBox }: ModelMeshPro
   }, [group, onBoundingBox]);
 
   // The loaded group is a THREE.Group, which can be rendered as a primitive
-  // But to avoid type errors, cast as any
-  return <primitive object={group as any} />;
+  // Use createElement to bypass type checking for 'primitive'
+  return createElement('primitive', { object: group });
 }

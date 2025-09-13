@@ -1,11 +1,9 @@
-import { useRef, useState, Suspense, memo, useMemo, useEffect, useCallback } from "react";
+import { useRef, useState, Suspense, memo, useMemo, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
-// Fix JSX types for three.js objects
 import '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment, Center, Bounds } from "@react-three/drei";
-import * as THREE from "three";
 import { Button } from "./ui/button";
-import { RotateCcw, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, RotateCw } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { ThreeJSManager, disposeWebGLContext } from "../utils/threeJSManager";
 import { ModelMesh } from "./ModelMesh";
@@ -18,7 +16,7 @@ interface ModelViewer3DProps {
 
 // Memoized scene component
 
-const Scene = memo(({ modelUrl, isWireframe }: { modelUrl?: string; isWireframe?: boolean }) => {
+const Scene = memo(({ modelUrl, isWireframe, autoRotate }: { modelUrl?: string; isWireframe?: boolean; autoRotate?: boolean }) => {
   return (
     <>
       <PerspectiveCamera makeDefault position={[3, 3, 3]} fov={50} />
@@ -28,7 +26,8 @@ const Scene = memo(({ modelUrl, isWireframe }: { modelUrl?: string; isWireframe?
         enableRotate={true}
         minDistance={2}
         maxDistance={500}
-        autoRotate={true}
+        autoRotate={autoRotate ?? false}
+        autoRotateSpeed={2.0}
       />
       {/* Lighting */}
       <ambientLight intensity={0.4} />
@@ -63,6 +62,7 @@ Scene.displayName = "Scene";
 
 export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
+  const [autoRotate, setAutoRotate] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDestroyed, setIsDestroyed] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
@@ -162,13 +162,23 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
             ref={canvasRef}
             {...canvasConfig}
           >
-            <Scene modelUrl={modelUrl} isWireframe={isWireframe} />
+            <Scene modelUrl={modelUrl} isWireframe={isWireframe} autoRotate={autoRotate} />
           </Canvas>
         </Suspense>
       </div>
 
       {/* Controls */}
       <div className="absolute top-3 right-3 flex gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => !isDestroyed && setAutoRotate(!autoRotate)}
+          className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+          disabled={isDestroyed}
+          aria-label={autoRotate ? "Stop auto-rotation" : "Start auto-rotation"}
+        >
+          <RotateCw className={`h-4 w-4 ${autoRotate ? 'text-primary animate-spin' : ''}`} />
+        </Button>
         <Button
           variant="secondary"
           size="sm"
@@ -179,16 +189,7 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
         >
           {isWireframe ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => { /* Bounds will auto-fit on model change */ }}
-          className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
-          disabled={isDestroyed}
-          aria-label="Reset camera position"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
+
       </div>
 
       {/* Instructions */}

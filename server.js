@@ -110,7 +110,7 @@ app.get('/api/models', async (req, res) => {
           // Recursively scan subdirectories
           console.log(`Scanning subdirectory: ${fullPath}`);
           scanForModels(fullPath);
-        } else if (entry.name.endsWith('-munchie.json')) {
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
           // Load and parse each munchie file
           console.log(`Found munchie file: ${fullPath}`);
           try {
@@ -118,10 +118,21 @@ app.get('/api/models', async (req, res) => {
             const model = JSON.parse(fileContent);
             // Add relative path information for proper URL construction
             const relativePath = path.relative(absolutePath, fullPath);
-            model.modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
             
-            // Set the filePath property for deletion purposes
-            model.filePath = relativePath.replace('-munchie.json', '.3mf');
+            // Handle both 3MF and STL file types
+            let modelUrl, filePath;
+            if (entry.name.endsWith('-stl-munchie.json')) {
+              // STL file
+              modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-stl-munchie.json', '.stl');
+              filePath = relativePath.replace('-stl-munchie.json', '.stl');
+            } else {
+              // 3MF file
+              modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
+              filePath = relativePath.replace('-munchie.json', '.3mf');
+            }
+            
+            model.modelUrl = modelUrl;
+            model.filePath = filePath;
             
             console.log(`Added model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
             models.push(model);
