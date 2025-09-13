@@ -1,11 +1,8 @@
 # 3D Model Muncher
 
-Organize, search, and preview your 3D printing models with an intuitive interface featuring dark/light theme support.
+Organize, search, and preview your 3D printing models with an intuitive interface.
 
-**Architecture:**
-- **Frontend**: React app with Three.js 3D viewer
-- **Backend**: Express.js API for file operations and 3MF parsing
-- **File Storage**: Automatic JSON metadata generation or "Munchie" files from 3MF parsing with full portability.
+![Demo Animation](public/images/demo.gif)
 
 ## Features
 
