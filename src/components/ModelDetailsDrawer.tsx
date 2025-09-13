@@ -15,7 +15,7 @@ import { Separator } from "./ui/separator";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
-import { Clock, Weight, HardDrive, Layers, Droplet, Shield, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign } from "lucide-react";
 import { Download } from "lucide-react";
 
 interface ModelDetailsDrawerProps {
@@ -78,7 +78,7 @@ export function ModelDetailsDrawer({
   const safePrintSettings = {
     layerHeight: currentModel.printSettings?.layerHeight || '',
     infill: currentModel.printSettings?.infill || '',
-    supports: currentModel.printSettings?.supports || ''
+    nozzle: currentModel.printSettings?.nozzle || ''
   };
 
   const startEditing = () => {
@@ -700,7 +700,7 @@ export function ModelDetailsDrawer({
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Layer Height</p>
-                  <p className="font-semibold text-foreground">{safePrintSettings.layerHeight}</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.layerHeight ? `${safePrintSettings.layerHeight} mm` : ''}</p>
                 </div>
               </div>
 
@@ -716,11 +716,11 @@ export function ModelDetailsDrawer({
 
               <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
                 <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
-                  <Shield className="h-5 w-5 text-muted-foreground" />
-                </div>
+                    <Diameter className="h-5 w-5 text-muted-foreground" />
+                  </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Supports</p>
-                  <p className="font-semibold text-foreground">{safePrintSettings.supports}</p>
+                  <p className="text-sm text-muted-foreground">Nozzle</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.nozzle ? `${safePrintSettings.nozzle} mm` : ''}</p>
                 </div>
               </div>
             </div>

@@ -740,7 +740,7 @@ export function SettingsPage({
         modelUrl: '',
         license: '',
         notes: '',
-        printSettings: { layerHeight: '', infill: '', supports: '' },
+  printSettings: { layerHeight: '', infill: '', nozzle: '' },
         hash: '',
         lastScanned: '',
         source: '',

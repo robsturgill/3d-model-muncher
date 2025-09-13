@@ -20,7 +20,7 @@ export interface Model {
   printSettings: {
     layerHeight: string;
     infill: string;
-    supports: string;
+    nozzle: string;
   };
 
   // Added for file integrity and duplicate detection

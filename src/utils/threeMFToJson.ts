@@ -6,7 +6,7 @@ import { XMLParser } from "fast-xml-parser";
 interface PrintSettings {
   layerHeight: string;
   infill: string;
-  supports: string;
+  nozzle: string;
 }
 
 interface ModelMetadata {
@@ -70,13 +70,65 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
     printSettings: {
       layerHeight: "",
       infill: "",
-      supports: ""
+      nozzle: ""
     },
     price: 0
   };
 
   try {
     const unzipped = unzipSync(new Uint8Array(buffer));
+
+    // ---- PROJECT SETTINGS (preferred source for layer height / infill) ----
+    if (unzipped["Metadata/project_settings.config"]) {
+      try {
+        const raw = new TextDecoder().decode(unzipped["Metadata/project_settings.config"]);
+        let settings: any = {};
+
+        // Try JSON first, then fall back to simple key=value or key: value parsing
+        try {
+          settings = JSON.parse(raw);
+        } catch {
+          raw.split(/\r?\n/).forEach((line) => {
+            const m = line.match(/^\s*([^:=\s]+)\s*[:=]\s*(.+)$/);
+            if (m) settings[m[1].trim()] = m[2].trim();
+          });
+        }
+
+        if (settings.layer_height != null && settings.layer_height !== "") {
+          // normalize: strip trailing "mm" if present, keep numeric string
+          const lh = String(settings.layer_height).trim().replace(/mm$/i, "").trim();
+          metadata.printSettings.layerHeight = lh;
+        }
+
+        // nozzle_diameter may be provided as an array. Use the first value if present.
+        if (settings.nozzle_diameter != null && settings.nozzle_diameter !== "") {
+          let nd: any = settings.nozzle_diameter;
+          // If it's an array (parsed from JSON), take first element
+          if (Array.isArray(nd)) nd = nd[0];
+          // If it's a comma-separated string, take first segment
+          if (typeof nd === 'string' && nd.indexOf(',') !== -1) nd = nd.split(',')[0];
+          let nozzleStr = String(nd).trim();
+          // strip trailing mm if present
+          nozzleStr = nozzleStr.replace(/mm$/i, '').trim();
+          metadata.printSettings.nozzle = nozzleStr;
+        }
+
+        // optional infill keys (if present in config)
+  // include sparse_infill_density (used in project_settings.config) as the preferred infill key
+  const infillKeyCandidates = ["sparse_infill_density"];
+        for (const k of infillKeyCandidates) {
+          if (settings[k] != null && settings[k] !== "") {
+            let iv = String(settings[k]).trim();
+            // ensure percent sign
+            if (!/%$/.test(iv)) iv = iv.replace(/\s*%$/, "") + "%";
+            metadata.printSettings.infill = iv;
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn("Could not parse Metadata/project_settings.config:", e);
+      }
+    }
 
     // Parse XML metadata
     if (unzipped["3D/3dmodel.model"]) {
@@ -115,16 +167,16 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
           }
           
           if (key === "profiletitle") {
-            // Parse layer height from title (e.g., "0.2mm layer, 8 walls, 25% infill")
-            const layerMatch = value.match(/([\d.]+)mm layer/);
-            if (layerMatch) {
-              metadata.printSettings.layerHeight = layerMatch[1];
+            // If layer height wasn't found in project_settings.config, fall back to parsing profiletitle
+            if (!metadata.printSettings.layerHeight) {
+              const layerMatch = value.match(/([\d.]+)mm layer/);
+              if (layerMatch) metadata.printSettings.layerHeight = layerMatch[1];
             }
 
-            // Parse infill from title
-            const infillMatch = value.match(/(\d+)% infill/);
-            if (infillMatch) {
-              metadata.printSettings.infill = infillMatch[1] + "%";
+            // Parse infill from title only if not already set by config
+            if (!metadata.printSettings.infill) {
+              const infillMatch = value.match(/(\d+)% infill/);
+              if (infillMatch) metadata.printSettings.infill = infillMatch[1] + "%";
             }
           }
 
@@ -152,16 +204,16 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
         }
 
         if (key === "profiletitle") {
-          // Parse layer height from title
-          const layerMatch = value.match(/([\d.]+)mm layer/);
-          if (layerMatch) {
-            metadata.printSettings.layerHeight = layerMatch[1];
+          // If layer height wasn't found in project_settings.config, fall back to parsing profiletitle
+          if (!metadata.printSettings.layerHeight) {
+            const layerMatch = value.match(/([\d.]+)mm layer/);
+            if (layerMatch) metadata.printSettings.layerHeight = layerMatch[1];
           }
 
-          // Parse infill from title
-          const infillMatch = value.match(/(\d+)% infill/);
-          if (infillMatch) {
-            metadata.printSettings.infill = infillMatch[1] + "%";
+          // Parse infill from title only if not already set by config
+          if (!metadata.printSettings.infill) {
+            const infillMatch = value.match(/(\d+)% infill/);
+            if (infillMatch) metadata.printSettings.infill = infillMatch[1] + "%";
           }
         }
 
