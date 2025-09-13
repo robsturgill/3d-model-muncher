@@ -16,6 +16,7 @@ import { Separator } from "./ui/separator";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
+import { compressImageFile } from "../utils/imageUtils";
 import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign } from "lucide-react";
 import { Download } from "lucide-react";
 
@@ -72,6 +73,8 @@ export function ModelDetailsDrawer({
 
   // In-window "fullscreen" (cover the browser viewport) for image previews
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
+  // Thumbnail strip container ref (used to programmatically scroll thumbnails into view)
+  const thumbnailStripRef = useRef<HTMLDivElement | null>(null);
   const prevButtonRef = useRef<any>(null);
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
   // Ref mirror to synchronously track fullscreen state (avoids React state update race)
@@ -113,31 +116,80 @@ export function ModelDetailsDrawer({
         addImageInputRef.current?.click();
       };
 
-      // Read selected file and add as base64 data URL to editedModel
-      const handleAddImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+      // Read selected files (multiple allowed), compress/resample and add as base64 data URLs
+      const [addImageProgress, setAddImageProgress] = useState<{ processed: number; total: number } | null>(null);
+      const [addImageError, setAddImageError] = useState<string | null>(null);
+
+      const handleAddImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
-        const file = e.target.files && e.target.files[0];
-        if (!file || !editedModel) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string | null;
-          if (!result) return;
-          // If there's no thumbnail yet, make this the thumbnail, otherwise append to images
-          const prevImgs = Array.isArray(editedModel.images) ? editedModel.images.slice() : [];
-          if (!editedModel.thumbnail) {
-            setEditedModel(prev => prev ? { ...prev, thumbnail: result, images: prevImgs } as Model : prev);
-            // new thumbnail becomes index 0, so select it
-            setSelectedImageIndex(0);
-          } else {
-            const newImgs = [...prevImgs, result];
-            setEditedModel(prev => prev ? { ...prev, images: newImgs } as Model : prev);
-            // new image will be at combined index = 1 + prevImgs.length
-            setSelectedImageIndex(prevImgs.length + 1);
+        setAddImageError(null);
+        // Capture the input element synchronously because React may recycle the
+        // synthetic event after an await (causing e.currentTarget to become null).
+        const inputEl = e.currentTarget as HTMLInputElement;
+        const files = inputEl.files ? Array.from(inputEl.files) : [];
+        if (files.length === 0 || !editedModel) {
+          // clear the input so the same file can be reselected later
+          try { inputEl.value = ''; } catch (err) { /* ignore */ }
+          return;
+        }
+
+        // Validate: reject very large files up front (e.g., > 20MB)
+        const oversize = files.find(f => f.size > 20 * 1024 * 1024);
+        if (oversize) {
+          setAddImageError(`File ${oversize.name} is too large (>20MB).`);
+          try { inputEl.value = ''; } catch (err) { /* ignore */ }
+          return;
+        }
+
+        setAddImageProgress({ processed: 0, total: files.length });
+
+        try {
+          const newDataUrls: string[] = [];
+
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            // Compress/resample to reasonable size
+            const dataUrl = await compressImageFile(file, { maxWidth: 1600, maxHeight: 1600, maxSizeBytes: 800000 });
+            newDataUrls.push(dataUrl);
+            setAddImageProgress({ processed: i + 1, total: files.length });
           }
-        };
-        reader.readAsDataURL(file);
-        // clear the input so the same file can be re-selected later if needed
-        e.currentTarget.value = '';
+
+          // Apply to editedModel: first image becomes thumbnail if none exists
+          setEditedModel(prev => {
+            if (!prev) return prev;
+            const thumbnail = prev.thumbnail || newDataUrls[0] || '';
+            const imgs = Array.isArray(prev.images) ? prev.images.slice() : [];
+            const toAppend = prev.thumbnail ? newDataUrls : newDataUrls.slice(1);
+            return { ...prev, thumbnail, images: [...imgs, ...toAppend] } as Model;
+          });
+
+          // Compute the index of the last item added in the gallery deterministically
+          // (do not rely on closure-captured `allImages` or on the async state update)
+          const prevThumbExists = Boolean(editedModel?.thumbnail);
+          const prevImgsCount = Array.isArray(editedModel?.images) ? editedModel!.images!.length : 0;
+          let lastIndex = 0;
+          if (!prevThumbExists) {
+            // First new image becomes the thumbnail at index 0. If only one file was added,
+            // the last added item is the thumbnail. Otherwise, appended images follow after
+            // the thumbnail and any existing images.
+            if (newDataUrls.length === 1) {
+              lastIndex = 0;
+            } else {
+              lastIndex = prevImgsCount + newDataUrls.length - 1;
+            }
+          } else {
+            // Thumbnail existed before; gallery layout is [thumbnail, ...images]. New images
+            // are appended to images, so compute their final index accordingly.
+            lastIndex = 1 + prevImgsCount + newDataUrls.length - 1;
+          }
+          setSelectedImageIndex(Math.max(0, lastIndex));
+        } catch (err: any) {
+          console.error('Error adding images:', err);
+          setAddImageError(String(err?.message || err));
+        } finally {
+          setAddImageProgress(null);
+          try { inputEl.value = ''; } catch (err) { /* ignore */ }
+        }
       };
 
     // Compute the full images array (thumbnail + additional images) from the currently-displayed model
@@ -280,6 +332,29 @@ export function ModelDetailsDrawer({
     }
     return;
   }, [isWindowFullscreen]);
+
+  // Scroll the thumbnail strip so the selected thumbnail is visible.
+  useEffect(() => {
+    if (isWindowFullscreen) return; // thumbnails are hidden in fullscreen
+    const container = thumbnailStripRef.current;
+    if (!container) return;
+    const selector = `[data-thumb-index=\"${selectedImageIndex}\"]`;
+    const active = container.querySelector<HTMLElement>(selector);
+    if (!active) return;
+
+    // Use smooth scrolling when possible; center the thumbnail in view
+    const containerRect = container.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    const offset = (activeRect.left + activeRect.right) / 2 - (containerRect.left + containerRect.right) / 2;
+    // Scroll by offset, but keep within bounds
+    const desired = container.scrollLeft + offset;
+    const final = Math.max(0, Math.min(desired, container.scrollWidth - container.clientWidth));
+    try {
+      container.scrollTo({ left: final, behavior: 'smooth' });
+    } catch (e) {
+      container.scrollLeft = final;
+    }
+  }, [selectedImageIndex, isWindowFullscreen]);
 
   if (!model) return null;
   const currentModel = editedModel || model;
@@ -654,13 +729,16 @@ export function ModelDetailsDrawer({
 
                       {/* Thumbnail Strip (normal view) */}
                       {(allImages.length > 1 || isEditing) && (
-                        <div className="mt-4 flex gap-2 overflow-x-auto pt-1 pb-2 pl-2">
-                              {/* Hidden file input for adding images (used in edit mode) */}
+                        // set a fixed height so the Radix ScrollArea viewport can render a scrollbar
+                        <ScrollArea className="mt-4 h-20" viewportRef={thumbnailStripRef} showHorizontalScrollbar={true} showVerticalScrollbar={false}>
+                          <div className="flex gap-2 items-center h-20 py-1 pl-2 w-20">
+                              {/* Hidden file input for adding images (used in edit mode). Allow multiple selection. */}
                               <input
                                 key="add-image-input"
                                 ref={addImageInputRef}
                                 type="file"
                                 accept="image/*"
+                                multiple
                                 className="hidden"
                                 onChange={handleAddImageFile}
                               />
@@ -668,6 +746,7 @@ export function ModelDetailsDrawer({
                           {allImages.map((image, index) => (
                             <button
                               key={index}
+                              data-thumb-index={index}
                               draggable={isEditing && !isWindowFullscreen}
                               onDragStart={(e) => handleDragStart(e, index)}
                               onDragOver={(e) => handleDragOver(e, index)}
@@ -699,18 +778,34 @@ export function ModelDetailsDrawer({
                               )}
                             </button>
                           ))}
+                          {/* Scroll the thumbnail container to show the selected item */}
+                          {/* The container ref is attached below in the wrapping div */}
                           {/* Add Image tile (only show in edit mode). Placed after existing thumbnails so it doesn't affect indexing for drag/drop */}
                           {isEditing && (
-                            <button
-                              type="button"
-                              onClick={handleAddImageClick}
-                              className="relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-primary"
-                            >
-                              <Plus className="h-5 w-5" />
-                              <span className="sr-only">Add image</span>
-                            </button>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={handleAddImageClick}
+                                className="relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-primary"
+                              >
+                                <Plus className="h-5 w-5" />
+                                <span className="sr-only">Add image</span>
+                              </button>
+                              {/* Inline progress / error */}
+                              {addImageProgress && (
+                                <div className="absolute -bottom-5 left-0 w-full text-xs text-muted-foreground text-center">
+                                  {addImageProgress.processed} / {addImageProgress.total}
+                                </div>
+                              )}
+                              {addImageError && (
+                                <div className="absolute -bottom-6 left-0 w-64 text-xs text-destructive">
+                                  {addImageError}
+                                </div>
+                              )}
+                            </div>
                           )}
-                        </div>
+                          </div>
+                        </ScrollArea>
                       )}
                     </div>
                   )}

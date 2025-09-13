@@ -8,8 +8,17 @@ import { cn } from "./utils";
 function ScrollArea({
   className,
   children,
+  // optional ref that will be attached to the internal Radix Viewport element
+  viewportRef,
+  // controls whether to render horizontal / vertical scrollbars (defaults to vertical only)
+  showHorizontalScrollbar = false,
+  showVerticalScrollbar = true,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
+  viewportRef?: React.RefObject<HTMLDivElement>;
+  showHorizontalScrollbar?: boolean;
+  showVerticalScrollbar?: boolean;
+}) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
@@ -17,12 +26,14 @@ function ScrollArea({
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
+        ref={viewportRef}
         data-slot="scroll-area-viewport"
         className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
+      {showVerticalScrollbar && <ScrollBar orientation="vertical" />}
+      {showHorizontalScrollbar && <ScrollBar orientation="horizontal" />}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   );
