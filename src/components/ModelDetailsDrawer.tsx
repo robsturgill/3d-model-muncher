@@ -103,6 +103,42 @@ export function ModelDetailsDrawer({
     const [selectedImageIndexes, setSelectedImageIndexes] = useState<number[]>([]);
     // Drag state for reordering thumbnails in edit mode
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+      // File input ref for adding new images in edit mode
+      const addImageInputRef = useRef<HTMLInputElement | null>(null);
+
+      // Handle clicking the add-image tile
+      const handleAddImageClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!isEditing) return;
+        addImageInputRef.current?.click();
+      };
+
+      // Read selected file and add as base64 data URL to editedModel
+      const handleAddImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        const file = e.target.files && e.target.files[0];
+        if (!file || !editedModel) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string | null;
+          if (!result) return;
+          // If there's no thumbnail yet, make this the thumbnail, otherwise append to images
+          const prevImgs = Array.isArray(editedModel.images) ? editedModel.images.slice() : [];
+          if (!editedModel.thumbnail) {
+            setEditedModel(prev => prev ? { ...prev, thumbnail: result, images: prevImgs } as Model : prev);
+            // new thumbnail becomes index 0, so select it
+            setSelectedImageIndex(0);
+          } else {
+            const newImgs = [...prevImgs, result];
+            setEditedModel(prev => prev ? { ...prev, images: newImgs } as Model : prev);
+            // new image will be at combined index = 1 + prevImgs.length
+            setSelectedImageIndex(prevImgs.length + 1);
+          }
+        };
+        reader.readAsDataURL(file);
+        // clear the input so the same file can be re-selected later if needed
+        e.currentTarget.value = '';
+      };
 
     // Compute the full images array (thumbnail + additional images) from the currently-displayed model
     // Use editedModel when editing so the gallery reflects pending changes immediately.
@@ -617,8 +653,18 @@ export function ModelDetailsDrawer({
                       </AspectRatio>
 
                       {/* Thumbnail Strip (normal view) */}
-                      {allImages.length > 1 && (
+                      {(allImages.length > 1 || isEditing) && (
                         <div className="mt-4 flex gap-2 overflow-x-auto pt-1 pb-2 pl-2">
+                              {/* Hidden file input for adding images (used in edit mode) */}
+                              <input
+                                key="add-image-input"
+                                ref={addImageInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleAddImageFile}
+                              />
+
                           {allImages.map((image, index) => (
                             <button
                               key={index}
@@ -653,6 +699,17 @@ export function ModelDetailsDrawer({
                               )}
                             </button>
                           ))}
+                          {/* Add Image tile (only show in edit mode). Placed after existing thumbnails so it doesn't affect indexing for drag/drop */}
+                          {isEditing && (
+                            <button
+                              type="button"
+                              onClick={handleAddImageClick}
+                              className="relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-primary"
+                            >
+                              <Plus className="h-5 w-5" />
+                              <span className="sr-only">Add image</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
