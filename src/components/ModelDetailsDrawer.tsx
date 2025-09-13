@@ -17,6 +17,7 @@ import { AspectRatio } from "./ui/aspect-ratio";
 import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
+import { ImageWithFallback } from "./ImageWithFallback";
 import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign } from "lucide-react";
 import { Download } from "lucide-react";
 
@@ -689,7 +690,7 @@ export function ModelDetailsDrawer({
                         <div className="relative w-full flex items-center justify-center">
                           {/* dark background for transparent images */}
                           <div className="absolute inset-0 bg-gradient-dark rounded-lg" aria-hidden />
-                          <img src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className="relative max-w-full max-h-full object-contain rounded-lg" />
+                          <ImageWithFallback src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className="relative max-w-full max-h-full object-contain rounded-lg" />
 
                           {allImages.length > 1 && (
                             <>
@@ -713,7 +714,7 @@ export function ModelDetailsDrawer({
                   ) : (
                     <div>
                       <AspectRatio ratio={16 / 10} className={`bg-muted`}>
-                        <img src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className={`w-full h-full object-cover rounded-lg`} />
+                        <ImageWithFallback src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className={`w-full h-full object-cover rounded-lg`} />
 
                         {allImages.length > 1 && (
                           <>
@@ -771,7 +772,7 @@ export function ModelDetailsDrawer({
                               }}
                               className={`relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${isImageSelected(index) ? 'opacity-60 ring-2 ring-destructive scale-95' : index === selectedImageIndex ? 'border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50 hover:scale-102'} ${dragOverIndex === index ? 'ring-2 ring-primary/60' : ''}`}
                             >
-                              <img src={image} alt={`${currentModel.name} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                              <ImageWithFallback src={image} alt={`${currentModel.name} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
                               {isImageSelected(index) && (
                                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-semibold">
                                   Remove
