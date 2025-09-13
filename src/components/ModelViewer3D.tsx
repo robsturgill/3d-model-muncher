@@ -19,7 +19,7 @@ interface ModelViewer3DProps {
 const Scene = memo(({ modelUrl, isWireframe, autoRotate }: { modelUrl?: string; isWireframe?: boolean; autoRotate?: boolean }) => {
   return (
     <>
-      <PerspectiveCamera makeDefault position={[3, 3, 3]} fov={50} />
+      <PerspectiveCamera makeDefault position={[-66, 79, 83]} rotation={[-0.76, -0.52, -0.44]} fov={20} />
       <OrbitControls
         enablePan={true}
         enableZoom={true}
@@ -48,11 +48,11 @@ const Scene = memo(({ modelUrl, isWireframe, autoRotate }: { modelUrl?: string; 
           </Bounds>
         ) : null}
       </Suspense>
-      {/* Ground plane */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
-        <planeGeometry args={[10, 10]} />
+      {/* Ground plane - commented out to hide */}
+      {/* <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
+        <planeGeometry args={[200, 200]} />
         <meshStandardMaterial color="#888888" transparent opacity={0.2} />
-      </mesh>
+      </mesh> */}
     </>
   );
 });

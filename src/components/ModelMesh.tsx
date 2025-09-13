@@ -36,10 +36,15 @@ export function ModelMesh({ modelUrl, isWireframe, onBoundingBox }: ModelMeshPro
       // Create a group to contain the mesh (similar to 3MF structure)
       const group = new THREE.Group();
       group.add(mesh);
+      // Rotate the group to make the model upright (common for STL files)
+      group.rotation.x = -Math.PI / 2;
       return group;
     } else {
       // 3MF loader returns a Group object directly
-      return modelData as THREE.Group;
+      const group = modelData as THREE.Group;
+      // Rotate the group to make the model upright (consistent with STL)
+      group.rotation.x = -Math.PI / 2;
+      return group;
     }
   }, [modelData, isSTL]);
 
