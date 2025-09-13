@@ -74,10 +74,14 @@ export function ModelDetailsDrawer({
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
   const prevButtonRef = useRef<any>(null);
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
+  // Ref mirror to synchronously track fullscreen state (avoids React state update race)
+  const isWindowFullscreenRef = useRef<boolean>(false);
 
   const handleToggleFullscreen = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setIsWindowFullscreen((prev) => !prev);
+    const next = !isWindowFullscreenRef.current;
+    isWindowFullscreenRef.current = next;
+    setIsWindowFullscreen(next);
   };
 
   // Exit fullscreen on Escape (keydown handler moved later, after allImages is defined)
@@ -115,6 +119,12 @@ export function ModelDetailsDrawer({
       if (!isWindowFullscreen) return;
 
       if (ev.key === 'Escape') {
+        // Close fullscreen but do not allow the Escape to bubble to the Sheet drawer
+        ev.preventDefault();
+        ev.stopPropagation();
+        try { ev.stopImmediatePropagation(); } catch (e) { /* ignore */ }
+        // update ref synchronously to avoid race with onOpenChange
+        isWindowFullscreenRef.current = false;
         setIsWindowFullscreen(false);
         return;
       }
@@ -132,8 +142,24 @@ export function ModelDetailsDrawer({
       }
     };
 
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    // Use capture phase so we intercept Escape before other handlers (like the Sheet's) that may close the drawer
+    document.addEventListener('keydown', onKey, true);
+    // Also intercept keyup in case other libraries (Radix) listen on keyup for Escape
+    const onKeyUp = (ev: KeyboardEvent) => {
+      if (!isWindowFullscreen) return;
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        try { ev.stopImmediatePropagation(); } catch (e) { /* ignore */ }
+        // ensure ref is in sync
+        isWindowFullscreenRef.current = false;
+      }
+    };
+    document.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('keyup', onKeyUp, true);
+    };
   }, [isWindowFullscreen, allImages.length]);
 
   // Helper: is an image (by gallery index) selected for deletion
@@ -407,9 +433,38 @@ export function ModelDetailsDrawer({
     document.body.removeChild(link);
   };
 
+  // Intercept Sheet open/close changes so that if the user tries to close the
+  // Sheet (e.g. via Escape or overlay click) while an image is in the
+  // in-window fullscreen, we exit fullscreen first and keep the Sheet open.
+  const handleSheetOpenChange = (open: boolean) => {
+    // Use the ref to synchronously decide whether to allow the Sheet to close.
+    if (!open && isWindowFullscreenRef.current) {
+      // Close only the fullscreen state; don't call onClose so the sheet stays open
+      isWindowFullscreenRef.current = false;
+      setIsWindowFullscreen(false);
+      return;
+    }
+    if (!open) {
+      onClose();
+    }
+  };
+
+  // Handler for Radix Dialog's Content-level escape event. This runs inside
+  // Radix before it triggers the default close behavior allowing us to
+  // prevent the Sheet from closing when an image fullscreen is active.
+  const handleContentEscapeKeyDown = (ev: KeyboardEvent) => {
+    if (isWindowFullscreenRef.current && ev.key === 'Escape') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      try { ev.stopImmediatePropagation(); } catch (e) { /* ignore */ }
+      isWindowFullscreenRef.current = false;
+      setIsWindowFullscreen(false);
+    }
+  };
+
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-2xl">
+    <Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
+      <SheetContent className="w-full sm:max-w-2xl" onEscapeKeyDown={handleContentEscapeKeyDown}>
         {/* Sticky Header during editing */}
         <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}> 
           <div className="flex items-start justify-between">
