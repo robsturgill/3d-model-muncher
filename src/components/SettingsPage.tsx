@@ -19,6 +19,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Progress } from "./ui/progress";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { 
   ArrowLeft, 
   GripVertical, 
@@ -166,10 +167,21 @@ export function SettingsPage({
           const fileName = pathParts.pop() || '';
           const directory = pathParts.join('/');
           
-          // Convert .3mf to -munchie.json if needed
-          const munchieFileName = fileName.endsWith('-munchie.json')
+          // Convert .3mf to -munchie.json or .stl to -stl-munchie.json if needed
+          const lowerFileName = fileName.toLowerCase();
+          const munchieFileName = fileName.endsWith('-munchie.json') || fileName.endsWith('-stl-munchie.json')
             ? fileName
-            : fileName.replace('.3mf', '-munchie.json');
+            : lowerFileName.endsWith('.stl') 
+              ? fileName.replace(/\.stl$/i, '-stl-munchie.json')
+              : lowerFileName.endsWith('.3mf')
+                ? fileName.replace(/\.3mf$/i, '-munchie.json')
+                : null; // Skip files that aren't model files
+          
+          // Skip if we couldn't determine the munchie file name
+          if (!munchieFileName) {
+            console.log('Skipping non-model file:', fileName);
+            continue;
+          }
           
           // Construct the final path, always starting with models/
           const fullPath = directory 
@@ -184,6 +196,9 @@ export function SettingsPage({
               // Store with the original file path as key for reliable lookup
               newModels[file.filePath] = modelData;
             }
+          } else if (response.status === 404) {
+            // File doesn't exist yet - this is expected for STL files that haven't been generated
+            console.log('Munchie file not found (expected for new STL files):', fullPath);
           }
         } catch (error) {
           console.error('Failed to load model data:', error);
@@ -196,6 +211,9 @@ export function SettingsPage({
     loadCorruptedModels();
   }, [hashCheckResult?.corruptedFiles]);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
+
+  // File type selection state - "3mf" or "stl" only
+  const [selectedFileType, setSelectedFileType] = useState<"3mf" | "stl">("3mf");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
@@ -213,18 +231,24 @@ export function SettingsPage({
 
   // State and handler for generating model JSONs via backend API
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
+  const [generateResult, setGenerateResult] = useState<{ skipped: number } | null>(null);
+  
   const handleGenerateModelJson = async () => {
     setIsGeneratingJson(true);
-    setStatusMessage('Generating JSON for all .3mf files...');
+    setGenerateResult(null);
+    const fileTypeText = selectedFileType === "3mf" ? ".3mf" : ".stl";
+    setStatusMessage(`Generating JSON for all ${fileTypeText} files...`);
     try {
       const response = await fetch('/api/scan-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileType: selectedFileType })
       });
       const data = await response.json();
       if (response.ok && data.success) {
         setSaveStatus('saved');
         setStatusMessage('Model JSON files generated successfully.');
+        setGenerateResult({ skipped: data.skipped || 0 });
       } else {
         setSaveStatus('error');
         setStatusMessage(data.message || 'Failed to generate model JSON files.');
@@ -712,8 +736,13 @@ export function SettingsPage({
   const handleRunHashCheck = () => {
     setIsHashChecking(true);
     setHashCheckProgress(0);
-    setStatusMessage('Rescanning .3mf files and comparing hashes...');
-    fetch('/api/hash-check')
+    const fileTypeText = selectedFileType === "3mf" ? ".3mf" : ".stl";
+    setStatusMessage(`Rescanning ${fileTypeText} files and comparing hashes...`);
+    fetch('/api/hash-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileType: selectedFileType })
+    })
       .then(resp => resp.json())
       .then(data => {
       if (!data.success) throw new Error(data.error || 'Hash check failed');
@@ -724,6 +753,7 @@ export function SettingsPage({
       const duplicateGroups: DuplicateGroup[] = [];
       const hashToModels: Record<string, Model[]> = {};
       const updatedModels: Model[] = [];
+      const usedIds = new Set<string>(); // Track used IDs to prevent duplicates
       // Default Model shape for missing fields
       const defaultModel: Model = {
         id: '',
@@ -753,27 +783,42 @@ export function SettingsPage({
           // Try multiple matching strategies
           if (m.name === r.baseName) return true;
           if (r.threeMF && m.modelUrl.endsWith(r.threeMF)) return true;
+          if (r.stl && m.modelUrl.endsWith(r.stl)) return true;
           // Try with /models/ prefix
           if (r.threeMF && m.modelUrl === `/models/${r.threeMF}`) return true;
+          if (r.stl && m.modelUrl === `/models/${r.stl}`) return true;
           // Try comparing the full modelUrl path (handling backslashes)
-          const expectedUrl = r.threeMF ? `/models/${r.threeMF}` : '';
+          const expectedUrl = r.threeMF ? `/models/${r.threeMF}` : r.stl ? `/models/${r.stl}` : '';
           if (m.modelUrl === expectedUrl) return true;
           // Try normalizing paths - convert backslashes to forward slashes
           const normalizedModelUrl = m.modelUrl.replace(/\\/g, '/');
           const normalizedExpectedUrl = expectedUrl.replace(/\\/g, '/');
           if (normalizedModelUrl === normalizedExpectedUrl) return true;
           // Try comparing just the filename
-          const modelFileName = m.modelUrl?.split(/[/\\]/).pop()?.replace('.3mf', '');
-          const hashFileName = r.threeMF?.replace('.3mf', '');
+          const modelFileName = m.modelUrl?.split(/[/\\]/).pop()?.replace(/\.(3mf|stl)$/i, '');
+          const hashFileName = (r.threeMF?.replace('.3mf', '') || r.stl?.replace('.stl', ''));
           return modelFileName && hashFileName && modelFileName === hashFileName;
         });
+        
+        // Create a unique ID that includes the full file path to ensure uniqueness
+        const filePath = r.threeMF || r.stl || r.baseName;
+        let baseId = fullModel?.id || `hash-${filePath.replace(/[^a-zA-Z0-9]/g, '-')}-${r.hash?.substring(0, 8) || Date.now()}`;
+        
+        // Ensure ID is unique by adding a counter if necessary
+        let uniqueId = baseId;
+        let counter = 1;
+        while (usedIds.has(uniqueId)) {
+          uniqueId = `${baseId}-${counter}`;
+          counter++;
+        }
+        usedIds.add(uniqueId);
         
         const mergedModel = {
           ...defaultModel,
           ...fullModel,
-          id: fullModel?.id || `hash-${r.hash}-${r.baseName}`, // Ensure we always have an ID
-          name: fullModel?.name || r.baseName.split(/[/\\]/).pop()?.replace('.3mf', '') || r.baseName, // Use clean filename as name
-          modelUrl: r.threeMF ? `/models/${r.threeMF}` : '',
+          id: uniqueId,
+          name: fullModel?.name || r.baseName.split(/[/\\]/).pop()?.replace(/\.(3mf|stl)$/i, '') || r.baseName, // Use clean filename as name
+          modelUrl: r.threeMF ? `/models/${r.threeMF}` : r.stl ? `/models/${r.stl}` : '',
           hash: r.hash,
           status: r.status
         };
@@ -784,7 +829,7 @@ export function SettingsPage({
         } else {
           corrupted++;
           // Add file info to corruptedFiles
-          const filePath = r.threeMF ? `/models/${r.threeMF}` : '';
+          const filePath = r.threeMF ? `/models/${r.threeMF}` : r.stl ? `/models/${r.stl}` : '';
           corruptedFiles.push({
             model: mergedModel,
             filePath: filePath,
@@ -836,16 +881,21 @@ export function SettingsPage({
   const handleRemoveDuplicates = async (group: DuplicateGroup, keepModelId: string) => {
     // Find models to remove (all except the one to keep)
     const modelsToRemove = group.models.filter(model => model.id !== keepModelId);
-    // Collect .3mf and -munchie.json file names for each
+    // Collect model files and their corresponding munchie.json files
     const filesToDelete: string[] = [];
     modelsToRemove.forEach(model => {
       if (model.modelUrl) {
-        // modelUrl is like /models/Foo.3mf
-        const threeMF = model.modelUrl.replace(/^\/models\//, '');
-        filesToDelete.push(threeMF);
-        // Add corresponding -munchie.json
-        const base = threeMF.replace(/\.3mf$/i, '');
-        filesToDelete.push(base + '-munchie.json');
+        // modelUrl is like /models/Foo.3mf or /models/Foo.stl
+        const modelFile = model.modelUrl.replace(/^\/models\//, '');
+        filesToDelete.push(modelFile);
+        // Add corresponding munchie.json file
+        if (modelFile.toLowerCase().endsWith('.3mf')) {
+          const base = modelFile.replace(/\.3mf$/i, '');
+          filesToDelete.push(base + '-munchie.json');
+        } else if (modelFile.toLowerCase().endsWith('.stl')) {
+          const base = modelFile.replace(/\.stl$/i, '');
+          filesToDelete.push(base + '-stl-munchie.json');
+        }
       }
     });
     if (filesToDelete.length === 0) {
@@ -1683,6 +1733,23 @@ export function SettingsPage({
                         <p className="text-sm text-muted-foreground">
                           Check for duplicates and verify model metadata
                         </p>
+                        <div className="mt-2">
+                          <Label className="text-sm font-medium">File Type</Label>
+                          <RadioGroup 
+                            value={selectedFileType} 
+                            onValueChange={(value: "3mf" | "stl") => setSelectedFileType(value)}
+                            className="flex gap-4 mt-2"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="3mf" id="file-type-3mf" />
+                              <Label htmlFor="file-type-3mf">3MF only</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="stl" id="file-type-stl" />
+                              <Label htmlFor="file-type-stl">STL only</Label>
+                            </div>
+                          </RadioGroup>
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <Button 
@@ -1713,22 +1780,38 @@ export function SettingsPage({
                       </div>
                     </div>
 
-                    {hashCheckResult && (
+                    {(hashCheckResult || generateResult) && (
                       <div className="flex flex-wrap gap-4 mt-3 md:mt-0 md:self-end">
-                        <div key="verified-count" className="flex items-center gap-2">
-                          <FileCheck className="h-4 w-4 text-green-600" />
-                          <span className="text-sm">{hashCheckResult.verified} verified</span>
-                        </div>
-                        {hashCheckResult.corrupted > 0 && (
-                          <div key="corrupted-count" className="flex items-center gap-2">
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                            <span className="text-sm">{hashCheckResult.corrupted} issues</span>
-                          </div>
+                        {hashCheckResult && (
+                          <>
+                            <div key="verified-count" className="flex items-center gap-2">
+                              <FileCheck className="h-4 w-4 text-green-600" />
+                              <span className="text-sm">{hashCheckResult.verified} verified</span>
+                            </div>
+                            {hashCheckResult.corrupted > 0 && (
+                              <div key="corrupted-count" className="flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-red-600" />
+                                <span className="text-sm">{hashCheckResult.corrupted} issues</span>
+                              </div>
+                            )}
+                            {hashCheckResult.duplicateGroups.length > 0 && (
+                              <div key="duplicates-count" className="flex items-center gap-2">
+                                <Files className="h-4 w-4 text-blue-600" />
+                                <span className="text-sm">{hashCheckResult.duplicateGroups.length} duplicates</span>
+                              </div>
+                            )}
+                            {(hashCheckResult.skipped || 0) > 0 && (
+                              <div key="skipped-count" className="flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-gray-600" />
+                                <span className="text-sm">{hashCheckResult.skipped} skipped</span>
+                              </div>
+                            )}
+                          </>
                         )}
-                        {hashCheckResult.duplicateGroups.length > 0 && (
-                          <div key="duplicates-count" className="flex items-center gap-2">
-                            <Files className="h-4 w-4 text-blue-600" />
-                            <span className="text-sm">{hashCheckResult.duplicateGroups.length} duplicates</span>
+                        {generateResult && generateResult.skipped > 0 && (
+                          <div key="gen-skipped-count" className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-gray-600" />
+                            <span className="text-sm">{generateResult.skipped} skipped</span>
                           </div>
                         )}
                       </div>
@@ -1762,8 +1845,8 @@ export function SettingsPage({
                               // Try without /models/ prefix
                               if (m.modelUrl === file.filePath.replace(/^[/\\]?models[/\\]/, '')) return true;
                               // Try by comparing just the filename
-                              const fileBaseName = file.filePath.split(/[/\\]/).pop()?.replace('.3mf', '');
-                              const modelBaseName = m.modelUrl?.split(/[/\\]/).pop()?.replace('.3mf', '');
+                              const fileBaseName = file.filePath.split(/[/\\]/).pop()?.replace(/\.(3mf|stl)$/i, '');
+                              const modelBaseName = m.modelUrl?.split(/[/\\]/).pop()?.replace(/\.(3mf|stl)$/i, '');
                               return fileBaseName && modelBaseName && fileBaseName === modelBaseName;
                             });
                             
@@ -1775,7 +1858,7 @@ export function SettingsPage({
                                 >
                                   <div className="min-w-0 flex-1">
                                   <p className="font-medium text-red-900 dark:text-red-100 truncate">
-                                    {model ? getDisplayPath(model) : file.filePath.split('/').pop()?.replace('.3mf', '') || 'Unknown'}
+                                    {model ? getDisplayPath(model) : file.filePath.split('/').pop()?.replace(/\.(3mf|stl)$/i, '') || 'Unknown'}
                                   </p>
                                   <p className="text-sm text-red-600 dark:text-red-400">
                                     {file.error || `Missing metadata or hash mismatch`}

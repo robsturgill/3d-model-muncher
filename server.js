@@ -145,9 +145,15 @@ app.get('/api/models', async (req, res) => {
 // API endpoint to trigger model directory scan and JSON generation
 app.post('/api/scan-models', async (req, res) => {
   try {
+    const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const dir = getModelsDirectory();
-    await scanDirectory(dir);
-    res.json({ success: true, message: 'Model JSON files generated successfully.' });
+    const result = await scanDirectory(dir, fileType);
+    res.json({ 
+      success: true, 
+      message: 'Model JSON files generated successfully.',
+      processed: result.processed,
+      skipped: result.skipped
+    });
   } catch (error) {
     console.error('Model JSON generation error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate model JSON files.', error: error.message });
@@ -199,8 +205,9 @@ app.get('/api/munchie-files', (req, res) => {
 });
 
 // --- API: Hash check for all .3mf files and their -munchie.json ---
-app.get('/api/hash-check', async (req, res) => {
+app.post('/api/hash-check', async (req, res) => {
   try {
+    const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const modelsDir = getAbsoluteModelsPath();
     const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
     let result = [];
@@ -218,14 +225,29 @@ app.get('/api/hash-check', async (req, res) => {
           scanDirectory(fullPath);
         } else {
           const relativePath = path.relative(modelsDir, fullPath);
-          if (relativePath.toLowerCase().endsWith('.3mf')) {
-            const base = relativePath.replace(/\.3mf$/i, '');
-            modelMap[base] = modelMap[base] || {};
-            modelMap[base].threeMF = relativePath;
-          } else if (relativePath.toLowerCase().endsWith('-munchie.json')) {
-            const base = relativePath.replace(/-munchie\.json$/i, '');
-            modelMap[base] = modelMap[base] || {};
-            modelMap[base].json = relativePath;
+          
+          if (fileType === "3mf") {
+            // Only process 3MF files and their JSON companions
+            if (relativePath.toLowerCase().endsWith('.3mf')) {
+              const base = relativePath.replace(/\.3mf$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].threeMF = relativePath;
+            } else if (relativePath.toLowerCase().endsWith('-munchie.json')) {
+              const base = relativePath.replace(/-munchie\.json$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].json = relativePath;
+            }
+          } else if (fileType === "stl") {
+            // Only process STL files and their JSON companions
+            if (relativePath.toLowerCase().endsWith('.stl')) {
+              const base = relativePath.replace(/\.stl$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].stl = relativePath;
+            } else if (relativePath.toLowerCase().endsWith('-stl-munchie.json')) {
+              const base = relativePath.replace(/-stl-munchie\.json$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].json = relativePath;
+            }
           }
         }
       }
@@ -234,55 +256,75 @@ app.get('/api/hash-check', async (req, res) => {
     // Start recursive scan
     scanDirectory(modelsDir);
 
-    // Process all found models
+    // Clean up the modelMap to only include entries that have the expected file type
+    const cleanedModelMap = {};
     for (const base in modelMap) {
       const entry = modelMap[base];
+      if (fileType === "3mf" && entry.threeMF) {
+        // Only include 3MF entries when in 3MF mode
+        cleanedModelMap[base] = entry;
+      } else if (fileType === "stl" && entry.stl) {
+        // Only include STL entries when in STL mode
+        cleanedModelMap[base] = entry;
+      }
+    }
+
+    // Process all found models
+    for (const base in cleanedModelMap) {
+      const entry = cleanedModelMap[base];
       const threeMFPath = entry.threeMF ? path.join(modelsDir, entry.threeMF) : null;
+      const stlPath = entry.stl ? path.join(modelsDir, entry.stl) : null;
       const jsonPath = entry.json ? path.join(modelsDir, entry.json) : null;
+      const modelPath = threeMFPath || stlPath; // Prefer 3MF, but use STL if no 3MF
       let status = 'ok';
       let details = '';
       let hash = null;
       let storedHash = null;
 
-      if (!threeMFPath) {
-        status = 'missing-3mf';
-        details = 'Missing .3mf file';
+      if (!modelPath) {
+        status = 'missing-model';
+        const fileExtension = fileType === "3mf" ? ".3mf" : ".stl";
+        details = `Missing ${fileExtension} file`;
       } else if (!jsonPath) {
         status = 'missing-json';
         details = 'Missing -munchie.json file';
-      } else {
-        try {
-          hash = computeMD5(threeMFPath);
-          const json = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-          storedHash = json.hash;
-          if (!storedHash) {
-            status = 'missing-hash';
-            details = 'No hash in JSON';
-          } else if (hash !== storedHash) {
-            status = 'hash-mismatch';
-            details = `Hash mismatch: .3mf=${hash}, json=${storedHash}`;
-          }
-        } catch (e) {
-          status = 'error';
-          details = e.message;
-        }
-      }
-
-      // Check for duplicate hashes
-      if (hash) {
-        if (seenHashes.has(hash)) {
-          status = 'duplicate-hash';
-          details = 'Duplicate hash found for another file';
-          hashToFiles[hash].push(base);
         } else {
-          seenHashes.add(hash);
-          hashToFiles[hash] = [base];
+          try {
+            hash = computeMD5(modelPath);
+            const jsonContent = fs.readFileSync(jsonPath, 'utf8');
+            if (jsonContent.trim().length === 0) {
+              status = 'empty-json';
+              details = 'Empty JSON file';
+            } else {
+              const json = JSON.parse(jsonContent);
+              storedHash = json.hash;
+              if (!storedHash) {
+                status = 'missing-hash';
+                details = 'No hash in JSON';
+              } else if (hash !== storedHash) {
+                status = 'hash-mismatch';
+                details = `Hash mismatch: model=${hash}, json=${storedHash}`;
+              }
+            }
+          } catch (e) {
+            status = 'error';
+            details = e.message;
+          }
         }
-      }
+        
+        // Store hash for duplicate checking (but don't change status for duplicates)
+        if (hash) {
+          if (hashToFiles[hash]) {
+            hashToFiles[hash].push(base);
+          } else {
+            hashToFiles[hash] = [base];
+          }
+        }
 
       result.push({
         baseName: base,
         threeMF: entry.threeMF || null,
+        stl: entry.stl || null,
         json: entry.json || null,
         hash,
         storedHash,
@@ -309,12 +351,14 @@ app.get('/api/hash-check', async (req, res) => {
 app.get('/api/load-model', async (req, res) => {
   try {
     const { filePath } = req.query;
+    console.log('Load model request for:', filePath);
     if (!filePath || typeof filePath !== 'string') {
       return res.status(400).json({ success: false, error: 'Missing file path' });
     }
 
     // Resolve the path relative to the application root
     const fullPath = path.resolve(filePath);
+    console.log('Resolved path:', fullPath);
 
     // Ensure the path is within the models directory for security
     const modelsDir = path.resolve(getModelsDirectory());
@@ -324,11 +368,26 @@ app.get('/api/load-model', async (req, res) => {
 
     // Check if file exists
     if (!fs.existsSync(fullPath)) {
+      console.log('File not found:', fullPath);
       return res.status(404).json({ success: false, error: 'File not found' });
     }
 
+    // Validate that we're only loading JSON files
+    if (!fullPath.toLowerCase().endsWith('.json')) {
+      console.log('Attempt to load non-JSON file as model data:', fullPath);
+      return res.status(400).json({ success: false, error: 'Only JSON files can be loaded as model data' });
+    }
+
+    // Read the file content first to check if it's valid
+    const fileContent = fs.readFileSync(fullPath, 'utf8');
+    console.log('File content length:', fileContent.length);
+    if (fileContent.trim().length === 0) {
+      console.log('Empty file detected:', fullPath);
+      return res.status(400).json({ success: false, error: 'Empty file' });
+    }
+
     // Read and parse the JSON file
-    const modelData = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+    const modelData = JSON.parse(fileContent);
     res.json(modelData);
   } catch (error) {
     console.error('Error loading model:', error);
