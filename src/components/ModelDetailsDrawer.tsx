@@ -730,7 +730,10 @@ export function ModelDetailsDrawer({
 
           {/* Tags Display */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-lg text-card-foreground">Tags</h3>
+            <div className="flex items-center gap-2">
+              <Tag className="h-5 w-5 text-muted-foreground" />
+              <h3 className="font-semibold text-lg text-card-foreground">Tags</h3>
+            </div>
             {Array.isArray(currentModel.tags) && currentModel.tags.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {currentModel.tags.map((tag, index) => (
@@ -755,9 +758,6 @@ export function ModelDetailsDrawer({
                   <h3 className="font-semibold text-lg text-card-foreground">Pricing</h3>
                 </div>
                 <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg border border-primary/20">
-                  <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-lg border border-primary/20">
-                    <DollarSign className="h-6 w-6 text-primary" />
-                  </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Selling Price</p>
                     <p className="text-2xl font-semibold text-primary">${currentModel.price}</p>
