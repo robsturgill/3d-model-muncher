@@ -1,3 +1,10 @@
+## [0.4.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.4.1...v0.4.2) (2025-09-14)
+
+
+### Bug Fixes
+
+* placeholder image color toned down for dark theme ([3888588](https://github.com/robsturgill/3d-model-muncher/commit/388858896239f5cab6b8596d2d981e8d121086b0))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
