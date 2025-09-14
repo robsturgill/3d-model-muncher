@@ -264,6 +264,14 @@ export function SettingsPage({
     }
   };
 
+  // Clear generate results when switching tabs so the "skipped" count
+  // doesn't persist when the user navigates to other sections (e.g. scanning)
+  useEffect(() => {
+    if (selectedTab !== 'generate' && generateResult) {
+      setGenerateResult(null);
+    }
+  }, [selectedTab]);
+
   // Get all unique tags with their usage information
   const getAllTags = (): TagInfo[] => {
     const tagMap = new Map<string, TagInfo>();
@@ -736,6 +744,8 @@ export function SettingsPage({
 
   // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
   const handleRunHashCheck = () => {
+    // Clear any previous generate results so the UI doesn't show stale "skipped" counts
+    if (generateResult) setGenerateResult(null);
     setIsHashChecking(true);
     setHashCheckProgress(0);
     const fileTypeText = selectedFileType === "3mf" ? ".3mf" : ".stl";
