@@ -226,3 +226,8 @@ html {
     background: linear-gradient(135deg, var(--brand-dark-bg) 0%, var(--brand-dark) 100%);
   }
 }
+
+.bg-placeholder {
+  background-color: var(--card-foreground);
+  opacity: 0.4;
+}
