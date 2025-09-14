@@ -740,7 +740,7 @@ function AppContent() {
                 <Checkbox 
                   id="include-3mf"
                   checked={includeThreeMfFiles}
-                  onCheckedChange={setIncludeThreeMfFiles}
+                  onCheckedChange={(v) => setIncludeThreeMfFiles(Boolean(v))}
                 />
                 <label 
                   htmlFor="include-3mf" 

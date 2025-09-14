@@ -236,7 +236,7 @@ export function DemoPage({ onBack }: DemoPageProps) {
                       <div className="flex items-center space-x-2">
                         <Switch 
                           checked={switchValue} 
-                          onCheckedChange={setSwitchValue}
+                          onCheckedChange={(v) => setSwitchValue(Boolean(v))}
                           id="demo-switch" 
                         />
                         <Label htmlFor="demo-switch">Enable notifications</Label>
@@ -248,7 +248,7 @@ export function DemoPage({ onBack }: DemoPageProps) {
                       <div className="flex items-center space-x-2">
                         <Checkbox 
                           checked={checkboxValue}
-                          onCheckedChange={setCheckboxValue}
+                          onCheckedChange={(v) => setCheckboxValue(Boolean(v))}
                           id="demo-checkbox" 
                         />
                         <Label htmlFor="demo-checkbox">I agree to the terms</Label>

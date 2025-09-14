@@ -111,7 +111,7 @@ export function ModelGrid({
     // If parent did not return a Promise (e.g. it just opened a confirmation dialog), don't clear selection here.
   };
 
-  const handleCheckboxClick = (e: React.MouseEvent<HTMLInputElement>, modelId: string) => {
+  const handleCheckboxClick = (e: React.MouseEvent<HTMLButtonElement>, modelId: string) => {
     e.stopPropagation();
     if (onModelSelection) {
       onModelSelection(modelId);
@@ -301,7 +301,7 @@ export function ModelGrid({
                       <Checkbox
                         checked={selectedModelIds.includes(model.id)}
                         onCheckedChange={() => onModelSelection?.(model.id)}
-                        onClick={(e: React.MouseEvent<HTMLInputElement>) => handleCheckboxClick(e, model.id)}
+                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleCheckboxClick(e, model.id)}
                         className="w-5 h-5"
                       />
                     </div>
