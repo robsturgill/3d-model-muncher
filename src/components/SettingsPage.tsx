@@ -88,6 +88,10 @@ interface SettingsPageProps {
   onDonationClick?: () => void;
   // Optional initial tab to open when the settings page mounts
   initialTab?: string;
+  // Optional action requested by the parent (open settings and run an action)
+  settingsAction?: null | { type: 'hash-check' | 'generate'; fileType: '3mf' | 'stl' };
+  // Callback to notify parent that action was handled (or cleared)
+  onActionHandled?: () => void;
 }
 
 interface TagInfo {
@@ -105,8 +109,10 @@ export function SettingsPage({
   models,
   onModelsUpdate,
   onModelClick,
-  onDonationClick
-  , initialTab
+  onDonationClick,
+  initialTab,
+  settingsAction,
+  onActionHandled,
 }: SettingsPageProps) {
   // Helper function to get a clean file path for display
   const getDisplayPath = (model: Model) => {
@@ -186,6 +192,30 @@ export function SettingsPage({
       setSelectedTab(initialTab);
     }
   }, [initialTab]);
+
+  // If parent opened settings with an action, run it and then notify parent
+  useEffect(() => {
+    if (!settingsAction) return;
+    // Switch to the integrity tab so the user sees progress/results
+    setSelectedTab('integrity');
+    // Ensure file type selection reflects action
+    setSelectedFileType(settingsAction.fileType);
+
+    (async () => {
+      try {
+        if (settingsAction.type === 'hash-check') {
+          // handleRunHashCheck is synchronous but triggers state updates/fetch
+          handleRunHashCheck();
+        } else if (settingsAction.type === 'generate') {
+          await handleGenerateModelJson();
+        }
+      } catch (err) {
+        console.error('Error running settingsAction:', err);
+      } finally {
+        onActionHandled?.();
+      }
+    })();
+  }, [settingsAction]);
 
   // Category editing state
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -1099,7 +1129,7 @@ export function SettingsPage({
       });
       onModelsUpdate(updatedModels);
       setSaveStatus('saved');
-      setStatusMessage('Hash check complete. See results below.');
+      setStatusMessage('Hash check complete. See results.');
       setTimeout(() => {
         setSaveStatus('idle');
         setStatusMessage('');

@@ -12,8 +12,14 @@ import { Model } from "./types/model";
 import { Category } from "./types/category";
 import { AppConfig } from "./types/config";
 import { ConfigManager } from "./utils/configManager";
-import { Menu, Palette, RefreshCw, Heart, FileCog } from "lucide-react";
+import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box } from "lucide-react";
 import { Button } from "./components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./components/ui/dropdown-menu";
 import { Checkbox } from "./components/ui/checkbox";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
@@ -27,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./components/ui/alert-dialog";
+import { Separator } from "./components/ui/separator";
 
 // Function to load model data from JSON files
 // Initial type for view
@@ -56,10 +63,11 @@ function AppContent() {
   const [includeThreeMfFiles, setIncludeThreeMfFiles] = useState(false);
 
   // Overflow menu state for small screens (used by header action overflow)
-  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  // removed unused showOverflowMenu state; DropdownMenu manages its own open state
 
   // Optional initial tab to open when showing SettingsPage (e.g. 'integrity')
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
+  const [settingsAction, setSettingsAction] = useState<null | { type: 'hash-check' | 'generate'; fileType: '3mf' | 'stl' }>(null);
 
   // Load configuration and models on app startup
   useEffect(() => {
@@ -566,13 +574,17 @@ function AppContent() {
     setSelectedModelIds([]);
   };
 
-  const openSettingsOnTab = (tab: string) => {
+  const openSettingsOnTab = (tab: string, action?: { type: 'hash-check' | 'generate'; fileType: '3mf' | 'stl' }) => {
     setSettingsInitialTab(tab);
     setCurrentView('settings');
     setIsDrawerOpen(false);
     setIsSelectionMode(false);
     setSelectedModelIds([]);
+    if (action) setSettingsAction(action);
   };
+
+  // Header actions: trigger same backend endpoints as SettingsPage
+  // We'll trigger checks/generates by opening Settings -> File Integrity and passing an action
 
   const handleDemoClick = () => {
     setCurrentView('demo');
@@ -688,7 +700,9 @@ function AppContent() {
           <div className="flex items-center gap-2">
             {/* Responsive Button Group with Overflow Menu */}
             <div className="flex items-center gap-2">
-              {/* Refresh (visible when in models view) */}
+              {/* Refresh (visible when in models view) - moved into Actions dropdown
+                  The old standalone button is commented out below. */}
+              { /*
               {currentView === 'models' && (
                 <Button
                   variant="ghost"
@@ -701,67 +715,47 @@ function AppContent() {
                   <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </Button>
               )}
+              */ }
 
               {/* Theme toggle (always visible) */}
               <ThemeToggle />
 
-              {/* Settings button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => openSettingsOnTab('integrity')}
-                className="p-2 hover:bg-accent transition-colors hidden lg:block"
-                title="Settings"
-              >
-                <FileCog className="h-4 w-4" />
-              </Button>
+              {/* Quick File Actions dropdown (3MF/STL check/generate) */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="p-2 hover:bg-accent transition-colors" title="Actions">
+                    <Box className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => { handleRefreshModels(); }} disabled={isRefreshing}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'hash-check', fileType: '3mf' })}> 
+                    <FileCheck className="h-4 w-4 mr-2" /> 3MF Check
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'hash-check', fileType: 'stl' })}>
+                    <FileCheck className="h-4 w-4 mr-2" /> STL Check
+                  </DropdownMenuItem>                  
+                  <Separator className="mt-2 mb-2" />
+                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'generate', fileType: '3mf' })}>
+                    <Files className="h-4 w-4 mr-2" /> 3MF Generate
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'generate', fileType: 'stl' })}>
+                    <Files className="h-4 w-4 mr-2" /> STL Generate
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleDonationClick}
-                className="p-2 hover:bg-accent transition-colors hidden lg:block"
+                className="p-2 hover:bg-accent transition-colors"
                 title="Support the project"
               >
                 <Heart className="h-4 w-4" />
               </Button>
-
-              {/* Overflow menu for other actions on small screens (hidden on lg+ screens) */}
-              <div className="relative block lg:hidden">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="p-2 hover:bg-accent transition-colors"
-                  title="More actions"
-                  onClick={() => setShowOverflowMenu((prev) => !prev)}
-                >
-                  <Menu className="h-4 w-4" />
-                </Button>
-                {showOverflowMenu && (
-                  <div className="absolute right-0 mt-2 bg-card border rounded shadow-lg z-50 w-max">
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent text-left"
-                      onClick={() => { setShowOverflowMenu(false); openSettingsOnTab('integrity'); }}
-                    >
-                      File Integrity
-                    </button>
-
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent text-left"
-                      onClick={() => { setShowOverflowMenu(false); handleDonationClick(); }}
-                    >
-                      Support the project
-                    </button>
-
-                    {/* <button
-                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent text-left"
-                      onClick={() => { setShowOverflowMenu(false); handleDemoClick(); }}
-                    >
-                      <Palette className="h-4 w-4" /> UI Demo
-                    </button> */}
-                  </div>
-                )}
-              </div>
 
               {/* UI Demo button */}
               <div className="hidden">
@@ -806,6 +800,8 @@ function AppContent() {
               onModelClick={handleModelClick}
               onDonationClick={handleDonationClick}
               initialTab={settingsInitialTab}
+              settingsAction={settingsAction}
+              onActionHandled={() => setSettingsAction(null)}
             />
           ) : (
             <DemoPage onBack={handleBackToModels} />
