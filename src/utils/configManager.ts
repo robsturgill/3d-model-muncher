@@ -123,6 +123,8 @@ export class ConfigManager {
   static loadConfig(): AppConfig {
     const isNode = typeof window === 'undefined';
 
+    console.debug('[ConfigManager] loadConfig() called, isNode=', isNode);
+
     if (isNode) {
       try {
         // @ts-ignore
@@ -144,18 +146,22 @@ export class ConfigManager {
 
     try {
       const storedConfig = localStorage.getItem(STORAGE_KEY);
-      
+      console.debug('[ConfigManager] localStorage raw value for', STORAGE_KEY, storedConfig ? '(present)' : '(missing)');
+
       if (storedConfig) {
         try {
           const parsed = JSON.parse(storedConfig);
           const validatedConfig = this.validateConfig(parsed);
+          console.debug('[ConfigManager] loaded and validated config from localStorage, lastModified=', validatedConfig.lastModified);
           return validatedConfig;
         } catch (parseError) {
-          console.warn('Failed to parse stored config, using default:', parseError);
+          console.warn('[ConfigManager] Failed to parse stored config, resetting to default:', parseError);
           const defaultConfig = this.getDefaultConfig();
           this.saveConfig(defaultConfig); // Reset corrupt storage
           return defaultConfig;
         }
+      } else {
+        console.debug('[ConfigManager] No stored config found in localStorage');
       }
       
     } catch (error) {
@@ -174,7 +180,13 @@ export class ConfigManager {
       const validatedConfig = this.validateConfig(config);
 
       const jsonString = JSON.stringify(validatedConfig, null, 2);
-      localStorage.setItem(STORAGE_KEY, jsonString);
+      try {
+        console.debug('[ConfigManager] Saving config to localStorage, lastModified=', validatedConfig.lastModified);
+        localStorage.setItem(STORAGE_KEY, jsonString);
+      } catch (err) {
+        console.error('[ConfigManager] Failed to write to localStorage:', err);
+        throw err;
+      }
     } catch (error) {
       console.error('Failed to save config to localStorage:', error);
       throw error;

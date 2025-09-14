@@ -1,0 +1,59 @@
+{
+  "version": "1.0.0",
+  "categories": [
+    {
+      "id": "aaa",
+      "label": "aaa",
+      "icon": "Tag"
+    },
+    {
+      "id": "bbbb",
+      "label": "bbbb",
+      "icon": "Tag"
+    },
+    {
+      "id": "miniatures",
+      "label": "Miniatures",
+      "icon": "Package"
+    },
+    {
+      "id": "utility",
+      "label": "Utility",
+      "icon": "Wrench"
+    },
+    {
+      "id": "decorative",
+      "label": "Decorative",
+      "icon": "Flower"
+    },
+    {
+      "id": "games",
+      "label": "Games",
+      "icon": "Gamepad2"
+    },
+    {
+      "id": "props",
+      "label": "Props",
+      "icon": "Sword"
+    },
+    {
+      "id": "cccc",
+      "label": "cccc",
+      "icon": "Tag"
+    }
+  ],
+  "settings": {
+    "defaultTheme": "dark",
+    "defaultView": "list",
+    "defaultGridDensity": 2,
+    "defaultModelView": "images",
+    "autoSave": true,
+    "modelDirectory": "./models"
+  },
+  "filters": {
+    "defaultCategory": "all",
+    "defaultPrintStatus": "all",
+    "defaultLicense": "all"
+  },
+  "lastModified": "2025-09-14T14:48:23.603Z"
+}

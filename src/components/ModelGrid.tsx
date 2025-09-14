@@ -24,6 +24,27 @@ interface ModelGridProps {
 
 type ViewMode = 'grid' | 'list';
 
+const UI_PREFS_KEY = '3d-model-muncher-ui-prefs';
+
+function loadUiPrefs() {
+  try {
+    const raw = localStorage.getItem(UI_PREFS_KEY);
+    if (!raw) return {} as any;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn('[ModelGrid] Failed to load UI prefs:', err);
+    return {} as any;
+  }
+}
+
+function saveUiPrefs(prefs: any) {
+  try {
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify(prefs));
+  } catch (err) {
+    console.warn('[ModelGrid] Failed to save UI prefs:', err);
+  }
+}
+
 export function ModelGrid({ 
   models, 
   onModelClick, 
@@ -36,14 +57,20 @@ export function ModelGrid({
   onBulkEdit,
   onBulkDelete
 }: ModelGridProps) {
-  // Initialize from global config
+  // Initialize from UI prefs first, fall back to global config
   const config = ConfigManager.loadConfig();
+  const uiPrefs = loadUiPrefs();
+
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (uiPrefs && (uiPrefs.defaultView === 'grid' || uiPrefs.defaultView === 'list')) {
+      return uiPrefs.defaultView;
+    }
     // Initialize from config, default to grid if invalid
     return ['grid', 'list'].includes(config.settings.defaultView) ? config.settings.defaultView : 'grid';
   });
-  
+
   const [gridDensity, setGridDensity] = useState<number[]>(() => {
+    if (uiPrefs && typeof uiPrefs.defaultGridDensity === 'number') return [uiPrefs.defaultGridDensity];
     // Initialize from config, ensure it's within valid range
     const density = config.settings.defaultGridDensity;
     return [density >= 1 && density <= 6 ? density : 4];
@@ -52,26 +79,18 @@ export function ModelGrid({
   // Save settings when they change
   const handleViewModeChange = (newMode: ViewMode) => {
     setViewMode(newMode);
-    const currentConfig = ConfigManager.loadConfig();
-    ConfigManager.saveConfig({
-      ...currentConfig,
-      settings: {
-        ...currentConfig.settings,
-        defaultView: newMode
-      }
-    });
+    // Persist view mode in UI-only prefs (do not overwrite global app config)
+    const prefs = loadUiPrefs();
+    prefs.defaultView = newMode;
+    saveUiPrefs(prefs);
   };
 
   const handleGridDensityChange = (newDensity: number[]) => {
     setGridDensity(newDensity);
-    const currentConfig = ConfigManager.loadConfig();
-    ConfigManager.saveConfig({
-      ...currentConfig,
-      settings: {
-        ...currentConfig.settings,
-        defaultGridDensity: newDensity[0]
-      }
-    });
+    // Persist density in UI-only prefs (do not overwrite global app config)
+    const prefs = loadUiPrefs();
+    prefs.defaultGridDensity = newDensity[0];
+    saveUiPrefs(prefs);
   };
 
   // Map density slider value to grid classes

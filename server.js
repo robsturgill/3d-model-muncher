@@ -215,6 +215,50 @@ app.post('/api/scan-models', async (req, res) => {
   }
 });
 
+// API endpoint to save app configuration to data/config.json
+app.post('/api/save-config', (req, res) => {
+  try {
+    const config = req.body;
+    console.log('[server] POST /api/save-config called, incoming lastModified=', config && config.lastModified);
+    if (!config) {
+      return res.status(400).json({ success: false, error: 'No configuration provided' });
+    }
+
+    const dataDir = path.join(process.cwd(), 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    const configPath = path.join(dataDir, 'config.json');
+    // Ensure lastModified is updated on server-side save
+    const finalConfig = { ...config, lastModified: new Date().toISOString() };
+    fs.writeFileSync(configPath, JSON.stringify(finalConfig, null, 2), 'utf8');
+    console.log('[server] Saved configuration to', configPath, 'server lastModified=', finalConfig.lastModified);
+    res.json({ success: true, path: configPath, config: finalConfig });
+  } catch (err) {
+    console.error('Failed to save config to data/config.json:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API endpoint to load config.json from the data directory
+app.get('/api/load-config', (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), 'data', 'config.json');
+    if (!fs.existsSync(configPath)) {
+      return res.status(404).json({ success: false, error: 'No server-side config found' });
+    }
+
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    console.log('[server] GET /api/load-config served, server lastModified=', parsed.lastModified);
+    res.json({ success: true, config: parsed });
+  } catch (err) {
+    console.error('Failed to load config from data/config.json:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // API endpoint to regenerate munchie files for specific models
 app.post('/api/regenerate-munchie-files', async (req, res) => {
   try {

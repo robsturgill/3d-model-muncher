@@ -48,7 +48,8 @@ import {
   FileText,
   Clock,
   HardDrive,
-  RotateCcw
+  RotateCcw,
+  Plus
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -114,10 +115,43 @@ export function SettingsPage({
   };
 
   const [localCategories, setLocalCategories] = useState<Category[]>(categories);
+  // Start with the prop config if provided, otherwise fall back to ConfigManager (localStorage/defaults).
   const [localConfig, setLocalConfig] = useState<AppConfig>(() => {
     const initialConfig = config || ConfigManager.loadConfig();
     return initialConfig;
   });
+
+  // Ensure SettingsPage prioritizes server-side `data/config.json` when loading.
+  // This makes the Application settings reflect the canonical server config rather than a local-only value.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadServerConfig() {
+      try {
+        console.debug('[SettingsPage] fetching server config /api/load-config to initialize settings UI');
+        const resp = await fetch('/api/load-config');
+        if (!resp.ok) {
+          console.debug('[SettingsPage] /api/load-config not available, status=', resp.status);
+          return;
+        }
+        const data = await resp.json();
+        if (data && data.success && data.config) {
+          if (cancelled) return;
+          console.debug('[SettingsPage] loaded server config, lastModified=', data.config.lastModified);
+          setLocalConfig(data.config);
+          setLocalCategories(data.config.categories || []);
+          // don't call onConfigUpdate here automatically; leave to user Save actions
+        }
+      } catch (err) {
+        console.warn('[SettingsPage] failed to fetch server config:', err);
+      }
+    }
+
+    // Always attempt to load server config on mount to prefer it over stale localStorage
+    loadServerConfig();
+
+    return () => { cancelled = true; };
+  }, []);
 
   // Keep localConfig in sync with parent config prop
   useEffect(() => {
@@ -146,6 +180,9 @@ export function SettingsPage({
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isCategoryRenameDialogOpen, setIsCategoryRenameDialogOpen] = useState(false);
   const [renameCategoryValue, setRenameCategoryValue] = useState('');
+  // Add category state
+  const [isAddCategoryDialogOpen, setIsAddCategoryDialogOpen] = useState(false);
+  const [newCategoryLabel, setNewCategoryLabel] = useState('');
 
   const [hashCheckResult, setHashCheckResult] = useState<HashCheckResult | null>(null);
   const [isHashChecking, setIsHashChecking] = useState(false);
@@ -392,14 +429,95 @@ export function SettingsPage({
     handleSaveConfig(updatedConfig);
   };
 
+  const handleConfirmAddCategory = async () => {
+    const label = newCategoryLabel.trim();
+    if (!label) return;
+
+    setSaveStatus('saving');
+    setStatusMessage(`Adding category "${label}"...`);
+
+    // Generate ID: lowercase, words separated by underscores, strip special chars
+    let baseId = label
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '') // remove non-alphanumeric except spaces
+      .trim()
+      .replace(/\s+/g, '_');
+    let uniqueId = baseId;
+    let counter = 1;
+    while (localCategories.some(c => c.id === uniqueId)) {
+      uniqueId = `${baseId}_${counter}`;
+      counter++;
+    }
+
+  const newCat: Category = { id: uniqueId, label, icon: 'Tag' } as Category;
+    const updatedCategories = [...localCategories, newCat];
+    const updatedConfig: AppConfig = { ...localConfig, categories: updatedCategories };
+
+    try {
+      // Persist locally and server-side
+      await handleSaveConfig(updatedConfig);
+
+      // Update UI state after save
+      setLocalCategories(updatedCategories);
+      setLocalConfig(updatedConfig);
+      onCategoriesUpdate(updatedCategories);
+      onConfigUpdate?.(updatedConfig);
+
+      setSaveStatus('saved');
+      setStatusMessage(`Category "${label}" added`);
+      setIsAddCategoryDialogOpen(false);
+      setNewCategoryLabel('');
+    } catch (error) {
+      console.error('Failed to add category:', error);
+      setSaveStatus('error');
+      setStatusMessage('Failed to add category');
+    }
+
+    setTimeout(() => {
+      setSaveStatus('idle');
+      setStatusMessage('');
+    }, 2500);
+  };
+
   const handleSaveConfig = async (configToSave?: AppConfig) => {
     const config = configToSave || localConfig;
+    // Stamp lastModified locally before saving
+    config.lastModified = new Date().toISOString();
     setSaveStatus('saving');
     setStatusMessage('Saving configuration...');
     
     try {
+      // Save to localStorage via ConfigManager
       ConfigManager.saveConfig(config);
       onConfigUpdate?.(config);
+
+      // Additionally persist to server-side file in /data/config.json
+      try {
+        const resp = await fetch('/api/save-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        const result = await resp.json();
+        if (!resp.ok || !result.success) {
+          console.warn('Server-side config save failed:', result);
+        } else {
+          console.log('Server-side config saved to:', result.path);
+          // If server returned the canonical config (with lastModified), update local state
+          if (result.config) {
+            const serverConfig: AppConfig = result.config;
+            setLocalConfig(serverConfig);
+            setLocalCategories(serverConfig.categories || []);
+            onCategoriesUpdate(serverConfig.categories || []);
+            onConfigUpdate?.(serverConfig);
+            // Ensure localStorage matches server file
+            ConfigManager.saveConfig(serverConfig);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to POST config to server:', err);
+      }
+
       setSaveStatus('saved');
       setStatusMessage('Configuration saved successfully');
       
@@ -412,6 +530,55 @@ export function SettingsPage({
       setSaveStatus('error');
       setStatusMessage('Failed to save configuration');
       console.error('Save config error:', error);
+    }
+  };
+
+  // Load configuration from server-side data/config.json and apply it
+  const handleLoadServerConfig = async () => {
+    setSaveStatus('saving');
+    setStatusMessage('Loading configuration from server...');
+
+    try {
+      const resp = await fetch('/api/load-config');
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        throw new Error(data?.error || 'Failed to load server config');
+      }
+
+      const serverConfig: AppConfig = data.config;
+      // Clear local UI prefs and stored config to avoid local overrides
+      try {
+        console.debug('[SettingsPage] Clearing localStorage keys before applying server config');
+        localStorage.removeItem('3d-model-muncher-ui-prefs');
+        localStorage.removeItem('3d-model-muncher-config');
+      } catch (err) {
+        console.warn('[SettingsPage] Failed to clear localStorage keys:', err);
+      }
+
+      // Save server config to local storage so ConfigManager.loadConfig() will pick it up after reload
+      ConfigManager.saveConfig(serverConfig);
+
+      // Notify parent components and update local state
+      setLocalConfig(serverConfig);
+      setLocalCategories(serverConfig.categories || []);
+      onCategoriesUpdate(serverConfig.categories || []);
+      onConfigUpdate?.(serverConfig);
+
+      setSaveStatus('saved');
+      setStatusMessage('Configuration loaded from server — reloading app');
+
+      // Small delay so the user sees the message, then reload to apply
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    } catch (err) {
+      console.error('Load server config error:', err);
+      setSaveStatus('error');
+      setStatusMessage('Failed to load configuration from server');
+      setTimeout(() => {
+        setSaveStatus('idle');
+        setStatusMessage('');
+      }, 3000);
     }
   };
 
@@ -445,6 +612,8 @@ export function SettingsPage({
 
     try {
       const importedConfig = await ConfigManager.importConfig(file);
+      // Persist imported config to localStorage and server file
+      await handleSaveConfig(importedConfig);
       setLocalConfig(importedConfig);
       setLocalCategories(importedConfig.categories);
       onCategoriesUpdate(importedConfig.categories);
@@ -469,6 +638,8 @@ export function SettingsPage({
 
   const handleResetConfig = () => {
     const defaultConfig = ConfigManager.resetConfig();
+    // Persist reset config to server as well
+    handleSaveConfig(defaultConfig);
     setLocalConfig(defaultConfig);
     setLocalCategories(defaultConfig.categories);
     onCategoriesUpdate(defaultConfig.categories);
@@ -1306,75 +1477,88 @@ export function SettingsPage({
                       </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                  <Separator />
 
-              {/* Default Filters */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Default Filters</CardTitle>
-                  <CardDescription>Set default filter values when the app starts</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Default Category</Label>
-                      <Select 
-                        value={localConfig.filters.defaultCategory}
-                        onValueChange={(value: string) => handleConfigFieldChange('filters.defaultCategory', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Categories</SelectItem>
-                          {localCategories.map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  {/* Default Filters */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium">Default Filters</h3>
+                    <p className="text-sm text-muted-foreground">Set default filter values when the app starts</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Default Category</Label>
+                        <Select 
+                          value={localConfig.filters.defaultCategory}
+                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultCategory', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {localCategories.map((category) => (
+                              <SelectItem key={category.id} value={category.id}>
+                                {category.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Default Print Status</Label>
+                        <Select 
+                          value={localConfig.filters.defaultPrintStatus}
+                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultPrintStatus', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="printed">Printed</SelectItem>
+                            <SelectItem value="not-printed">Not Printed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Default License</Label>
+                        <Select 
+                          value={localConfig.filters.defaultLicense}
+                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultLicense', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Licenses</SelectItem>
+                            <SelectItem value="Creative Commons - Attribution">CC Attribution</SelectItem>
+                            <SelectItem value="Creative Commons - Attribution-ShareAlike">CC Attribution-ShareAlike</SelectItem>
+                            <SelectItem value="MIT License">MIT License</SelectItem>
+                            <SelectItem value="GNU GPL v3">GNU GPL v3</SelectItem>
+                            <SelectItem value="Apache License 2.0">Apache License 2.0</SelectItem>
+                            <SelectItem value="Public Domain">Public Domain</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+                  </div>                  
+                  <Separator />
 
-                    <div className="space-y-2">
-                      <Label>Default Print Status</Label>
-                      <Select 
-                        value={localConfig.filters.defaultPrintStatus}
-                        onValueChange={(value: string) => handleConfigFieldChange('filters.defaultPrintStatus', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Status</SelectItem>
-                          <SelectItem value="printed">Printed</SelectItem>
-                          <SelectItem value="not-printed">Not Printed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Default License</Label>
-                      <Select 
-                        value={localConfig.filters.defaultLicense}
-                        onValueChange={(value: string) => handleConfigFieldChange('filters.defaultLicense', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Licenses</SelectItem>
-                          <SelectItem value="Creative Commons - Attribution">CC Attribution</SelectItem>
-                          <SelectItem value="Creative Commons - Attribution-ShareAlike">CC Attribution-ShareAlike</SelectItem>
-                          <SelectItem value="MIT License">MIT License</SelectItem>
-                          <SelectItem value="GNU GPL v3">GNU GPL v3</SelectItem>
-                          <SelectItem value="Apache License 2.0">Apache License 2.0</SelectItem>
-                          <SelectItem value="Public Domain">Public Domain</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  {/* Add Load Configuration button to Application Settings (matches Configuration tab) */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium">Apply Server Configuration</h3>
+                    <p className="text-sm text-muted-foreground">Load the authoritative configuration from the server's <code>data/config.json</code>. This will clear local UI overrides.</p>
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" onClick={handleLoadServerConfig} className="gap-2">
+                        <Download className="h-4 w-4" />
+                        Load Configuration
+                      </Button>
                     </div>
                   </div>
+
+                
+
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1431,10 +1615,17 @@ export function SettingsPage({
                   </div>
                   
 
-                  <Button onClick={handleSaveCategories} className="gap-2">
-                    <Save className="h-4 w-4" />
-                    Save Category Order
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <Button onClick={handleSaveCategories} className="gap-2">
+                      <Save className="h-4 w-4" />
+                      Save Category Order
+                    </Button>
+
+                    <Button variant="secondary" onClick={() => setIsAddCategoryDialogOpen(true)} className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      Add Category
+                    </Button>
+                  </div>
 
                 </CardContent>
               </Card>
@@ -2198,10 +2389,17 @@ export function SettingsPage({
                     <p className="text-sm text-muted-foreground">
                       Save your current configuration manually. This is useful when auto-save is disabled.
                     </p>
-                    <Button onClick={() => handleSaveConfig()} className="gap-2">
-                      <Save className="h-4 w-4" />
-                      Save Configuration
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      <Button onClick={() => handleSaveConfig()} className="gap-2">
+                        <Save className="h-4 w-4" />
+                        Save Configuration
+                      </Button>
+
+                      <Button variant="outline" onClick={handleLoadServerConfig} className="gap-2">
+                        <Download className="h-4 w-4" />
+                        Load Configuration
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -2295,6 +2493,37 @@ export function SettingsPage({
                   disabled={!renameCategoryValue.trim() || renameCategoryValue === selectedCategory?.label}
                 >
                   Rename Category
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add Category Dialog */}
+          <Dialog open={isAddCategoryDialogOpen} onOpenChange={setIsAddCategoryDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Category</DialogTitle>
+                <DialogDescription>
+                  Create a new category. This will be saved to your configuration.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-category">Category name</Label>
+                  <Input
+                    id="new-category"
+                    value={newCategoryLabel}
+                    onChange={(e) => setNewCategoryLabel(e.target.value)}
+                    placeholder="Enter category name"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddCategoryDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmAddCategory} disabled={!newCategoryLabel.trim()}>
+                  Add Category
                 </Button>
               </DialogFooter>
             </DialogContent>

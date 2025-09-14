@@ -59,8 +59,47 @@ function AppContent() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const config = ConfigManager.loadConfig();
+        console.debug('[App] loadInitialData() - starting. Checking localStorage key before loading config');
 
+        let config: AppConfig | null = null;
+
+        try {
+          const stored = localStorage.getItem('3d-model-muncher-config');
+          console.debug('[App] localStorage check for 3d-model-muncher-config:', stored ? '(present)' : '(missing)');
+
+          if (stored) {
+            // If localStorage has a value, load and validate it
+            config = ConfigManager.loadConfig();
+          } else {
+            // No local config; attempt to fetch server-side config
+            try {
+              const resp = await fetch('/api/load-config');
+              if (resp.ok) {
+                const data = await resp.json();
+                if (data && data.success && data.config) {
+                  console.debug('[App] Loaded config from server /api/load-config, server lastModified=', data.config.lastModified);
+                  config = data.config;
+                  // Persist server config locally so subsequent loads use localStorage
+                  try { ConfigManager.saveConfig(data.config); } catch (e) { console.warn('[App] Failed to save server config to localStorage', e); }
+                }
+              } else {
+                console.debug('[App] /api/load-config responded with', resp.status);
+              }
+            } catch (e) {
+              console.warn('[App] Failed to fetch server config:', e);
+            }
+          }
+        } catch (e) {
+          console.warn('[App] Error while checking localStorage or fetching server config:', e);
+        }
+
+        // Fallback to default if still null
+        if (!config) {
+          console.debug('[App] No config found locally or on server; using default config');
+          config = ConfigManager.getDefaultConfig();
+        }
+
+        console.debug('[App] Initial config chosen, lastModified=', config.lastModified);
         setAppConfig(config);
         setCategories(config.categories);
 
@@ -477,6 +516,12 @@ function AppContent() {
       if (updatedConfig.settings.autoSave) {
         try {
           ConfigManager.saveConfig(updatedConfig);
+          // Also attempt to persist to server-side file
+          fetch('/api/save-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedConfig)
+          }).then(r => r.ok || console.warn('Server config save failed', r.statusText)).catch(err => console.warn('Server save-config error:', err));
         } catch (error) {
           console.error('Failed to auto-save config:', error);
         }
@@ -488,6 +533,12 @@ function AppContent() {
     try {
       // Save to localStorage first
       ConfigManager.saveConfig(updatedConfig);
+      // Also persist to server-side file
+      fetch('/api/save-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedConfig)
+      }).then(r => r.ok || console.warn('Server config save failed', r.statusText)).catch(err => console.warn('Server save-config error:', err));
       // Then update state
       setAppConfig(updatedConfig);
       setCategories(updatedConfig.categories);
