@@ -60,6 +60,10 @@ jobs:
             echo "no_tag=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Set up Docker Buildx
+        if: ${{ steps.get_tag.outputs.no_tag == 'false' }}
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to Docker Hub
         if: ${{ steps.get_tag.outputs.no_tag == 'false' }}
         uses: docker/login-action@v3
@@ -79,5 +83,3 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
