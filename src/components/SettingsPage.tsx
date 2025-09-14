@@ -219,6 +219,8 @@ export function SettingsPage({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
+  // Track the active status toast id so we can update loading -> success/error
+  const statusToastId = useRef<string | number | null>(null);
 
   // State for backup and restore functionality
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
@@ -272,23 +274,37 @@ export function SettingsPage({
     }
   }, [selectedTab]);
 
-  // Show status messages as toast notifications (instead of only the inline alert)
+  // Show status messages as toast notifications (using sonner's richer API)
   useEffect(() => {
     if (!statusMessage || saveStatus === 'idle') return;
 
     try {
       if (saveStatus === 'saving') {
-        // show a persistent-ish toast for saving actions
-        toast(statusMessage, { description: '', duration: 8000 });
+        // Start or replace a loading toast
+        if (statusToastId.current) {
+          // update existing loading toast message by dismissing and creating a new one
+          try { toast.dismiss(statusToastId.current); } catch {}
+        }
+        statusToastId.current = toast.loading(statusMessage);
       } else if (saveStatus === 'saved') {
-        toast(statusMessage, { description: '' });
+        if (statusToastId.current) {
+          toast.success(statusMessage, { id: statusToastId.current });
+        } else {
+          toast.success(statusMessage);
+        }
+        statusToastId.current = null;
         // clear the inline status after showing success
         setTimeout(() => {
           setSaveStatus('idle');
           setStatusMessage('');
         }, 3000);
       } else if (saveStatus === 'error') {
-        toast(statusMessage, { description: '' });
+        if (statusToastId.current) {
+          toast.error(statusMessage, { id: statusToastId.current });
+        } else {
+          toast.error(statusMessage);
+        }
+        statusToastId.current = null;
         // keep the inline error for a short while then clear
         setTimeout(() => {
           setSaveStatus('idle');
