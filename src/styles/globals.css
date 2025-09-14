@@ -231,3 +231,10 @@ html {
   background-color: var(--card-foreground);
   opacity: 0.4;
 }
+
+
+@media (width >= 64rem) {
+  .lg\:block {
+      display: block;
+  }
+}

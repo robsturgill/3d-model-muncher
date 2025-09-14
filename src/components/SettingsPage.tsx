@@ -86,6 +86,8 @@ interface SettingsPageProps {
   onModelsUpdate: (models: Model[]) => void;
   onModelClick?: (model: Model) => void;
   onDonationClick?: () => void;
+  // Optional initial tab to open when the settings page mounts
+  initialTab?: string;
 }
 
 interface TagInfo {
@@ -104,6 +106,7 @@ export function SettingsPage({
   onModelsUpdate,
   onModelClick,
   onDonationClick
+  , initialTab
 }: SettingsPageProps) {
   // Helper function to get a clean file path for display
   const getDisplayPath = (model: Model) => {
@@ -174,7 +177,15 @@ export function SettingsPage({
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameTagValue, setRenameTagValue] = useState('');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
-  const [selectedTab, setSelectedTab] = useState('general');
+  // Allow parent to control which tab is opened initially (e.g. "integrity")
+  const [selectedTab, setSelectedTab] = useState<string>(initialTab ?? 'general');
+
+  // If the parent changes initialTab while the page is mounted, respect it
+  useEffect(() => {
+    if (initialTab) {
+      setSelectedTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Category editing state
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
