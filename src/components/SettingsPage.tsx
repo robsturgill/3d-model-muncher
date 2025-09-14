@@ -211,6 +211,8 @@ export function SettingsPage({
     loadCorruptedModels();
   }, [hashCheckResult?.corruptedFiles]);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
+  // Track which duplicate group's dialog is open (store group.hash or null)
+  const [openDuplicateGroupHash, setOpenDuplicateGroupHash] = useState<string | null>(null);
 
   // File type selection state - "3mf" or "stl" only
   const [selectedFileType, setSelectedFileType] = useState<"3mf" | "stl">("3mf");
@@ -878,7 +880,7 @@ export function SettingsPage({
       });
   };
 
-  const handleRemoveDuplicates = async (group: DuplicateGroup, keepModelId: string) => {
+  const handleRemoveDuplicates = async (group: DuplicateGroup, keepModelId: string): Promise<boolean> => {
     // Find models to remove (all except the one to keep)
     const modelsToRemove = group.models.filter(model => model.id !== keepModelId);
     // Collect model files and their corresponding munchie.json files
@@ -901,11 +903,11 @@ export function SettingsPage({
     if (filesToDelete.length === 0) {
       setSaveStatus('error');
       setStatusMessage('No files to delete.');
-      return;
+      return false;
     }
     setSaveStatus('saving');
     setStatusMessage('Deleting duplicate files...');
-    try {
+  try {
       const resp = await fetch('/api/delete-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -915,7 +917,7 @@ export function SettingsPage({
       if (!data.success) {
         setSaveStatus('error');
         setStatusMessage('Failed to delete some files: ' + (data.errors?.map((e: { file: string }) => e.file).join(', ') || 'Unknown error'));
-        return;
+        return false;
       }
       // Remove from UI
       const updatedModels = removeDuplicates(models, group, keepModelId);
@@ -930,10 +932,12 @@ export function SettingsPage({
         setSaveStatus('idle');
         setStatusMessage('');
       }, 3000);
+      return true;
     } catch (error) {
       setSaveStatus('error');
       setStatusMessage('Failed to delete files.');
       console.error('Delete files error:', error);
+      return false;
     }
   };
 
@@ -1897,12 +1901,13 @@ export function SettingsPage({
                                 <span className="text-sm text-blue-600 dark:text-blue-400">
                                   {group.models.length} copies - {group.totalSize} total
                                 </span>
-                                <Dialog>
+                                <Dialog open={openDuplicateGroupHash === group.hash} onOpenChange={(open: boolean) => setOpenDuplicateGroupHash(open ? group.hash : null)}>
                                   <DialogTrigger asChild>
                                     <Button
                                       variant="outline"
                                       size="sm"
                                       className="gap-2"
+                                      onClick={() => setOpenDuplicateGroupHash(group.hash)}
                                     >
                                       <Trash2 className="h-4 w-4" />
                                       Remove Duplicates
@@ -1936,7 +1941,13 @@ export function SettingsPage({
                                           <Button
                                             variant="secondary"
                                             size="sm"
-                                            onClick={() => handleRemoveDuplicates(group, model.id)}
+                                            onClick={async () => {
+                                              const success = await handleRemoveDuplicates(group, model.id);
+                                              if (success) {
+                                                // Close the dialog for this group
+                                                setOpenDuplicateGroupHash(null);
+                                              }
+                                            }}
                                           >
                                             Keep This
                                           </Button>
