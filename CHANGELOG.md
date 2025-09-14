@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-09-14
+
+### Fixed
+- Fixed Docker build versioning issues with semantic-release dependencies
+- Added missing @semantic-release/changelog and @semantic-release/git plugins
+- Corrected package version dependencies for Docker production builds
+
 ## [0.4.0] - 2025-09-13
 
 ### Added
