@@ -29,7 +29,6 @@ import {
   Save, 
   FolderOpen,
   Settings as SettingsIcon,
-  CheckCircle,
   AlertCircle,
   Tag,
   Edit2,
@@ -51,6 +50,7 @@ import {
   HardDrive,
   RotateCcw
 } from "lucide-react";
+import { toast } from "sonner";
 
 // Icon component for model thumbnails
 const ModelThumbnail = ({ thumbnail, name }: { thumbnail: string | null | undefined; name: string }) => {
@@ -271,6 +271,34 @@ export function SettingsPage({
       setGenerateResult(null);
     }
   }, [selectedTab]);
+
+  // Show status messages as toast notifications (instead of only the inline alert)
+  useEffect(() => {
+    if (!statusMessage || saveStatus === 'idle') return;
+
+    try {
+      if (saveStatus === 'saving') {
+        // show a persistent-ish toast for saving actions
+        toast(statusMessage, { description: '', duration: 8000 });
+      } else if (saveStatus === 'saved') {
+        toast(statusMessage, { description: '' });
+        // clear the inline status after showing success
+        setTimeout(() => {
+          setSaveStatus('idle');
+          setStatusMessage('');
+        }, 3000);
+      } else if (saveStatus === 'error') {
+        toast(statusMessage, { description: '' });
+        // keep the inline error for a short while then clear
+        setTimeout(() => {
+          setSaveStatus('idle');
+          setStatusMessage('');
+        }, 5000);
+      }
+    } catch (err) {
+      console.error('Toast error:', err);
+    }
+  }, [saveStatus, statusMessage]);
 
   // Get all unique tags with their usage information
   const getAllTags = (): TagInfo[] => {
@@ -1118,24 +1146,15 @@ export function SettingsPage({
           </div>
 
           {/* Status Alert */}
-          {saveStatus !== 'idle' && statusMessage && (
-            <Alert className={`${
-              saveStatus === 'saved' ? 'border-green-500 bg-green-50 dark:bg-green-950' : 
-              saveStatus === 'error' ? 'border-red-500 bg-red-50 dark:bg-red-950' : 
-              'border-blue-500 bg-blue-50 dark:bg-blue-950'
-            }`}>
-              {saveStatus === 'saved' && <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />}
-              {saveStatus === 'error' && <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />}
-              {saveStatus === 'saving' && <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />}
-              <AlertDescription className={`${
-                saveStatus === 'saved' ? 'text-green-700 dark:text-green-300' : 
-                saveStatus === 'error' ? 'text-red-700 dark:text-red-300' : 
-                'text-blue-700 dark:text-blue-300'
-              }`}>
-                {statusMessage}
-              </AlertDescription>
-            </Alert>
-          )}
+            {/* Inline status alert: only show inline for errors. Other statuses are shown as toasts. */}
+            {saveStatus === 'error' && statusMessage && (
+              <Alert className={`border-red-500 bg-red-50 dark:bg-red-950`}>
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                <AlertDescription className={`text-red-700 dark:text-red-300`}>
+                  {statusMessage}
+                </AlertDescription>
+              </Alert>
+            )}
 
           {/* Settings Tabs */}
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
