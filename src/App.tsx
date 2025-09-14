@@ -146,6 +146,11 @@ function AppContent() {
     setSelectedModelIds([]);
   };
 
+  const exitSelectionMode = () => {
+    setSelectedModelIds([]);
+    setIsSelectionMode(false);
+  };
+
   const getSelectedModels = (): Model[] => {
     return models.filter(model => selectedModelIds.includes(model.id));
   };
@@ -708,6 +713,8 @@ function AppContent() {
           isOpen={isBulkEditOpen}
           onClose={() => setIsBulkEditOpen(false)}
           onBulkUpdate={handleBulkUpdateModels}
+          onRefresh={handleRefreshModels}
+          onClearSelections={exitSelectionMode}
           categories={categories}
         />
       )}

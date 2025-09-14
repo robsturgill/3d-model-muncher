@@ -39,6 +39,7 @@ import {
   Eye,
   Clock,
   Weight,
+  RefreshCw,
 } from "lucide-react";
 
 interface BulkEditDrawerProps {
@@ -46,6 +47,8 @@ interface BulkEditDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onBulkUpdate: (updates: Partial<Model>) => void;
+  onRefresh?: () => Promise<void>;
+  onClearSelections?: () => void;
   categories: Category[];
 }
 
@@ -76,6 +79,7 @@ interface FieldSelection {
   price: boolean;
   printTime: boolean;
   filamentUsed: boolean;
+  regenerateMunchie: boolean;
 }
 
 export function BulkEditDrawer({
@@ -83,6 +87,8 @@ export function BulkEditDrawer({
   isOpen,
   onClose,
   onBulkUpdate,
+  onRefresh,
+  onClearSelections,
   categories,
 }: BulkEditDrawerProps) {
   const [editState, setEditState] = useState<BulkEditState>({});
@@ -98,6 +104,7 @@ export function BulkEditDrawer({
       price: false,
       printTime: false,
       filamentUsed: false,
+      regenerateMunchie: false,
     });
   const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -202,6 +209,7 @@ export function BulkEditDrawer({
         price: false,
         printTime: false,
         filamentUsed: false,
+        regenerateMunchie: false,
       });
       setNewTag("");
     }
@@ -213,11 +221,11 @@ export function BulkEditDrawer({
       [field]: !prev[field],
     }));
 
-    // Clear the field value if unchecked
-    if (fieldSelection[field]) {
+    // Clear the field value if unchecked (except for regenerateMunchie which is an action, not a value)
+    if (fieldSelection[field] && field !== 'regenerateMunchie') {
       setEditState((prev) => {
         const newState = { ...prev };
-        delete newState[field];
+        delete (newState as any)[field];
         return newState;
       });
     }
@@ -409,6 +417,44 @@ export function BulkEditDrawer({
         (updates as any).bulkTagChanges = editState.tags;
       }
 
+      // Handle regenerate munchie files first if selected
+      if (fieldSelection.regenerateMunchie) {
+        try {
+          const modelIds = models.map(model => model.id);
+          const response = await fetch('/api/regenerate-munchie-files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelIds })
+          });
+          
+          const result = await response.json();
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to regenerate munchie files');
+          }
+          
+          console.log(`Regenerated ${result.processed} munchie files`);
+          
+          // Refresh model data after regeneration
+          if (onRefresh) {
+            await onRefresh();
+          }
+          
+          // Clear selections after regeneration
+          if (onClearSelections) {
+            onClearSelections();
+          }
+          
+          // If regeneration was the only action, close and return
+          if (Object.keys(updates).length === 0) {
+            onClose();
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to regenerate munchie files:', error);
+          throw error; // Re-throw to be caught by outer try-catch
+        }
+      }
+
       // Update UI state
       onBulkUpdate(updates);
 
@@ -488,6 +534,16 @@ export function BulkEditDrawer({
 
         // Save to file
         await saveModelToFile(updatedModel, model);
+      }
+
+      // If regeneration was part of the operation, refresh models
+      if (fieldSelection.regenerateMunchie && onRefresh) {
+        await onRefresh();
+      }
+
+      // Clear selections if regeneration was involved
+      if (fieldSelection.regenerateMunchie && onClearSelections) {
+        onClearSelections();
       }
 
       // Close the drawer after successful save
@@ -1063,6 +1119,35 @@ export function BulkEditDrawer({
                     Current: {commonValues.filamentUsed}
                   </p>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* Regenerate Munchie Field */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="regenerate-munchie-field"
+                checked={fieldSelection.regenerateMunchie}
+                onCheckedChange={() =>
+                  handleFieldToggle("regenerateMunchie")
+                }
+              />
+              <Label
+                htmlFor="regenerate-munchie-field"
+                className="font-medium flex items-center gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Regenerate Munchie Files
+              </Label>
+            </div>
+
+            {fieldSelection.regenerateMunchie && (
+              <div className="ml-6 space-y-2">
+                <p className="text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <strong>Warning:</strong> This will re-parse the 3MF/STL files and regenerate metadata.
+                  Your custom notes, tags, category, and other user data will be preserved.
+                </p>
               </div>
             )}
           </div>

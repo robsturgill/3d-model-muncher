@@ -215,6 +215,139 @@ app.post('/api/scan-models', async (req, res) => {
   }
 });
 
+// API endpoint to regenerate munchie files for specific models
+app.post('/api/regenerate-munchie-files', async (req, res) => {
+  try {
+    const { modelIds } = req.body;
+    
+    if (!Array.isArray(modelIds) || modelIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'No model IDs provided' });
+    }
+
+    const modelsDir = getAbsoluteModelsPath();
+    const { parse3MF, parseSTL, computeMD5 } = require('./dist-backend/utils/threeMFToJson');
+    let processed = 0;
+    let errors = [];
+
+    // Get all models to find the ones we need to regenerate
+    let allModels = [];
+    
+    function scanForModels(directory) {
+      const entries = fs.readdirSync(directory, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        
+        if (entry.isDirectory()) {
+          scanForModels(fullPath);
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+          try {
+            const fileContent = fs.readFileSync(fullPath, 'utf8');
+            const model = JSON.parse(fileContent);
+            const relativePath = path.relative(modelsDir, fullPath);
+            
+            // Set the correct filePath based on model type
+            if (entry.name.endsWith('-stl-munchie.json')) {
+              model.filePath = relativePath.replace('-stl-munchie.json', '.stl');
+              model.jsonPath = fullPath;
+            } else {
+              model.filePath = relativePath.replace('-munchie.json', '.3mf');
+              model.jsonPath = fullPath;
+            }
+            
+            allModels.push(model);
+          } catch (error) {
+            console.error(`Error reading model file ${fullPath}:`, error);
+          }
+        }
+      }
+    }
+    
+    scanForModels(modelsDir);
+
+    for (const modelId of modelIds) {
+      const model = allModels.find(m => m.id === modelId);
+      
+      if (!model) {
+        errors.push({ modelId, error: 'Model not found' });
+        continue;
+      }
+
+      try {
+        // Get the actual model file path
+        const modelFilePath = path.join(modelsDir, model.filePath);
+        
+        if (!fs.existsSync(modelFilePath)) {
+          errors.push({ modelId, error: 'Model file not found' });
+          continue;
+        }
+
+        // Backup user data before regenerating
+        const currentData = JSON.parse(fs.readFileSync(model.jsonPath, 'utf8'));
+        const userDataBackup = {
+          tags: currentData.tags || [],
+          isPrinted: currentData.isPrinted || false,
+          printTime: currentData.printTime || "",
+          filamentUsed: currentData.filamentUsed || "",
+          category: currentData.category || "",
+          notes: currentData.notes || "",
+          license: currentData.license || "",
+          hidden: currentData.hidden || false,
+          source: currentData.source || "",
+          price: currentData.price || 0
+        };
+
+        // Generate new metadata
+        let newMetadata;
+        const buffer = fs.readFileSync(modelFilePath);
+        const hash = computeMD5(buffer);
+        
+        if (model.filePath.toLowerCase().endsWith('.3mf')) {
+          newMetadata = await parse3MF(modelFilePath, model.id, hash);
+        } else if (model.filePath.toLowerCase().endsWith('.stl')) {
+          newMetadata = await parseSTL(modelFilePath, model.id, hash);
+        } else {
+          errors.push({ modelId, error: 'Unsupported file type' });
+          continue;
+        }
+
+        // Merge with user data
+        const mergedMetadata = {
+          ...newMetadata,
+          ...userDataBackup,
+          id: model.id, // Preserve the original ID
+          hash: hash
+        };
+
+        // Write the regenerated file
+        fs.writeFileSync(model.jsonPath, JSON.stringify(mergedMetadata, null, 2), 'utf8');
+        processed++;
+        
+        console.log(`Regenerated munchie file for model: ${model.name}`);
+        
+      } catch (error) {
+        console.error(`Error regenerating munchie file for model ${modelId}:`, error);
+        errors.push({ modelId, error: error.message });
+      }
+    }
+
+    res.json({
+      success: errors.length === 0,
+      processed,
+      errors,
+      message: `Regenerated ${processed} munchie files${errors.length > 0 ? ` with ${errors.length} errors` : ''}`
+    });
+
+  } catch (error) {
+    console.error('Munchie file regeneration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to regenerate munchie files.', 
+      error: error.message 
+    });
+  }
+});
+
 // --- API: Get all -munchie.json files and their hashes ---
 
 // --- API: Get all -munchie.json files and their hashes ---
