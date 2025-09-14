@@ -1,3 +1,10 @@
+## [0.5.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.5.1...v0.5.2) (2025-09-14)
+
+
+### Bug Fixes
+
+* docker workflows to streamline build and push steps ([ef26a66](https://github.com/robsturgill/3d-model-muncher/commit/ef26a66396bdcae76cadc2f0f80a50f2e191631c))
+
 ## [0.5.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.5.0...v0.5.1) (2025-09-14)
 
 
