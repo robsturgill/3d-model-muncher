@@ -1,3 +1,11 @@
+## [0.5.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.5.0...v0.5.1) (2025-09-14)
+
+
+### Bug Fixes
+
+* enhance and streamline image build process ([abfed43](https://github.com/robsturgill/3d-model-muncher/commit/abfed43c0308035a85543ba81b23402be08d36eb))
+* update .gitignore for data dir and removed testing config ([139f26b](https://github.com/robsturgill/3d-model-muncher/commit/139f26bfe5909595fbad921a3b176da94ba4db50))
+
 # [0.5.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.4.2...v0.5.0) (2025-09-14)
 
 
