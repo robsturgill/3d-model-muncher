@@ -146,6 +146,11 @@ function AppContent() {
     setSelectedModelIds([]);
   };
 
+  const exitSelectionMode = () => {
+    setSelectedModelIds([]);
+    setIsSelectionMode(false);
+  };
+
   const getSelectedModels = (): Model[] => {
     return models.filter(model => selectedModelIds.includes(model.id));
   };
@@ -173,9 +178,10 @@ function AppContent() {
   };
 
   const handleBulkDelete = async () => {
+    console.debug('Bulk delete confirmed, current selection:', selectedModelIds);
     if (selectedModelIds.length === 0) {
       toast("No models selected", {
-        description: "Please select models first before deleting"
+        description: `Please select models first before deleting. (current: ${selectedModelIds.join(',') || 'none'})`
       });
       return;
     }
@@ -186,11 +192,13 @@ function AppContent() {
     try {
       const fileTypes = ['json']; // Always delete munchie.json files
       if (includeThreeMfFiles) {
-        fileTypes.push('3mf'); // Only add 3mf if checkbox is checked
+        // When the checkbox is checked, delete the 3D model files in addition to metadata
+        fileTypes.push('3mf'); // add .3mf
+        fileTypes.push('stl'); // add .stl
       }
 
       const fileTypeText = includeThreeMfFiles 
-        ? 'munchie.json and .3mf files' 
+        ? 'munchie.json, .3mf and .stl files' 
         : 'munchie.json files';
       
       toast("Deleting model files...", {
@@ -222,12 +230,13 @@ function AppContent() {
         const successfullyDeletedIds = selectedModelIds.filter(modelId => {
           const model = models.find(m => m.id === modelId);
           if (!model) return false;
-          
-          // Check if this model's files were actually deleted
+
+          // Consider the model deleted if any of the requested file types for this bulk
+          // deletion were actually removed for the model (e.g. 'json', '3mf', 'stl').
           const modelDeleted = deleteResult.deleted?.some((item: any) => 
-            item.modelId === modelId && item.type === '3mf'
+            item.modelId === modelId && fileTypes.includes(item.type)
           );
-          
+
           return modelDeleted;
         });
 
@@ -260,6 +269,12 @@ function AppContent() {
           toast(`${errorCount} models could not be deleted`, {
             description: "Check console for details"
           });
+        }
+        // After processing deletion results, refresh model metadata to ensure UI shows latest state
+        try {
+          await handleRefreshModels();
+        } catch (err) {
+          console.error('Failed to refresh models after deletion:', err);
         }
       } else {
         throw new Error(deleteResult.error || 'Unknown deletion error');
@@ -698,6 +713,8 @@ function AppContent() {
           isOpen={isBulkEditOpen}
           onClose={() => setIsBulkEditOpen(false)}
           onBulkUpdate={handleBulkUpdateModels}
+          onRefresh={handleRefreshModels}
+          onClearSelections={exitSelectionMode}
           categories={categories}
         />
       )}
@@ -716,23 +733,23 @@ function AppContent() {
             <AlertDialogDescription>
               Are you sure you want to delete {selectedModelIds.length} model{selectedModelIds.length !== 1 ? 's' : ''}? 
               <br /><br />
-              <div className="space-y-3 my-4 mb-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="include-3mf"
-                    checked={includeThreeMfFiles}
-                    onCheckedChange={setIncludeThreeMfFiles}
-                  />
-                  <label 
-                    htmlFor="include-3mf" 
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    Include .3mf files (3D model files) when deleting
-                  </label>
-                </div>
-              </div>
               <strong>This action cannot be undone.</strong>
             </AlertDialogDescription>
+            <div className="space-y-3 my-4 mb-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="include-3mf"
+                  checked={includeThreeMfFiles}
+                  onCheckedChange={(v) => setIncludeThreeMfFiles(Boolean(v))}
+                />
+                <label 
+                  htmlFor="include-3mf" 
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Include .3mf and .stl files (3D model files) when deleting
+                </label>
+              </div>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

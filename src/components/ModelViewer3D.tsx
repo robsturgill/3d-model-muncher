@@ -1,11 +1,9 @@
-import { useRef, useState, Suspense, memo, useMemo, useEffect, useCallback } from "react";
+import { useRef, useState, Suspense, memo, useMemo, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
-// Fix JSX types for three.js objects
 import '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment, Center, Bounds } from "@react-three/drei";
-import * as THREE from "three";
 import { Button } from "./ui/button";
-import { RotateCcw, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, RotateCw, Palette } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import { ThreeJSManager, disposeWebGLContext } from "../utils/threeJSManager";
 import { ModelMesh } from "./ModelMesh";
@@ -18,17 +16,18 @@ interface ModelViewer3DProps {
 
 // Memoized scene component
 
-const Scene = memo(({ modelUrl, isWireframe }: { modelUrl?: string; isWireframe?: boolean }) => {
+const Scene = memo(({ modelUrl, isWireframe, autoRotate, materialType, customColor }: { modelUrl?: string; isWireframe?: boolean; autoRotate?: boolean; materialType?: 'standard' | 'normal'; customColor?: string }) => {
   return (
     <>
-      <PerspectiveCamera makeDefault position={[3, 3, 3]} fov={50} />
+      <PerspectiveCamera makeDefault position={[-66, 79, 83]} rotation={[-0.76, -0.52, -0.44]} fov={20} />
       <OrbitControls
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
         minDistance={2}
         maxDistance={500}
-        autoRotate={true}
+        autoRotate={autoRotate ?? false}
+        autoRotateSpeed={2.0}
       />
       {/* Lighting */}
       <ambientLight intensity={0.4} />
@@ -43,17 +42,19 @@ const Scene = memo(({ modelUrl, isWireframe }: { modelUrl?: string; isWireframe?
             <Center>
               <ModelMesh 
                 modelUrl={modelUrl} 
-                isWireframe={isWireframe} 
+                isWireframe={isWireframe}
+                materialType={materialType}
+                customColor={customColor}
               />
             </Center>
           </Bounds>
         ) : null}
       </Suspense>
-      {/* Ground plane */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
-        <planeGeometry args={[10, 10]} />
+      {/* Ground plane - commented out to hide */}
+      {/* <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
+        <planeGeometry args={[200, 200]} />
         <meshStandardMaterial color="#888888" transparent opacity={0.2} />
-      </mesh>
+      </mesh> */}
     </>
   );
 });
@@ -63,11 +64,16 @@ Scene.displayName = "Scene";
 
 export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
+  const [autoRotate, setAutoRotate] = useState(false);
+  const [materialType, setMaterialType] = useState<'standard' | 'normal'>('standard');
+  const [customColor, setCustomColor] = useState<string | undefined>(undefined);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDestroyed, setIsDestroyed] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const instanceId = useRef(`viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const [isRegistered, setIsRegistered] = useState(false);
+
+  const is3MF = modelUrl?.toLowerCase().endsWith('.3mf');
 
   // Reset states when component unmounts or model changes
   useEffect(() => {
@@ -162,13 +168,23 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
             ref={canvasRef}
             {...canvasConfig}
           >
-            <Scene modelUrl={modelUrl} isWireframe={isWireframe} />
+            <Scene modelUrl={modelUrl} isWireframe={isWireframe} autoRotate={autoRotate} materialType={materialType} customColor={customColor} />
           </Canvas>
         </Suspense>
       </div>
 
       {/* Controls */}
       <div className="absolute top-3 right-3 flex gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => !isDestroyed && setAutoRotate(!autoRotate)}
+          className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+          disabled={isDestroyed}
+          aria-label={autoRotate ? "Stop auto-rotation" : "Start auto-rotation"}
+        >
+          <RotateCw className={`h-4 w-4 ${autoRotate ? 'text-primary animate-spin' : ''}`} />
+        </Button>
         <Button
           variant="secondary"
           size="sm"
@@ -179,17 +195,29 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
         >
           {isWireframe ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => { /* Bounds will auto-fit on model change */ }}
-          className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
-          disabled={isDestroyed}
-          aria-label="Reset camera position"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
+        {!is3MF && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => !isDestroyed && setMaterialType(materialType === 'standard' ? 'normal' : 'standard')}
+            className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+            disabled={isDestroyed}
+            aria-label={materialType === 'standard' ? "Switch to normal material" : "Switch to standard material"}
+          >
+            <Palette className="h-4 w-4" />
+          </Button>
+        )}
       </div>
+
+      {/* Color picker for models */}
+      <input
+        type="color"
+        value={customColor || '#aaaaaa'}
+        onChange={(e) => setCustomColor(e.target.value)}
+        className="w-8 h-8 rounded border border-border bg-background/90 backdrop-blur-sm"
+        disabled={isDestroyed}
+        title="Pick custom color for model"
+      />
 
       {/* Instructions */}
       <div className="mt-3 text-center">

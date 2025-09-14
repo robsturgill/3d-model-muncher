@@ -17,6 +17,7 @@ import { AspectRatio } from "./ui/aspect-ratio";
 import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
+import { ImageWithFallback } from "./ImageWithFallback";
 import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign } from "lucide-react";
 import { Download } from "lucide-react";
 
@@ -369,10 +370,13 @@ export function ModelDetailsDrawer({
     // Ensure filePath is present for saving - convert to JSON file path
     let jsonFilePath;
     if (model.filePath) {
-      // Convert from .3mf path to -munchie.json path
+      // Convert from .3mf/.stl path to -munchie.json path
       if (model.filePath.endsWith('.3mf')) {
         jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
-      } else if (model.filePath.endsWith('-munchie.json')) {
+      } else if (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL')) {
+        // Handle both lowercase and uppercase STL extensions
+        jsonFilePath = model.filePath.replace(/\.stl$/i, '-stl-munchie.json');
+      } else if (model.filePath.endsWith('-munchie.json') || model.filePath.endsWith('-stl-munchie.json')) {
         // Already a JSON path, use as-is
         jsonFilePath = model.filePath;
       } else {
@@ -382,10 +386,13 @@ export function ModelDetailsDrawer({
     } else if (model.modelUrl) {
       // Construct the path based on the modelUrl to match the actual JSON file location
       let relativePath = model.modelUrl.replace('/models/', '');
-      // Replace .3mf extension with -munchie.json
+      // Replace .3mf/.stl extension with appropriate -munchie.json
       if (relativePath.endsWith('.3mf')) {
         relativePath = relativePath.replace('.3mf', '-munchie.json');
-      } else if (relativePath.endsWith('-munchie.json')) {
+      } else if (relativePath.endsWith('.stl') || relativePath.endsWith('.STL')) {
+        // Handle both lowercase and uppercase STL extensions
+        relativePath = relativePath.replace(/\.stl$/i, '-stl-munchie.json');
+      } else if (relativePath.endsWith('-munchie.json') || relativePath.endsWith('-stl-munchie.json')) {
         // Already a JSON path, use as-is
         relativePath = relativePath;
       } else {
@@ -528,17 +535,19 @@ export function ModelDetailsDrawer({
   // Download handler for model file
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Determine default extension based on modelUrl if available
+    const defaultExtension = currentModel.modelUrl?.endsWith('.stl') ? '.stl' : '.3mf';
     // Prefer filePath, fallback to modelUrl or name
       let fileName = currentModel.filePath
-        ? currentModel.filePath.split(/[/\\]/).pop() || `${currentModel.name}.3mf`
-        : currentModel.modelUrl?.replace('/models/', '') || `${currentModel.name}.3mf`;
+        ? currentModel.filePath.split(/[/\\]/).pop() || `${currentModel.name}${defaultExtension}`
+        : currentModel.modelUrl?.replace('/models/', '') || `${currentModel.name}${defaultExtension}`;
     let filePath = currentModel.filePath
       ? `/models/${fileName}`
       : currentModel.modelUrl || `/models/${fileName}`;
     // Create a temporary link and trigger download
     const link = document.createElement('a');
     link.href = filePath;
-      link.download = fileName || "model.3mf";
+      link.download = fileName || `model${defaultExtension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -683,7 +692,7 @@ export function ModelDetailsDrawer({
                         <div className="relative w-full flex items-center justify-center">
                           {/* dark background for transparent images */}
                           <div className="absolute inset-0 bg-gradient-dark rounded-lg" aria-hidden />
-                          <img src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className="relative max-w-full max-h-full object-contain rounded-lg" />
+                          <ImageWithFallback src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className="relative max-w-full max-h-full object-contain rounded-lg" />
 
                           {allImages.length > 1 && (
                             <>
@@ -707,7 +716,7 @@ export function ModelDetailsDrawer({
                   ) : (
                     <div>
                       <AspectRatio ratio={16 / 10} className={`bg-muted`}>
-                        <img src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className={`w-full h-full object-cover rounded-lg`} />
+                        <ImageWithFallback src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className={`w-full h-full object-cover rounded-lg`} />
 
                         {allImages.length > 1 && (
                           <>
@@ -765,7 +774,7 @@ export function ModelDetailsDrawer({
                               }}
                               className={`relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${isImageSelected(index) ? 'opacity-60 ring-2 ring-destructive scale-95' : index === selectedImageIndex ? 'border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50 hover:scale-102'} ${dragOverIndex === index ? 'ring-2 ring-primary/60' : ''}`}
                             >
-                              <img src={image} alt={`${currentModel.name} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                              <ImageWithFallback src={image} alt={`${currentModel.name} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
                               {isImageSelected(index) && (
                                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-semibold">
                                   Remove

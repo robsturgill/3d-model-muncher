@@ -110,7 +110,7 @@ app.get('/api/models', async (req, res) => {
           // Recursively scan subdirectories
           console.log(`Scanning subdirectory: ${fullPath}`);
           scanForModels(fullPath);
-        } else if (entry.name.endsWith('-munchie.json')) {
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
           // Load and parse each munchie file
           console.log(`Found munchie file: ${fullPath}`);
           try {
@@ -118,13 +118,68 @@ app.get('/api/models', async (req, res) => {
             const model = JSON.parse(fileContent);
             // Add relative path information for proper URL construction
             const relativePath = path.relative(absolutePath, fullPath);
-            model.modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
             
-            // Set the filePath property for deletion purposes
-            model.filePath = relativePath.replace('-munchie.json', '.3mf');
-            
-            console.log(`Added model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
-            models.push(model);
+            // Handle both 3MF and STL file types
+            let modelUrl, filePath;
+            if (entry.name.endsWith('-stl-munchie.json')) {
+              // STL file - check if corresponding .stl file exists
+              // Only process files with proper naming format: [name]-stl-munchie.json
+              const fileName = entry.name;
+              
+              // Skip files with malformed names (e.g., containing duplicate suffixes)
+              if (fileName.includes('-stl-munchie.json_')) {
+                console.log(`Skipping malformed STL JSON file: ${fullPath}`);
+              } else {
+                const baseFilePath = relativePath.replace('-stl-munchie.json', '');
+                // Try both .stl and .STL extensions
+                let stlFilePath = baseFilePath + '.stl';
+                let absoluteStlPath = path.join(absolutePath, stlFilePath);
+                
+                if (!fs.existsSync(absoluteStlPath)) {
+                  // Try uppercase extension
+                  stlFilePath = baseFilePath + '.STL';
+                  absoluteStlPath = path.join(absolutePath, stlFilePath);
+                }
+                
+                if (fs.existsSync(absoluteStlPath)) {
+                  modelUrl = '/models/' + stlFilePath.replace(/\\/g, '/');
+                  filePath = stlFilePath;
+                  
+                  model.modelUrl = modelUrl;
+                  model.filePath = filePath;
+                  
+                  console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
+                  models.push(model);
+                } else {
+                  console.log(`Skipping ${fullPath} - corresponding .stl/.STL file not found`);
+                }
+              }
+            } else {
+              // 3MF file - check if corresponding .3mf file exists
+              // Only process files with proper naming format: [name]-munchie.json
+              const fileName = entry.name;
+              
+              // Skip files with malformed names
+              if (fileName.includes('-munchie.json_')) {
+                console.log(`Skipping malformed 3MF JSON file: ${fullPath}`);
+              } else {
+                const threeMfFilePath = relativePath.replace('-munchie.json', '.3mf');
+                const absoluteThreeMfPath = path.join(absolutePath, threeMfFilePath);
+                
+                if (fs.existsSync(absoluteThreeMfPath)) {
+                  modelUrl = '/models/' + threeMfFilePath.replace(/\\/g, '/');
+                  filePath = threeMfFilePath;
+                  
+                  model.modelUrl = modelUrl;
+                  model.filePath = filePath;
+                  
+                  console.log(`Added 3MF model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
+                  models.push(model);
+                } else {
+                  console.log(`Skipping ${fullPath} - corresponding .3mf file not found at ${absoluteThreeMfPath}`);
+                }
+              }
+            }
           } catch (error) {
             console.error(`Error reading model file ${fullPath}:`, error);
           }
@@ -145,12 +200,151 @@ app.get('/api/models', async (req, res) => {
 // API endpoint to trigger model directory scan and JSON generation
 app.post('/api/scan-models', async (req, res) => {
   try {
+    const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const dir = getModelsDirectory();
-    await scanDirectory(dir);
-    res.json({ success: true, message: 'Model JSON files generated successfully.' });
+    const result = await scanDirectory(dir, fileType);
+    res.json({ 
+      success: true, 
+      message: 'Model JSON files generated successfully.',
+      processed: result.processed,
+      skipped: result.skipped
+    });
   } catch (error) {
     console.error('Model JSON generation error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate model JSON files.', error: error.message });
+  }
+});
+
+// API endpoint to regenerate munchie files for specific models
+app.post('/api/regenerate-munchie-files', async (req, res) => {
+  try {
+    const { modelIds } = req.body;
+    
+    if (!Array.isArray(modelIds) || modelIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'No model IDs provided' });
+    }
+
+    const modelsDir = getAbsoluteModelsPath();
+    const { parse3MF, parseSTL, computeMD5 } = require('./dist-backend/utils/threeMFToJson');
+    let processed = 0;
+    let errors = [];
+
+    // Get all models to find the ones we need to regenerate
+    let allModels = [];
+    
+    function scanForModels(directory) {
+      const entries = fs.readdirSync(directory, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        
+        if (entry.isDirectory()) {
+          scanForModels(fullPath);
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+          try {
+            const fileContent = fs.readFileSync(fullPath, 'utf8');
+            const model = JSON.parse(fileContent);
+            const relativePath = path.relative(modelsDir, fullPath);
+            
+            // Set the correct filePath based on model type
+            if (entry.name.endsWith('-stl-munchie.json')) {
+              model.filePath = relativePath.replace('-stl-munchie.json', '.stl');
+              model.jsonPath = fullPath;
+            } else {
+              model.filePath = relativePath.replace('-munchie.json', '.3mf');
+              model.jsonPath = fullPath;
+            }
+            
+            allModels.push(model);
+          } catch (error) {
+            console.error(`Error reading model file ${fullPath}:`, error);
+          }
+        }
+      }
+    }
+    
+    scanForModels(modelsDir);
+
+    for (const modelId of modelIds) {
+      const model = allModels.find(m => m.id === modelId);
+      
+      if (!model) {
+        errors.push({ modelId, error: 'Model not found' });
+        continue;
+      }
+
+      try {
+        // Get the actual model file path
+        const modelFilePath = path.join(modelsDir, model.filePath);
+        
+        if (!fs.existsSync(modelFilePath)) {
+          errors.push({ modelId, error: 'Model file not found' });
+          continue;
+        }
+
+        // Backup user data before regenerating
+        const currentData = JSON.parse(fs.readFileSync(model.jsonPath, 'utf8'));
+        const userDataBackup = {
+          tags: currentData.tags || [],
+          isPrinted: currentData.isPrinted || false,
+          printTime: currentData.printTime || "",
+          filamentUsed: currentData.filamentUsed || "",
+          category: currentData.category || "",
+          notes: currentData.notes || "",
+          license: currentData.license || "",
+          hidden: currentData.hidden || false,
+          source: currentData.source || "",
+          price: currentData.price || 0
+        };
+
+        // Generate new metadata
+        let newMetadata;
+        const buffer = fs.readFileSync(modelFilePath);
+        const hash = computeMD5(buffer);
+        
+        if (model.filePath.toLowerCase().endsWith('.3mf')) {
+          newMetadata = await parse3MF(modelFilePath, model.id, hash);
+        } else if (model.filePath.toLowerCase().endsWith('.stl')) {
+          newMetadata = await parseSTL(modelFilePath, model.id, hash);
+        } else {
+          errors.push({ modelId, error: 'Unsupported file type' });
+          continue;
+        }
+
+        // Merge with user data
+        const mergedMetadata = {
+          ...newMetadata,
+          ...userDataBackup,
+          id: model.id, // Preserve the original ID
+          hash: hash
+        };
+
+        // Write the regenerated file
+        fs.writeFileSync(model.jsonPath, JSON.stringify(mergedMetadata, null, 2), 'utf8');
+        processed++;
+        
+        console.log(`Regenerated munchie file for model: ${model.name}`);
+        
+      } catch (error) {
+        console.error(`Error regenerating munchie file for model ${modelId}:`, error);
+        errors.push({ modelId, error: error.message });
+      }
+    }
+
+    res.json({
+      success: errors.length === 0,
+      processed,
+      errors,
+      message: `Regenerated ${processed} munchie files${errors.length > 0 ? ` with ${errors.length} errors` : ''}`
+    });
+
+  } catch (error) {
+    console.error('Munchie file regeneration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to regenerate munchie files.', 
+      error: error.message 
+    });
   }
 });
 
@@ -199,8 +393,9 @@ app.get('/api/munchie-files', (req, res) => {
 });
 
 // --- API: Hash check for all .3mf files and their -munchie.json ---
-app.get('/api/hash-check', async (req, res) => {
+app.post('/api/hash-check', async (req, res) => {
   try {
+    const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const modelsDir = getAbsoluteModelsPath();
     const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
     let result = [];
@@ -218,14 +413,29 @@ app.get('/api/hash-check', async (req, res) => {
           scanDirectory(fullPath);
         } else {
           const relativePath = path.relative(modelsDir, fullPath);
-          if (relativePath.toLowerCase().endsWith('.3mf')) {
-            const base = relativePath.replace(/\.3mf$/i, '');
-            modelMap[base] = modelMap[base] || {};
-            modelMap[base].threeMF = relativePath;
-          } else if (relativePath.toLowerCase().endsWith('-munchie.json')) {
-            const base = relativePath.replace(/-munchie\.json$/i, '');
-            modelMap[base] = modelMap[base] || {};
-            modelMap[base].json = relativePath;
+          
+          if (fileType === "3mf") {
+            // Only process 3MF files and their JSON companions
+            if (relativePath.toLowerCase().endsWith('.3mf')) {
+              const base = relativePath.replace(/\.3mf$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].threeMF = relativePath;
+            } else if (relativePath.toLowerCase().endsWith('-munchie.json')) {
+              const base = relativePath.replace(/-munchie\.json$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].json = relativePath;
+            }
+          } else if (fileType === "stl") {
+            // Only process STL files and their JSON companions
+            if (relativePath.toLowerCase().endsWith('.stl')) {
+              const base = relativePath.replace(/\.stl$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].stl = relativePath;
+            } else if (relativePath.toLowerCase().endsWith('-stl-munchie.json')) {
+              const base = relativePath.replace(/-stl-munchie\.json$/i, '');
+              modelMap[base] = modelMap[base] || {};
+              modelMap[base].json = relativePath;
+            }
           }
         }
       }
@@ -234,55 +444,75 @@ app.get('/api/hash-check', async (req, res) => {
     // Start recursive scan
     scanDirectory(modelsDir);
 
-    // Process all found models
+    // Clean up the modelMap to only include entries that have the expected file type
+    const cleanedModelMap = {};
     for (const base in modelMap) {
       const entry = modelMap[base];
+      if (fileType === "3mf" && entry.threeMF) {
+        // Only include 3MF entries when in 3MF mode
+        cleanedModelMap[base] = entry;
+      } else if (fileType === "stl" && entry.stl) {
+        // Only include STL entries when in STL mode
+        cleanedModelMap[base] = entry;
+      }
+    }
+
+    // Process all found models
+    for (const base in cleanedModelMap) {
+      const entry = cleanedModelMap[base];
       const threeMFPath = entry.threeMF ? path.join(modelsDir, entry.threeMF) : null;
+      const stlPath = entry.stl ? path.join(modelsDir, entry.stl) : null;
       const jsonPath = entry.json ? path.join(modelsDir, entry.json) : null;
+      const modelPath = threeMFPath || stlPath; // Prefer 3MF, but use STL if no 3MF
       let status = 'ok';
       let details = '';
       let hash = null;
       let storedHash = null;
 
-      if (!threeMFPath) {
-        status = 'missing-3mf';
-        details = 'Missing .3mf file';
+      if (!modelPath) {
+        status = 'missing-model';
+        const fileExtension = fileType === "3mf" ? ".3mf" : ".stl";
+        details = `Missing ${fileExtension} file`;
       } else if (!jsonPath) {
         status = 'missing-json';
         details = 'Missing -munchie.json file';
-      } else {
-        try {
-          hash = computeMD5(threeMFPath);
-          const json = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-          storedHash = json.hash;
-          if (!storedHash) {
-            status = 'missing-hash';
-            details = 'No hash in JSON';
-          } else if (hash !== storedHash) {
-            status = 'hash-mismatch';
-            details = `Hash mismatch: .3mf=${hash}, json=${storedHash}`;
-          }
-        } catch (e) {
-          status = 'error';
-          details = e.message;
-        }
-      }
-
-      // Check for duplicate hashes
-      if (hash) {
-        if (seenHashes.has(hash)) {
-          status = 'duplicate-hash';
-          details = 'Duplicate hash found for another file';
-          hashToFiles[hash].push(base);
         } else {
-          seenHashes.add(hash);
-          hashToFiles[hash] = [base];
+          try {
+            hash = computeMD5(modelPath);
+            const jsonContent = fs.readFileSync(jsonPath, 'utf8');
+            if (jsonContent.trim().length === 0) {
+              status = 'empty-json';
+              details = 'Empty JSON file';
+            } else {
+              const json = JSON.parse(jsonContent);
+              storedHash = json.hash;
+              if (!storedHash) {
+                status = 'missing-hash';
+                details = 'No hash in JSON';
+              } else if (hash !== storedHash) {
+                status = 'hash-mismatch';
+                details = `Hash mismatch: model=${hash}, json=${storedHash}`;
+              }
+            }
+          } catch (e) {
+            status = 'error';
+            details = e.message;
+          }
         }
-      }
+        
+        // Store hash for duplicate checking (but don't change status for duplicates)
+        if (hash) {
+          if (hashToFiles[hash]) {
+            hashToFiles[hash].push(base);
+          } else {
+            hashToFiles[hash] = [base];
+          }
+        }
 
       result.push({
         baseName: base,
         threeMF: entry.threeMF || null,
+        stl: entry.stl || null,
         json: entry.json || null,
         hash,
         storedHash,
@@ -309,12 +539,14 @@ app.get('/api/hash-check', async (req, res) => {
 app.get('/api/load-model', async (req, res) => {
   try {
     const { filePath } = req.query;
+    console.log('Load model request for:', filePath);
     if (!filePath || typeof filePath !== 'string') {
       return res.status(400).json({ success: false, error: 'Missing file path' });
     }
 
     // Resolve the path relative to the application root
     const fullPath = path.resolve(filePath);
+    console.log('Resolved path:', fullPath);
 
     // Ensure the path is within the models directory for security
     const modelsDir = path.resolve(getModelsDirectory());
@@ -324,11 +556,26 @@ app.get('/api/load-model', async (req, res) => {
 
     // Check if file exists
     if (!fs.existsSync(fullPath)) {
+      console.log('File not found:', fullPath);
       return res.status(404).json({ success: false, error: 'File not found' });
     }
 
+    // Validate that we're only loading JSON files
+    if (!fullPath.toLowerCase().endsWith('.json')) {
+      console.log('Attempt to load non-JSON file as model data:', fullPath);
+      return res.status(400).json({ success: false, error: 'Only JSON files can be loaded as model data' });
+    }
+
+    // Read the file content first to check if it's valid
+    const fileContent = fs.readFileSync(fullPath, 'utf8');
+    console.log('File content length:', fileContent.length);
+    if (fileContent.trim().length === 0) {
+      console.log('Empty file detected:', fullPath);
+      return res.status(400).json({ success: false, error: 'Empty file' });
+    }
+
     // Read and parse the JSON file
-    const modelData = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+    const modelData = JSON.parse(fileContent);
     res.json(modelData);
   } catch (error) {
     console.error('Error loading model:', error);
@@ -459,8 +706,41 @@ app.delete('/api/models/delete', async (req, res) => {
     let deleted = [];
     let errors = [];
 
-    // First, we need to get the current models to find their file paths
-    const allModels = await getAllModels(modelsDir);
+    // Scan for all models (both 3MF and STL) using the same logic as the main API
+    let allModels = [];
+    
+    function scanForModels(directory) {
+      const entries = fs.readdirSync(directory, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        
+        if (entry.isDirectory()) {
+          scanForModels(fullPath);
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+          try {
+            const fileContent = fs.readFileSync(fullPath, 'utf8');
+            const model = JSON.parse(fileContent);
+            const relativePath = path.relative(modelsDir, fullPath);
+            
+            // Set the correct filePath based on model type
+            if (entry.name.endsWith('-stl-munchie.json')) {
+              // STL model
+              model.filePath = relativePath.replace('-stl-munchie.json', '.stl');
+            } else {
+              // 3MF model
+              model.filePath = relativePath.replace('-munchie.json', '.3mf');
+            }
+            
+            allModels.push(model);
+          } catch (error) {
+            console.error(`Error reading model file ${fullPath}:`, error);
+          }
+        }
+      }
+    }
+    
+    scanForModels(modelsDir);
     
     for (const modelId of modelIds) {
       const model = allModels.find(m => m.id === modelId);
@@ -483,21 +763,37 @@ app.delete('/api/models/delete', async (req, res) => {
         continue;
       }
       
-      // Add the .3mf file only if requested
-      if (typesToDelete.includes('3mf')) {
+      // Add the .3mf file only if requested and model is a 3MF model
+      if (typesToDelete.includes('3mf') && model.filePath.endsWith('.3mf')) {
         const threeMfPath = path.isAbsolute(model.filePath) 
           ? model.filePath 
           : path.join(modelsDir, model.filePath);
         filesToDelete.push({ type: '3mf', path: threeMfPath });
       }
       
+      // Add the .stl file only if requested and model is an STL model
+      if (typesToDelete.includes('stl') && (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL'))) {
+        const stlPath = path.isAbsolute(model.filePath) 
+          ? model.filePath 
+          : path.join(modelsDir, model.filePath);
+        filesToDelete.push({ type: 'stl', path: stlPath });
+      }
+      
       // Add the corresponding munchie.json file only if requested
       if (typesToDelete.includes('json')) {
-        const jsonFileName = model.filePath.replace(/\.3mf$/i, '-munchie.json');
-        const jsonPath = path.isAbsolute(jsonFileName)
-          ? jsonFileName
-          : path.join(modelsDir, jsonFileName);
-        filesToDelete.push({ type: 'json', path: jsonPath });
+        let jsonFileName;
+        if (model.filePath.endsWith('.3mf')) {
+          jsonFileName = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+        } else if (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL')) {
+          jsonFileName = model.filePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\.STL$/i, '-stl-munchie.json');
+        }
+        
+        if (jsonFileName) {
+          const jsonPath = path.isAbsolute(jsonFileName)
+            ? jsonFileName
+            : path.join(modelsDir, jsonFileName);
+          filesToDelete.push({ type: 'json', path: jsonPath });
+        }
       }
 
       console.log(`Files to delete for ${modelId}:`, filesToDelete);

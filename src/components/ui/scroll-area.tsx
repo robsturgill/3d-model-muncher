@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area@1.2.3";
+import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 
 import { cn } from "./utils";
 
@@ -15,7 +15,7 @@ function ScrollArea({
   showVerticalScrollbar = true,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
-  viewportRef?: React.RefObject<HTMLDivElement>;
+  viewportRef?: React.RefObject<HTMLDivElement | null>;
   showHorizontalScrollbar?: boolean;
   showVerticalScrollbar?: boolean;
 }) {

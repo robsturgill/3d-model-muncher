@@ -50,7 +50,7 @@ export function scanModelFile(model: Model): Promise<Partial<Model>> {
       }
       if (fs.existsSync(filePath)) {
         // Use the real parse3MF function
-        const metadata = realParse3MF(filePath, Number(model.id) || 1);
+        const metadata = realParse3MF(filePath, String(model.id || '1'));
         resolve({
           ...metadata,
           lastScanned: new Date().toISOString(),

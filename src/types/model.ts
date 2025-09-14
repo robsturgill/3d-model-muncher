@@ -48,6 +48,7 @@ export interface CorruptedFile {
 export interface HashCheckResult {
   verified: number;
   corrupted: number;
+  skipped?: number;
   duplicateGroups: DuplicateGroup[];
   corruptedFiles: CorruptedFile[];
   corruptedFileDetails: CorruptedFile[];

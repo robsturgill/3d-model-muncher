@@ -47,12 +47,12 @@ export function computeMD5(input: string | Buffer | Uint8Array): string {
   return crypto.createHash('md5').update(buffer).digest('hex');
 }
 
-export async function parse3MF(filePath: string, id: number): Promise<ModelMetadata> {
+export async function parse3MF(filePath: string, id: string, precomputedHash?: string): Promise<ModelMetadata> {
   const buffer = fs.readFileSync(filePath);
   const size = fs.statSync(filePath).size;
 
   const metadata: ModelMetadata = {
-    id: id.toString(),
+    id: id,
     name: "", // Will be set from metadata or fallback to filename
     thumbnail: "",
     images: [],
@@ -229,7 +229,7 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
     }
 
     // ---- MD5 HASH ----
-    metadata.hash = computeMD5(buffer);
+    metadata.hash = precomputedHash || computeMD5(buffer);
 
     // ---- THUMBNAIL SELECTION ----
     if (unzipped["Metadata/plate_1.png"]) {
@@ -255,47 +255,128 @@ export async function parse3MF(filePath: string, id: number): Promise<ModelMetad
 }
 
 
-export async function scanDirectory(dir: string): Promise<void> {
-  let idCounter = 1;
+export async function parseSTL(filePath: string, id: string, precomputedHash?: string): Promise<ModelMetadata> {
+  const buffer = fs.readFileSync(filePath);
+  const size = fs.statSync(filePath).size;
 
-  async function recurse(currentDir: string) {
+  const metadata: ModelMetadata = {
+    id: id,
+    name: "", // Will be set from filename
+    thumbnail: "",
+    images: [],
+    tags: [],
+    isPrinted: false,
+    printTime: "",
+    filamentUsed: "",
+    category: "",
+    description: "",
+    fileSize: bytesToMB(size),
+    modelUrl: "",
+    license: "",
+    notes: "",
+    hash: precomputedHash || computeMD5(buffer),
+    printSettings: {
+      layerHeight: "",
+      infill: "",
+      nozzle: ""
+    },
+    price: 0
+  };
+
+  // Use filename as name for STL files
+  const fileName = path.basename(filePath, '.stl');
+  metadata.name = fileName;
+  
+  // Set the model URL (relative to models directory)
+  const relativePath = path.relative(process.cwd(), filePath);
+  metadata.modelUrl = "/" + relativePath.replace(/\\/g, "/");
+
+  return metadata;
+}
+
+// Generate a unique ID based on file path and content hash
+function generateUniqueId(filePath: string, hash?: string): string {
+  // Use the relative path from the models directory, normalize separators
+  const relativePath = path.relative(process.cwd(), filePath);
+  const normalizedPath = relativePath.replace(/[\/\\]/g, '-').replace(/\.(3mf|stl)$/i, '');
+  
+  // Clean the path to be safe for IDs (remove special characters)
+  const cleanPath = normalizedPath.replace(/[^a-zA-Z0-9\-_]/g, '-');
+  
+  // If we have a hash, use the first 8 characters for uniqueness
+  const hashSuffix = hash ? `-${hash.substring(0, 8)}` : '';
+  
+  // Create a unique ID combining path and hash
+  return `${cleanPath}${hashSuffix}`;
+}
+
+export async function scanDirectory(dir: string, fileType: "3mf" | "stl" = "3mf"): Promise<{ processed: number; skipped: number; }> {
+
+  async function recurse(currentDir: string): Promise<{ processed: number; skipped: number; }> {
     console.log(`Scanning: ${currentDir}`);
 
     const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    let localProcessed = 0;
+    let localSkipped = 0;
 
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
 
       if (entry.isDirectory()) {
-        recurse(fullPath);
+        const subResult = await recurse(fullPath);
+        localProcessed += subResult.processed;
+        localSkipped += subResult.skipped;
       } else if (entry.isFile()) {
-        if (entry.name.endsWith(".3mf")) {
-          console.log(`Parsing 3MF: ${fullPath}`);
-          const metadata = await parse3MF(fullPath, idCounter++);
+        if (fileType === "3mf" && entry.name.endsWith(".3mf")) {
           const outPath = fullPath.replace(/\.3mf$/, "-munchie.json");
-
-          // If munchie.json exists, preserve tags, isPrinted, category, notes, price
+          
+          // Skip parsing if munchie.json already exists
           if (fs.existsSync(outPath)) {
-            try {
-              const existing = JSON.parse(fs.readFileSync(outPath, "utf-8"));
-              if (Array.isArray(existing.tags)) metadata.tags = existing.tags;
-              if (typeof existing.isPrinted === "boolean") metadata.isPrinted = existing.isPrinted;
-              if (typeof existing.category === "string") metadata.category = existing.category;
-              if (typeof existing.notes === "string") metadata.notes = existing.notes;
-              if (typeof existing.price === "number") metadata.price = existing.price;
-            } catch (e) {
-              console.warn(`Could not preserve fields from ${outPath}:`, e);
-            }
+            console.log(`⏭️ Skipping 3MF (JSON exists): ${fullPath}`);
+            localSkipped++;
+            continue;
           }
+
+          console.log(`Parsing 3MF: ${fullPath}`);
+          // Generate hash first to create unique ID
+          const buffer = fs.readFileSync(fullPath);
+          const hash = computeMD5(buffer);
+          const uniqueId = generateUniqueId(fullPath, hash);
+          const metadata = await parse3MF(fullPath, uniqueId, hash);
 
           fs.writeFileSync(outPath, JSON.stringify(metadata, null, 2), "utf-8");
           console.log(`✅ Created JSON for: ${outPath}`);
+          localProcessed++;
+        } else if (fileType === "stl" && entry.name.toLowerCase().endsWith(".stl")) {
+          // For STL files, include the extension in the munchie.json filename to avoid conflicts
+          const outPath = fullPath.replace(/\.stl$/i, "-stl-munchie.json");
+          
+          // Skip parsing if munchie.json already exists
+          if (fs.existsSync(outPath)) {
+            console.log(`⏭️ Skipping STL (JSON exists): ${fullPath}`);
+            localSkipped++;
+            continue;
+          }
+
+          console.log(`Parsing STL: ${fullPath}`);
+          // Generate hash first to create unique ID
+          const buffer = fs.readFileSync(fullPath);
+          const hash = computeMD5(buffer);
+          const uniqueId = generateUniqueId(fullPath, hash);
+          const metadata = await parseSTL(fullPath, uniqueId, hash);
+
+          fs.writeFileSync(outPath, JSON.stringify(metadata, null, 2), "utf-8");
+          console.log(`✅ Created JSON for STL: ${outPath}`);
+          localProcessed++;
         }
       }
     }
+
+    return { processed: localProcessed, skipped: localSkipped };
   }
 
-  recurse(dir);
+  const result = await recurse(dir);
+  return result;
 }
 
 // To use: import { scanDirectory } and call it when needed (e.g., on button click)
