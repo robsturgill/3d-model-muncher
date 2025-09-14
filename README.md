@@ -6,7 +6,7 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 
 ## Features
 
-- **3D Model Viewer**: Built-in Three.js viewer for .3mf files with automatic thumbnails
+- **3D Model Viewer**: Built-in Three.js viewer for .3mf & .stl files with automatic thumbnails
 - **Model Management**: Organize, categorize, and track print status
 - **Advanced Search & Filtering**: Search by name, tags, category, print status, and license
 - **Automatic Scanning**: Auto-generate metadata JSON files from 3MF files
@@ -18,7 +18,7 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 
 ## Usage
 
-1. **Add Models**: Place `.3mf` files in the `models/` directory
+1. **Add Models**: Place `.3mf` or `.stl` files in the `models/` directory
 2. **Scan Models**: Use the scan feature to generate JSON metadata files
 3. **Browse & Search**: Filter by category, tags, print status, or license
 4. **3D Preview**: Click models to view in the built-in Three.js viewer
@@ -84,13 +84,13 @@ docker-compose up -d
 - `GET /api/models` - Get all model metadata
 - `POST /api/save-model` - Save model changes
 - `POST /api/scan-models` - Scan models directory
-- `GET /api/validate-3mf` - Validate 3MF file integrity
+- `GET /api/validate-3mf` - Validate 3MF & STL file integrity
 - `POST /api/delete-models` - Delete models and files
-- `GET /models/*` - Static model files (3MF, images, etc.)
+- `GET /models/*` - Static model files (3MF, STL, images, etc.)
 
 ## File Structure
 
-Each 3MF file gets a corresponding `-munchie.json` metadata file containing extracted information like thumbnails, print settings, and user-defined tags. The system uses MD5 hashing for duplicate detection and preserves user data during rescans.
+Each 3MF/STL file gets a corresponding `-munchie.json` metadata file containing extracted information like thumbnails, print settings, and user-defined tags. The system uses MD5 hashing for duplicate detection and preserves user data during rescans.
 
 ## Troubleshooting
 
