@@ -127,7 +127,7 @@ app.get('/api/models', async (req, res) => {
               const fileName = entry.name;
               
               // Skip files with malformed names (e.g., containing duplicate suffixes)
-              if (fileName.includes('-stl-munchie.json_') || fileName.includes('.stl_')) {
+              if (fileName.includes('-stl-munchie.json_')) {
                 console.log(`Skipping malformed STL JSON file: ${fullPath}`);
               } else {
                 const baseFilePath = relativePath.replace('-stl-munchie.json', '');
@@ -160,7 +160,7 @@ app.get('/api/models', async (req, res) => {
               const fileName = entry.name;
               
               // Skip files with malformed names
-              if (fileName.includes('-munchie.json_') || fileName.includes('.3mf_')) {
+              if (fileName.includes('-munchie.json_')) {
                 console.log(`Skipping malformed 3MF JSON file: ${fullPath}`);
               } else {
                 const threeMfFilePath = relativePath.replace('-munchie.json', '.3mf');
@@ -573,8 +573,41 @@ app.delete('/api/models/delete', async (req, res) => {
     let deleted = [];
     let errors = [];
 
-    // First, we need to get the current models to find their file paths
-    const allModels = await getAllModels(modelsDir);
+    // Scan for all models (both 3MF and STL) using the same logic as the main API
+    let allModels = [];
+    
+    function scanForModels(directory) {
+      const entries = fs.readdirSync(directory, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        
+        if (entry.isDirectory()) {
+          scanForModels(fullPath);
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+          try {
+            const fileContent = fs.readFileSync(fullPath, 'utf8');
+            const model = JSON.parse(fileContent);
+            const relativePath = path.relative(modelsDir, fullPath);
+            
+            // Set the correct filePath based on model type
+            if (entry.name.endsWith('-stl-munchie.json')) {
+              // STL model
+              model.filePath = relativePath.replace('-stl-munchie.json', '.stl');
+            } else {
+              // 3MF model
+              model.filePath = relativePath.replace('-munchie.json', '.3mf');
+            }
+            
+            allModels.push(model);
+          } catch (error) {
+            console.error(`Error reading model file ${fullPath}:`, error);
+          }
+        }
+      }
+    }
+    
+    scanForModels(modelsDir);
     
     for (const modelId of modelIds) {
       const model = allModels.find(m => m.id === modelId);
@@ -597,21 +630,37 @@ app.delete('/api/models/delete', async (req, res) => {
         continue;
       }
       
-      // Add the .3mf file only if requested
-      if (typesToDelete.includes('3mf')) {
+      // Add the .3mf file only if requested and model is a 3MF model
+      if (typesToDelete.includes('3mf') && model.filePath.endsWith('.3mf')) {
         const threeMfPath = path.isAbsolute(model.filePath) 
           ? model.filePath 
           : path.join(modelsDir, model.filePath);
         filesToDelete.push({ type: '3mf', path: threeMfPath });
       }
       
+      // Add the .stl file only if requested and model is an STL model
+      if (typesToDelete.includes('stl') && (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL'))) {
+        const stlPath = path.isAbsolute(model.filePath) 
+          ? model.filePath 
+          : path.join(modelsDir, model.filePath);
+        filesToDelete.push({ type: 'stl', path: stlPath });
+      }
+      
       // Add the corresponding munchie.json file only if requested
       if (typesToDelete.includes('json')) {
-        const jsonFileName = model.filePath.replace(/\.3mf$/i, '-munchie.json');
-        const jsonPath = path.isAbsolute(jsonFileName)
-          ? jsonFileName
-          : path.join(modelsDir, jsonFileName);
-        filesToDelete.push({ type: 'json', path: jsonPath });
+        let jsonFileName;
+        if (model.filePath.endsWith('.3mf')) {
+          jsonFileName = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+        } else if (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL')) {
+          jsonFileName = model.filePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\.STL$/i, '-stl-munchie.json');
+        }
+        
+        if (jsonFileName) {
+          const jsonPath = path.isAbsolute(jsonFileName)
+            ? jsonFileName
+            : path.join(modelsDir, jsonFileName);
+          filesToDelete.push({ type: 'json', path: jsonPath });
+        }
       }
 
       console.log(`Files to delete for ${modelId}:`, filesToDelete);

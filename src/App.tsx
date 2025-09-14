@@ -187,11 +187,13 @@ function AppContent() {
     try {
       const fileTypes = ['json']; // Always delete munchie.json files
       if (includeThreeMfFiles) {
-        fileTypes.push('3mf'); // Only add 3mf if checkbox is checked
+        // When the checkbox is checked, delete the 3D model files in addition to metadata
+        fileTypes.push('3mf'); // add .3mf
+        fileTypes.push('stl'); // add .stl
       }
 
       const fileTypeText = includeThreeMfFiles 
-        ? 'munchie.json and .3mf files' 
+        ? 'munchie.json, .3mf and .stl files' 
         : 'munchie.json files';
       
       toast("Deleting model files...", {
@@ -223,12 +225,13 @@ function AppContent() {
         const successfullyDeletedIds = selectedModelIds.filter(modelId => {
           const model = models.find(m => m.id === modelId);
           if (!model) return false;
-          
-          // Check if this model's files were actually deleted
+
+          // Consider the model deleted if any of the requested file types for this bulk
+          // deletion were actually removed for the model (e.g. 'json', '3mf', 'stl').
           const modelDeleted = deleteResult.deleted?.some((item: any) => 
-            item.modelId === modelId && item.type === '3mf'
+            item.modelId === modelId && fileTypes.includes(item.type)
           );
-          
+
           return modelDeleted;
         });
 
@@ -736,7 +739,7 @@ function AppContent() {
                   htmlFor="include-3mf" 
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  Include .3mf files (3D model files) when deleting
+                  Include .3mf and .stl files (3D model files) when deleting
                 </label>
               </div>
             </div>
