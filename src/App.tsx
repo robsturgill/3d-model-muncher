@@ -262,6 +262,12 @@ function AppContent() {
             description: "Check console for details"
           });
         }
+        // After processing deletion results, refresh model metadata to ensure UI shows latest state
+        try {
+          await handleRefreshModels();
+        } catch (err) {
+          console.error('Failed to refresh models after deletion:', err);
+        }
       } else {
         throw new Error(deleteResult.error || 'Unknown deletion error');
       }
