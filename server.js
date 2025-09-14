@@ -122,20 +122,64 @@ app.get('/api/models', async (req, res) => {
             // Handle both 3MF and STL file types
             let modelUrl, filePath;
             if (entry.name.endsWith('-stl-munchie.json')) {
-              // STL file
-              modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-stl-munchie.json', '.stl');
-              filePath = relativePath.replace('-stl-munchie.json', '.stl');
+              // STL file - check if corresponding .stl file exists
+              // Only process files with proper naming format: [name]-stl-munchie.json
+              const fileName = entry.name;
+              
+              // Skip files with malformed names (e.g., containing duplicate suffixes)
+              if (fileName.includes('-stl-munchie.json_') || fileName.includes('.stl_')) {
+                console.log(`Skipping malformed STL JSON file: ${fullPath}`);
+              } else {
+                const baseFilePath = relativePath.replace('-stl-munchie.json', '');
+                // Try both .stl and .STL extensions
+                let stlFilePath = baseFilePath + '.stl';
+                let absoluteStlPath = path.join(absolutePath, stlFilePath);
+                
+                if (!fs.existsSync(absoluteStlPath)) {
+                  // Try uppercase extension
+                  stlFilePath = baseFilePath + '.STL';
+                  absoluteStlPath = path.join(absolutePath, stlFilePath);
+                }
+                
+                if (fs.existsSync(absoluteStlPath)) {
+                  modelUrl = '/models/' + stlFilePath.replace(/\\/g, '/');
+                  filePath = stlFilePath;
+                  
+                  model.modelUrl = modelUrl;
+                  model.filePath = filePath;
+                  
+                  console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
+                  models.push(model);
+                } else {
+                  console.log(`Skipping ${fullPath} - corresponding .stl/.STL file not found`);
+                }
+              }
             } else {
-              // 3MF file
-              modelUrl = '/models/' + relativePath.replace(/\\/g, '/').replace('-munchie.json', '.3mf');
-              filePath = relativePath.replace('-munchie.json', '.3mf');
+              // 3MF file - check if corresponding .3mf file exists
+              // Only process files with proper naming format: [name]-munchie.json
+              const fileName = entry.name;
+              
+              // Skip files with malformed names
+              if (fileName.includes('-munchie.json_') || fileName.includes('.3mf_')) {
+                console.log(`Skipping malformed 3MF JSON file: ${fullPath}`);
+              } else {
+                const threeMfFilePath = relativePath.replace('-munchie.json', '.3mf');
+                const absoluteThreeMfPath = path.join(absolutePath, threeMfFilePath);
+                
+                if (fs.existsSync(absoluteThreeMfPath)) {
+                  modelUrl = '/models/' + threeMfFilePath.replace(/\\/g, '/');
+                  filePath = threeMfFilePath;
+                  
+                  model.modelUrl = modelUrl;
+                  model.filePath = filePath;
+                  
+                  console.log(`Added 3MF model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
+                  models.push(model);
+                } else {
+                  console.log(`Skipping ${fullPath} - corresponding .3mf file not found at ${absoluteThreeMfPath}`);
+                }
+              }
             }
-            
-            model.modelUrl = modelUrl;
-            model.filePath = filePath;
-            
-            console.log(`Added model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
-            models.push(model);
           } catch (error) {
             console.error(`Error reading model file ${fullPath}:`, error);
           }

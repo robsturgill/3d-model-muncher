@@ -373,8 +373,9 @@ export function ModelDetailsDrawer({
       // Convert from .3mf/.stl path to -munchie.json path
       if (model.filePath.endsWith('.3mf')) {
         jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
-      } else if (model.filePath.endsWith('.stl')) {
-        jsonFilePath = model.filePath.replace('.stl', '-stl-munchie.json');
+      } else if (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL')) {
+        // Handle both lowercase and uppercase STL extensions
+        jsonFilePath = model.filePath.replace(/\.stl$/i, '-stl-munchie.json');
       } else if (model.filePath.endsWith('-munchie.json') || model.filePath.endsWith('-stl-munchie.json')) {
         // Already a JSON path, use as-is
         jsonFilePath = model.filePath;
@@ -388,8 +389,9 @@ export function ModelDetailsDrawer({
       // Replace .3mf/.stl extension with appropriate -munchie.json
       if (relativePath.endsWith('.3mf')) {
         relativePath = relativePath.replace('.3mf', '-munchie.json');
-      } else if (relativePath.endsWith('.stl')) {
-        relativePath = relativePath.replace('.stl', '-stl-munchie.json');
+      } else if (relativePath.endsWith('.stl') || relativePath.endsWith('.STL')) {
+        // Handle both lowercase and uppercase STL extensions
+        relativePath = relativePath.replace(/\.stl$/i, '-stl-munchie.json');
       } else if (relativePath.endsWith('-munchie.json') || relativePath.endsWith('-stl-munchie.json')) {
         // Already a JSON path, use as-is
         relativePath = relativePath;
