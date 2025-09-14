@@ -1,3 +1,15 @@
+# [0.5.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.4.2...v0.5.0) (2025-09-14)
+
+
+### Bug Fixes
+
+* list view missing image with ImageWithFallback ([2ea47f6](https://github.com/robsturgill/3d-model-muncher/commit/2ea47f6928922bdbc3786774dc650e430146cb5f))
+
+
+### Features
+
+* can add categories and updated configuration management and UI preferences handling ([df658de](https://github.com/robsturgill/3d-model-muncher/commit/df658de1cc03a7f62f4583586a97eeae74209c46))
+
 ## [0.4.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.4.1...v0.4.2) (2025-09-14)
 
 
