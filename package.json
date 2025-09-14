@@ -56,6 +56,8 @@
       "devDependencies": {
             "@react-three/drei": "^9.86.7",
             "@react-three/fiber": "^8.13.7",
+            "@semantic-release/changelog": "^6.0.3",
+            "@semantic-release/git": "^10.0.1",
             "@types/node": "^20.19.13",
             "@types/react": "^19.1.12",
             "@types/react-dom": "^19.1.9",
