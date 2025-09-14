@@ -18,8 +18,8 @@ interface ModelGridProps {
   onToggleSelectionMode?: () => void;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
-  onBulkEdit?: () => void;
-  onBulkDelete?: () => void;
+  onBulkEdit?: () => void | Promise<void>;
+  onBulkDelete?: () => void | Promise<void>;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -95,6 +95,22 @@ export function ModelGrid({
     }
   };
 
+  // Ensure bulk delete waits for any async work from parent, then clear selection
+  const handleBulkDeleteClick = async () => {
+    if (!onBulkDelete) return;
+  const res = onBulkDelete();
+    // If parent returns a Promise (meaning it performed async deletion), wait and then clear selection
+    if (res && typeof (res as any).then === "function") {
+      try {
+        await res;
+      } finally {
+        onDeselectAll?.();
+        onToggleSelectionMode?.();
+      }
+    }
+    // If parent did not return a Promise (e.g. it just opened a confirmation dialog), don't clear selection here.
+  };
+
   const handleCheckboxClick = (e: React.MouseEvent<HTMLInputElement>, modelId: string) => {
     e.stopPropagation();
     if (onModelSelection) {
@@ -161,7 +177,7 @@ export function ModelGrid({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={onBulkDelete}
+                      onClick={handleBulkDeleteClick}
                       className="gap-2 text-destructive hover:text-destructive"
                       title="Delete selected models"
                     >

@@ -173,9 +173,10 @@ function AppContent() {
   };
 
   const handleBulkDelete = async () => {
+    console.debug('Bulk delete confirmed, current selection:', selectedModelIds);
     if (selectedModelIds.length === 0) {
       toast("No models selected", {
-        description: "Please select models first before deleting"
+        description: `Please select models first before deleting. (current: ${selectedModelIds.join(',') || 'none'})`
       });
       return;
     }
@@ -716,23 +717,23 @@ function AppContent() {
             <AlertDialogDescription>
               Are you sure you want to delete {selectedModelIds.length} model{selectedModelIds.length !== 1 ? 's' : ''}? 
               <br /><br />
-              <div className="space-y-3 my-4 mb-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="include-3mf"
-                    checked={includeThreeMfFiles}
-                    onCheckedChange={setIncludeThreeMfFiles}
-                  />
-                  <label 
-                    htmlFor="include-3mf" 
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    Include .3mf files (3D model files) when deleting
-                  </label>
-                </div>
-              </div>
               <strong>This action cannot be undone.</strong>
             </AlertDialogDescription>
+            <div className="space-y-3 my-4 mb-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="include-3mf"
+                  checked={includeThreeMfFiles}
+                  onCheckedChange={setIncludeThreeMfFiles}
+                />
+                <label 
+                  htmlFor="include-3mf" 
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Include .3mf files (3D model files) when deleting
+                </label>
+              </div>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
