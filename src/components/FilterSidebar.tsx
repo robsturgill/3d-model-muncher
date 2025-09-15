@@ -16,6 +16,7 @@ interface FilterSidebarProps {
     category: string;
     printStatus: string;
     license: string;
+    fileType: string;
     tags: string[];
     showHidden: boolean;
   }) => void;
@@ -47,6 +48,7 @@ export function FilterSidebar({
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedPrintStatus, setSelectedPrintStatus] = useState("all");
   const [selectedLicense, setSelectedLicense] = useState("all");
+  const [selectedFileType, setSelectedFileType] = useState("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showHidden, setShowHidden] = useState(false);
 
@@ -95,6 +97,7 @@ export function FilterSidebar({
       category: selectedCategory,
       printStatus: selectedPrintStatus,
       license: selectedLicense,
+      fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
     });
@@ -107,6 +110,7 @@ export function FilterSidebar({
       category: value,
       printStatus: selectedPrintStatus,
       license: selectedLicense,
+      fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
     });
@@ -119,6 +123,7 @@ export function FilterSidebar({
       category: selectedCategory,
       printStatus: value,
       license: selectedLicense,
+      fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
     });
@@ -131,6 +136,20 @@ export function FilterSidebar({
       category: selectedCategory,
       printStatus: selectedPrintStatus,
       license: value,
+      fileType: selectedFileType,
+      tags: selectedTags,
+      showHidden: showHidden,
+    });
+  };
+
+  const handleFileTypeChange = (value: string) => {
+    setSelectedFileType(value);
+    onFilterChange({
+      search: searchTerm,
+      category: selectedCategory,
+      printStatus: selectedPrintStatus,
+      license: selectedLicense,
+      fileType: value,
       tags: selectedTags,
       showHidden: showHidden,
     });
@@ -148,6 +167,7 @@ export function FilterSidebar({
       category: selectedCategory,
       printStatus: selectedPrintStatus,
       license: selectedLicense,
+      fileType: selectedFileType,
       tags: newSelectedTags,
       showHidden: showHidden,
     });
@@ -160,6 +180,7 @@ export function FilterSidebar({
       category: selectedCategory,
       printStatus: selectedPrintStatus,
       license: selectedLicense,
+      fileType: selectedFileType,
       tags: selectedTags,
       showHidden: checked,
     });
@@ -170,6 +191,7 @@ export function FilterSidebar({
     setSelectedCategory("all");
     setSelectedPrintStatus("all");
     setSelectedLicense("all");
+    setSelectedFileType("all");
     setSelectedTags([]);
     setShowHidden(false);
     onFilterChange({
@@ -177,6 +199,7 @@ export function FilterSidebar({
       category: "all",
       printStatus: "all",
       license: "all",
+      fileType: "all",
       tags: [],
       showHidden: false,
     });
@@ -314,6 +337,21 @@ export function FilterSidebar({
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="printed">Printed</SelectItem>
                   <SelectItem value="not-printed">Not Printed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* File Type Filter */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-foreground">File Type</label>
+              <Select value={selectedFileType} onValueChange={handleFileTypeChange}>
+                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                  <SelectValue placeholder="All File Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Files</SelectItem>
+                  <SelectItem value="3mf">3MF</SelectItem>
+                  <SelectItem value="stl">STL</SelectItem>
                 </SelectContent>
               </Select>
             </div>

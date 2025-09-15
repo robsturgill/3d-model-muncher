@@ -424,6 +424,7 @@ function AppContent() {
     category: string;
     printStatus: string;
     license: string;
+    fileType: string;
     tags: string[];
     showHidden: boolean;
   }) => {
@@ -472,6 +473,15 @@ function AppContent() {
           )
         )
       );
+    }
+
+    // File type filter - check model filePath or modelUrl for extension
+    if (filters.fileType && filters.fileType !== 'all') {
+      const ext = filters.fileType.toLowerCase();
+      filtered = filtered.filter(model => {
+        const path = (model.filePath || model.modelUrl || '').toLowerCase();
+        return path.endsWith('.' + ext);
+      });
     }
 
     setFilteredModels(filtered);
