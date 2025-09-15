@@ -29,10 +29,13 @@ const Scene = memo(({ modelUrl, isWireframe, autoRotate, materialType, customCol
         autoRotate={autoRotate ?? false}
         autoRotateSpeed={2.0}
       />
-      {/* Lighting */}
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[5, 5, 5]} intensity={1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
-      <directionalLight position={[-5, 3, -5]} intensity={0.5} />
+  {/* Lighting */}
+  {/* @ts-ignore: react-three/fiber JSX intrinsic types */}
+  <ambientLight intensity={0.4} />
+  {/* @ts-ignore: react-three/fiber JSX intrinsic types */}
+  <directionalLight position={[5, 5, 5]} intensity={1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+  {/* @ts-ignore: react-three/fiber JSX intrinsic types */}
+  <directionalLight position={[-5, 3, -5]} intensity={0.5} />
       {/* Environment for reflections */}
       <Environment preset="studio" />
       {/* Model with Bounds for auto-fit */}
