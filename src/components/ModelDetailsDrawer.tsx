@@ -18,7 +18,7 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store } from "lucide-react";
 import { Download } from "lucide-react";
 
 interface ModelDetailsDrawerProps {
@@ -359,6 +359,12 @@ export function ModelDetailsDrawer({
 
   if (!model) return null;
   const currentModel = editedModel || model;
+  // Display path: prefer filePath (JSON path), fall back to modelUrl (trim leading /models/) or a default filename
+  const displayModelPath = currentModel.filePath
+    ? currentModel.filePath
+    : currentModel.modelUrl
+    ? currentModel.modelUrl.replace(/^\/models\//, '')
+    : `${currentModel.name}.3mf`;
   // Defensive: ensure printSettings is always an object with string fields
   const safePrintSettings = {
     layerHeight: currentModel.printSettings?.layerHeight || '',
@@ -604,14 +610,7 @@ export function ModelDetailsDrawer({
                 )}
               </SheetDescription>
             </div>
-            {/* Download button only in non-editing mode */}
             <div className="flex items-center gap-2 shrink-0">
-              {!isEditing && (
-                <Button onClick={handleDownloadClick} variant="default" size="sm" className="gap-2" title="Download model file">
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
-              )}
               {isEditing ? (
                 <>
                   <Button onClick={saveChanges} size="sm" className="gap-2">
@@ -633,7 +632,22 @@ export function ModelDetailsDrawer({
         </SheetHeader>
 
         <ScrollArea className="flex-1 min-h-0">
-          <div className="p-6 space-y-8">
+          <div className="p-4 space-y-8">
+          {/* Model file path / URL (readonly, download) - moved above preview */}
+          <div className="mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <Label className="whitespace-nowrap text-muted-foreground">Path</Label>
+              <div className="flex-1 flex items-center gap-2">
+                <Input readOnly value={displayModelPath} className="text-sm truncate" />
+                {/* Use the existing download handler here instead of a separate copy button */}
+                <Button onClick={handleDownloadClick} size="sm" variant="default" className="gap-2" title="Download model file">
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Model Viewer with Toggle */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -823,10 +837,82 @@ export function ModelDetailsDrawer({
             </div>
           </div>
 
-          {/* Model Details */}
-          <div className="space-y-6">
-            <h3 className="font-semibold text-lg text-card-foreground">Details</h3>
+          {/* Print Settings */}
+          <div className="space-y-4 mb-4">
+            <h3 className="font-semibold text-lg text-card-foreground">Print Settings</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Print Time:</span>
+                <span className="font-medium text-foreground">{currentModel.printTime}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Weight className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Filament:</span>
+                <span className="font-medium text-foreground">{currentModel.filamentUsed}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <HardDrive className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">File Size:</span>
+                <span className="font-medium text-foreground">{currentModel.fileSize}</span>
+              </div>
+            </div>
+
+            <Separator />
             
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
+                <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
+                  <Layers className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Layer Height</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.layerHeight ? `${safePrintSettings.layerHeight} mm` : ''}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
+                <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
+                  <Droplet className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Infill</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.infill}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
+                <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
+                  <Diameter className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Nozzle</p>
+                  <p className="font-semibold text-foreground">{safePrintSettings.nozzle ? `${safePrintSettings.nozzle} mm` : ''}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pricing Section (shows only if price defined) */}
+            {currentModel.price !== undefined && currentModel.price !== 0 && (
+              <>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg border border-primary/20">
+                    <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
+                      <Store className="h-5 w-5 text-muted-foreground" />
+                    </div>                    
+                    <div>
+                      <p className="text-sm text-muted-foreground">Price</p>
+                      <p className="text-xl font-semibold text-foreground">${currentModel.price}</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}            
+          </div>
+
+          {/* Model Details */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg text-card-foreground">Details</h3>
             {isEditing ? (
               <div className="grid gap-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1083,194 +1169,106 @@ export function ModelDetailsDrawer({
                   {currentModel.description}
                 </p>
 
-                {/* License Information */}
-                <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg border">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">License:</span>
-                  <Badge variant="outline" className="font-medium">
-                    {currentModel.license}
-                  </Badge>
-                </div>
+                {/* License Information (hidden when not set) */}
+                {currentModel.license && (
+                  <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg border">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">License:</span>
+                    <Badge variant="outline" className="font-medium">
+                      {currentModel.license}
+                    </Badge>
+                  </div>
+                )}
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Print Time:</span>
-                    <span className="font-medium text-foreground">{currentModel.printTime}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Weight className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Filament:</span>
-                    <span className="font-medium text-foreground">{currentModel.filamentUsed}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <HardDrive className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">File Size:</span>
-                    <span className="font-medium text-foreground">{currentModel.fileSize}</span>
-                  </div>
-                  {currentModel.price !== undefined && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Price:</span>
-                      <span className="font-medium text-foreground">${currentModel.price}</span>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
           </div>
 
-          <Separator />
 
-          {/* Print Settings */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-lg text-card-foreground">Print Settings</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
-                  <Layers className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Layer Height</p>
-                  <p className="font-semibold text-foreground">{safePrintSettings.layerHeight ? `${safePrintSettings.layerHeight} mm` : ''}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
-                  <Droplet className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Infill</p>
-                  <p className="font-semibold text-foreground">{safePrintSettings.infill}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
-                    <Diameter className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Nozzle</p>
-                  <p className="font-semibold text-foreground">{safePrintSettings.nozzle ? `${safePrintSettings.nozzle} mm` : ''}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Tags Display */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Tag className="h-5 w-5 text-muted-foreground" />
-              <h3 className="font-semibold text-lg text-card-foreground">Tags</h3>
-            </div>
-            {Array.isArray(currentModel.tags) && currentModel.tags.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {currentModel.tags.map((tag, index) => (
-                  <Badge key={`${tag}-${index}`} variant="secondary" className="text-sm">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">No tags added yet.</p>
-            )}
-          </div>
-
-          {/* Pricing Section */}
-          {currentModel.price !== undefined && (
+          {Array.isArray(currentModel.tags) && currentModel.tags.length > 0 && (
             <>
               <Separator />
-              
+              {/* Tags Display */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="font-semibold text-lg text-card-foreground">Pricing</h3>
+                  <Tag className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-lg text-card-foreground">Tags</h3>
                 </div>
-                <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg border border-primary/20">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Selling Price</p>
-                    <p className="text-2xl font-semibold text-primary">${currentModel.price}</p>
-                  </div>
+                <div className="flex flex-wrap gap-2">
+                  {currentModel.tags.map((tag, index) => (
+                    <Badge key={`${tag}-${index}`} variant="secondary" className="text-sm">
+                      {tag}
+                    </Badge>
+                  ))}
                 </div>
               </div>
             </>
           )}
 
-          <Separator />
 
-          {/* Notes Section */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <StickyNote className="h-5 w-5 text-muted-foreground" />
-              <h3 className="font-semibold text-lg text-card-foreground">Notes</h3>
-            </div>
-            {currentModel.notes ? (
-              <div className="p-4 bg-muted/30 rounded-lg border">
-                <p className="text-foreground leading-relaxed whitespace-pre-wrap">
-                  {currentModel.notes}
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 bg-muted/20 rounded-lg border border-dashed">
-                <p className="text-muted-foreground text-sm text-center">
-                  No notes added yet. Click Edit to add your thoughts about this model.
-                </p>
-              </div>
-            )}
-          </div>
 
-          <Separator />
-
-          {/* Source Section */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-muted-foreground" />
-              <h3 className="font-semibold text-lg text-card-foreground">Source</h3>
-            </div>
-            {currentModel.source ? (
-              <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
-                  <ExternalLink className="h-5 w-5 text-muted-foreground" />
+          {currentModel.notes && (
+            <>
+              <Separator />
+              {/* Notes Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <StickyNote className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-lg text-card-foreground">Notes</h3>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-muted-foreground">Downloaded from:</p>
-                  <a
-                    href={currentModel.source}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-primary hover:text-primary/80 transition-colors break-all"
-                  >
-                    {currentModel.source}
-                  </a>
+                <div className="p-4 bg-muted/30 rounded-lg border">
+                  <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                    {currentModel.notes}
+                  </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="shrink-0"
-                >
-                  <a
-                    href={currentModel.source}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="gap-2"
+              </div>
+            </>
+          )}
+
+          {currentModel.source && (
+            <>
+              <Separator />
+              {/* Source Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-lg text-card-foreground">Source</h3>
+                </div>
+                <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border">
+                  <div className="flex items-center justify-center w-10 h-10 bg-background rounded-lg border">
+                    <ExternalLink className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">Downloaded from:</p>
+                    <a
+                      href={currentModel.source}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary hover:text-primary/80 transition-colors break-all"
+                    >
+                      {currentModel.source}
+                    </a>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="shrink-0"
                   >
-                    <ExternalLink className="h-4 w-4" />
-                    Visit
-                  </a>
-                </Button>
+                    <a
+                      href={currentModel.source}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="gap-2"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Visit
+                    </a>
+                  </Button>
+                </div>
               </div>
-            ) : (
-              <div className="p-4 bg-muted/20 rounded-lg border border-dashed">
-                <p className="text-muted-foreground text-sm text-center">
-                  No source URL added yet. Click Edit to add where you found this model.
-                </p>
-              </div>
-            )}
-          </div>
+            </>
+          )}
           </div>
         </ScrollArea>
       </SheetContent>
