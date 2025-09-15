@@ -40,6 +40,8 @@ import {
   Clock,
   Weight,
   RefreshCw,
+  Layers,
+  CircleCheckBig
 } from "lucide-react";
 
 interface BulkEditDrawerProps {
@@ -635,7 +637,8 @@ export function BulkEditDrawer({
                 htmlFor="category-field"
                 className="font-medium"
               >
-                Update Category
+                <Layers className="h-4 w-4 text-foreground" />
+                Category
               </Label>
             </div>
 
@@ -683,7 +686,7 @@ export function BulkEditDrawer({
                 className="font-medium flex items-center gap-2"
               >
                 <FileText className="h-4 w-4" />
-                Update License
+                License
               </Label>
             </div>
 
@@ -727,7 +730,8 @@ export function BulkEditDrawer({
                 htmlFor="print-status-field"
                 className="font-medium"
               >
-                Update Print Status
+                <CircleCheckBig className="h-4 w-4" />
+                Print Status
               </Label>
             </div>
 
@@ -780,7 +784,8 @@ export function BulkEditDrawer({
                 htmlFor="hidden-status-field"
                 className="font-medium"
               >
-                Update Hidden Status
+                <Eye className="h-4 w-4" />
+                Hidden Status
               </Label>
             </div>
 
@@ -833,7 +838,7 @@ export function BulkEditDrawer({
                 className="font-medium flex items-center gap-2"
               >
                 <Tag className="h-4 w-4" />
-                Update Tags
+                Tags
               </Label>
             </div>
 
@@ -951,7 +956,7 @@ export function BulkEditDrawer({
                 className="font-medium flex items-center gap-2"
               >
                 <StickyNote className="h-4 w-4" />
-                Update Notes
+                Notes
               </Label>
             </div>
 
@@ -989,7 +994,7 @@ export function BulkEditDrawer({
                 className="font-medium flex items-center gap-2"
               >
                 <Globe className="h-4 w-4" />
-                Update Source URL
+                Source URL
               </Label>
             </div>
 
@@ -1025,7 +1030,7 @@ export function BulkEditDrawer({
                 className="font-medium flex items-center gap-2"
               >
                 <DollarSign className="h-4 w-4" />
-                Update Selling Price
+                Selling Price
               </Label>
             </div>
 
@@ -1068,7 +1073,7 @@ export function BulkEditDrawer({
                 className="font-medium flex items-center gap-2"
               >
                 <Clock className="h-4 w-4" />
-                Update Print Time
+                Print Time
               </Label>
             </div>
 
@@ -1103,7 +1108,7 @@ export function BulkEditDrawer({
                 className="font-medium flex items-center gap-2"
               >
                 <Weight className="h-4 w-4" />
-                Update Filament
+                Filament
               </Label>
             </div>
 
