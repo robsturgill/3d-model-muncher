@@ -25,7 +25,7 @@ const Scene = memo(({ modelUrl, isWireframe, autoRotate, materialType, customCol
         enableZoom={true}
         enableRotate={true}
         minDistance={2}
-        maxDistance={500}
+        // maxDistance={5000}
         autoRotate={autoRotate ?? false}
         autoRotateSpeed={2.0}
       />
