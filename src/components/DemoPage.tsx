@@ -308,7 +308,7 @@ export function DemoPage({ onBack }: DemoPageProps) {
                   <div>
                     <h4 className="mb-3">Status Badges</h4>
                     <div className="flex flex-wrap gap-2">
-                      <Badge className="bg-green-500 hover:bg-green-600">✓ Printed</Badge>
+                      <Badge className="bg-green-700 hover:bg-green-600">✓ Printed</Badge>
                       <Badge variant="secondary">○ Not Printed</Badge>
                       <Badge variant="outline">Miniature</Badge>
                       <Badge variant="outline">Fantasy</Badge>

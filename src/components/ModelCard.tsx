@@ -91,7 +91,7 @@ export function ModelCard({
           {/* Print Status - Top Right */}
           <div className="absolute top-3 right-3">
             {model.isPrinted ? (
-              <Badge className="bg-green-500 hover:bg-green-600">
+              <Badge className="bg-green-700 hover:bg-green-600">
                 <Check className="h-3 w-3 mr-1" />
                 Printed
               </Badge>

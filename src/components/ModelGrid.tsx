@@ -341,7 +341,7 @@ export function ModelGrid({
                       />
                       {/* Print status overlay */}
                       <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card ${
-                        model.isPrinted ? 'bg-green-500' : 'bg-yellow-500'
+                        model.isPrinted ? 'bg-green-700' : 'bg-yellow-500'
                       }`} />
                     </div>
                   </div>

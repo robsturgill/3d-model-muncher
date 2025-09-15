@@ -238,3 +238,7 @@ html {
       display: block;
   }
 }
+
+.bg-green-700 {
+  background-color: var(--color-green-700);
+}
