@@ -1,3 +1,12 @@
+# [0.6.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.5.2...v0.6.0) (2025-09-15)
+
+
+### Features
+
+* add shortcut to File Integrity view from Appbar ([a3b6254](https://github.com/robsturgill/3d-model-muncher/commit/a3b6254c2a9906f15783f2ea1ba9a0735f38a549)), closes [#11](https://github.com/robsturgill/3d-model-muncher/issues/11)
+* added file scanning and generation actions to top toolbar ([c1968d5](https://github.com/robsturgill/3d-model-muncher/commit/c1968d570e4c54812d3269be56d7b1cf9d7d766d)), closes [#11](https://github.com/robsturgill/3d-model-muncher/issues/11)
+* update ModelDetailsDrawer to add model path rearranged sections and display conditionals ([0735177](https://github.com/robsturgill/3d-model-muncher/commit/0735177534e33b7ecce2ef7deaace46e6c95e7bc))
+
 ## [0.5.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.5.1...v0.5.2) (2025-09-14)
 
 
