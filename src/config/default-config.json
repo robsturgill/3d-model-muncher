@@ -1,11 +1,12 @@
 {
   "version": "1.0.0",
   "categories": [
-    { "id": "miniatures", "label": "Miniatures", "icon": "Package" },
-    { "id": "utility", "label": "Utility", "icon": "Wrench" },
-    { "id": "decorative", "label": "Decorative", "icon": "Flower" },
-    { "id": "games", "label": "Games", "icon": "Gamepad2" },
-    { "id": "props", "label": "Props", "icon": "Sword" }
+  { "id": "uncategorized", "label": "Uncategorized", "icon": "Tag" },
+  { "id": "miniatures", "label": "Miniatures", "icon": "Package" },
+  { "id": "utility", "label": "Utility", "icon": "Wrench" },
+  { "id": "decorative", "label": "Decorative", "icon": "Flower" },
+  { "id": "games", "label": "Games", "icon": "Gamepad2" },
+  { "id": "props", "label": "Props", "icon": "Sword" }
   ],
   "settings": {
     "defaultTheme": "system",

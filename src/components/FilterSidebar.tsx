@@ -310,10 +310,10 @@ export function FilterSidebar({
                   return (
                     <Button
                       key={category.id}
-                      variant={selectedCategory === category.id ? "default" : "ghost"}
-                      onClick={() => handleCategoryChange(category.id)}
+                      variant={selectedCategory === category.label ? "default" : "ghost"}
+                      onClick={() => handleCategoryChange(category.label)}
                       className={`w-full justify-start h-10 px-3 ${
-                        selectedCategory === category.id 
+                        selectedCategory === category.label 
                           ? "text-primary-foreground hover:text-primary-foreground" 
                           : "text-foreground hover:bg-accent hover:text-accent-foreground"
                       }`}

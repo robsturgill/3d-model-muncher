@@ -45,13 +45,13 @@ import {
   Box,
   Images,
   Archive,
+  Plus,
   FileText,
   Clock,
   HardDrive,
-  RotateCcw,
-  Plus
-} from "lucide-react";
-import { toast } from "sonner";
+  RotateCcw
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 // Icon component for model thumbnails
 const ModelThumbnail = ({ thumbnail, name }: { thumbnail: string | null | undefined; name: string }) => {
@@ -224,6 +224,9 @@ export function SettingsPage({
   // Add category state
   const [isAddCategoryDialogOpen, setIsAddCategoryDialogOpen] = useState(false);
   const [newCategoryLabel, setNewCategoryLabel] = useState('');
+  // Delete confirmation dialog state
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
 
   const [hashCheckResult, setHashCheckResult] = useState<HashCheckResult | null>(null);
   const [isHashChecking, setIsHashChecking] = useState(false);
@@ -477,17 +480,25 @@ export function SettingsPage({
     setSaveStatus('saving');
     setStatusMessage(`Adding category "${label}"...`);
 
-    // Generate ID: lowercase, words separated by underscores, strip special chars
+    // Generate ID: lowercase, words separated by hyphens, strip special chars
     let baseId = label
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, '') // remove non-alphanumeric except spaces
       .trim()
-      .replace(/\s+/g, '_');
+    .replace(/\s+/g, '_');
     let uniqueId = baseId;
     let counter = 1;
     while (localCategories.some(c => c.id === uniqueId)) {
-      uniqueId = `${baseId}_${counter}`;
+      uniqueId = `${baseId}-${counter}`;
       counter++;
+    }
+
+    // Prevent duplicate labels (case-insensitive)
+    if (localCategories.some(c => c.label.toLowerCase() === label.toLowerCase())) {
+      setSaveStatus('error');
+      setStatusMessage(`A category with the label "${label}" already exists.`);
+      setTimeout(() => { setSaveStatus('idle'); setStatusMessage(''); }, 3000);
+      return;
     }
 
   const newCat: Category = { id: uniqueId, label, icon: 'Tag' } as Category;
@@ -888,10 +899,22 @@ export function SettingsPage({
 
   // Category management functions
   const handleRenameCategory = async (oldCategoryId: string, newCategoryId: string, newCategoryLabel: string) => {
-    if (!newCategoryId.trim() || !newCategoryLabel.trim() || oldCategoryId === newCategoryId.trim()) return;
+    if (!newCategoryId.trim() || !newCategoryLabel.trim()) return;
 
-    setSaveStatus('saving');
-    setStatusMessage(`Renaming category "${oldCategoryId}" to "${newCategoryId.trim()}"...`);
+    const newIdTrimmed = newCategoryId.trim();
+    const newLabelTrimmed = newCategoryLabel.trim();
+
+    // If id or label conflicts with another category (not the one we're renaming), block the change
+    const conflicting = localCategories.find(c => (c.id === newIdTrimmed || c.label.toLowerCase() === newLabelTrimmed.toLowerCase()) && c.id !== oldCategoryId);
+    if (conflicting) {
+      setSaveStatus('error');
+      setStatusMessage(`A category with the same ${conflicting.id === newIdTrimmed ? 'id' : 'label'} already exists.`);
+      setTimeout(() => { setSaveStatus('idle'); setStatusMessage(''); }, 3000);
+      return;
+    }
+
+  setSaveStatus('saving');
+  setStatusMessage(`Renaming category "${oldCategoryId}" to "${newIdTrimmed}"...`);
     
     // Find the old category to get its label (since models store category by label, not ID)
     const oldCategory = localCategories.find(cat => cat.id === oldCategoryId);
@@ -907,14 +930,14 @@ export function SettingsPage({
     // Update the category in the local categories list
     const updatedCategories = localCategories.map(cat => 
       cat.id === oldCategoryId 
-        ? { ...cat, id: newCategoryId.trim(), label: newCategoryLabel.trim() }
+        ? { ...cat, id: newIdTrimmed, label: newLabelTrimmed }
         : cat
     );
 
     // Update all models that use this category (by label, not ID)
     const updatedModels = models.map(model => ({
       ...model,
-      category: model.category === oldCategoryLabel ? newCategoryLabel.trim() : model.category
+      category: model.category === oldCategoryLabel ? newLabelTrimmed : model.category
     }));
 
     console.log('Models to update:', models.filter(m => m.category === oldCategoryLabel).map(m => ({ name: m.name, id: m.id, oldCategory: m.category })));
@@ -996,6 +1019,102 @@ export function SettingsPage({
     setSelectedCategory(category);
     setRenameCategoryValue(category.label);
     setIsCategoryRenameDialogOpen(true);
+  };
+
+  // Delete category and update all models that used it
+  const handleDeleteCategory = async (categoryId: string) => {
+    const cat = localCategories.find(c => c.id === categoryId);
+    if (!cat) return;
+
+  // This function is now called after user confirms in the dialog
+
+    setSaveStatus('saving');
+    setStatusMessage(`Deleting category "${cat.label}"...`);
+
+    // Remove category from localCategories
+    const updatedCategories = localCategories.filter(c => c.id !== categoryId);
+
+  // Update models: set category to 'Uncategorized' where it matched the deleted category label
+  const updatedModels = models.map(m => ({ ...m, category: m.category === cat.label ? 'Uncategorized' : m.category }));
+
+    // Save each affected model to its JSON file
+    let saveErrors = 0;
+    for (const model of updatedModels) {
+      const original = models.find(x => x.id === model.id);
+      if (!original) continue;
+      if (original.category !== model.category) {
+        try {
+          let filePath: string | undefined;
+          if (model.modelUrl) {
+            const threeMfPath = model.modelUrl.replace(/^\/models\//, '');
+            filePath = threeMfPath.replace(/\.3mf$/i, '-munchie.json');
+          } else if (model.filePath) {
+            filePath = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+          }
+          if (!filePath) {
+            console.error('No file path for model while deleting category:', model.name);
+            saveErrors++;
+            continue;
+          }
+
+          const requestData = {
+            filePath,
+            id: model.id,
+            category: model.category
+          };
+
+          const resp = await fetch('/api/save-model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+          });
+          const result = await resp.json();
+          if (!result.success) {
+            console.error('Failed to save model after category delete:', model.name, result.error);
+            saveErrors++;
+          }
+        } catch (err) {
+          console.error('Error saving model after category delete:', model.name, err);
+          saveErrors++;
+        }
+      }
+    }
+
+    // Update UI state and persist config
+    setLocalCategories(updatedCategories);
+    const updatedConfig = { ...localConfig, categories: updatedCategories };
+    try {
+      await handleSaveConfig(updatedConfig);
+    } catch (err) {
+      console.warn('Failed to save config after category delete:', err);
+    }
+
+    onCategoriesUpdate(updatedCategories);
+    onModelsUpdate(updatedModels);
+    setIsCategoryRenameDialogOpen(false);
+    setSelectedCategory(null);
+
+    if (saveErrors === 0) {
+      setSaveStatus('saved');
+      setStatusMessage(`Category "${cat.label}" deleted and models updated`);
+    } else {
+      setSaveStatus('error');
+      setStatusMessage(`Category deleted but ${saveErrors} model save(s) failed`);
+    }
+
+    setTimeout(() => {
+      setSaveStatus('idle');
+      setStatusMessage('');
+    }, 3000);
+  };
+
+  // Open the delete confirmation dialog and compute affected models
+  const openDeleteConfirm = (categoryId: string) => {
+    const cat = localCategories.find(c => c.id === categoryId);
+    if (!cat) return;
+    const count = models.reduce((acc, m) => acc + (m.category === cat.label ? 1 : 0), 0);
+    setPendingDeleteCount(count);
+    setIsDeleteConfirmOpen(true);
   };
 
   // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
@@ -1638,18 +1757,20 @@ export function SettingsPage({
                           </span>
                         </span>
                         <div className="flex items-center gap-2 ml-auto">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e: React.MouseEvent) => {
-                              e.stopPropagation();
-                              startRenameCategory(category);
-                            }}
-                            className="gap-2"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                            Edit
-                          </Button>
+                          {!(category.id === 'uncategorized' || category.label === 'Uncategorized') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e: React.MouseEvent) => {
+                                e.stopPropagation();
+                                startRenameCategory(category);
+                              }}
+                              className="gap-2"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                              Edit
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2519,21 +2640,60 @@ export function SettingsPage({
                   />
                 </div>
               </div>
+              <DialogFooter className="flex justify-between items-center">
+                <div className="flex-1 flex justify-start">
+                  <Button
+                    variant="destructive"
+                    onClick={() => selectedCategory && openDeleteConfirm(selectedCategory.id)}
+                    disabled={!selectedCategory}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="flex-1 flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsCategoryRenameDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      if (selectedCategory && renameCategoryValue.trim()) {
+                        const newId = renameCategoryValue.trim().toLowerCase().replace(/\s+/g, '_');
+                        handleRenameCategory(selectedCategory.id, newId, renameCategoryValue.trim());
+                      }
+                    }}
+                    disabled={!renameCategoryValue.trim() || renameCategoryValue === selectedCategory?.label}
+                  >
+                    Rename Category
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Confirmation Dialog */}
+          <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Confirm Delete Category</DialogTitle>
+                <DialogDescription>
+                  {pendingDeleteCount} model{pendingDeleteCount !== 1 ? 's' : ''} will be moved to "Uncategorized".
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">This action cannot be undone. Are you sure you want to delete this category?</p>
+              </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCategoryRenameDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={() => {
-                    if (selectedCategory && renameCategoryValue.trim()) {
-                      // Generate a new ID based on the label, or keep the same ID if it's just a label change
-                      const newId = renameCategoryValue.trim().toLowerCase().replace(/\s+/g, '-');
-                      handleRenameCategory(selectedCategory.id, newId, renameCategoryValue.trim());
+                <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (selectedCategory) {
+                      setIsDeleteConfirmOpen(false);
+                      await handleDeleteCategory(selectedCategory.id);
                     }
                   }}
-                  disabled={!renameCategoryValue.trim() || renameCategoryValue === selectedCategory?.label}
                 >
-                  Rename Category
+                  Confirm Delete
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -2541,33 +2701,35 @@ export function SettingsPage({
 
           {/* Add Category Dialog */}
           <Dialog open={isAddCategoryDialogOpen} onOpenChange={setIsAddCategoryDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Category</DialogTitle>
-                <DialogDescription>
-                  Create a new category. This will be saved to your configuration.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-category">Category name</Label>
-                  <Input
-                    id="new-category"
-                    value={newCategoryLabel}
-                    onChange={(e) => setNewCategoryLabel(e.target.value)}
-                    placeholder="Enter category name"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddCategoryDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleConfirmAddCategory} disabled={!newCategoryLabel.trim()}>
-                  Add Category
-                </Button>
-              </DialogFooter>
-            </DialogContent>
+              <DialogContent>
+                <form onSubmit={(e) => { e.preventDefault(); handleConfirmAddCategory(); }}>
+                  <DialogHeader>
+                    <DialogTitle>Add Category</DialogTitle>
+                    <DialogDescription>
+                      Create a new category. This will be saved to your configuration.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2 mt-4 mb-4">
+                      <Label htmlFor="new-category">Category name</Label>
+                      <Input
+                        id="new-category"
+                        value={newCategoryLabel}
+                        onChange={(e) => setNewCategoryLabel(e.target.value)}
+                        placeholder="Enter category name"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" type="button" onClick={() => setIsAddCategoryDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={!newCategoryLabel.trim()}>
+                      Add Category
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
           </Dialog>
 
           {/* Tag Models View Dialog */}

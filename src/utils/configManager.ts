@@ -7,6 +7,7 @@ export class ConfigManager {
   private static defaultConfig: AppConfig = {
     version: "1.0.0",
     categories: [
+      { id: "uncategorized", label: "Uncategorized", icon: "Tag" },
       { id: "miniatures", label: "Miniatures", icon: "Package" },
       { id: "utility", label: "Utility", icon: "Wrench" },
       { id: "decorative", label: "Decorative", icon: "Flower" },
