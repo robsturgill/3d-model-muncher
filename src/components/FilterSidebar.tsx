@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Search, Filter, Layers, Package, Gamepad2, Wrench, Flower, X, Settings, Sword, FileText, EyeOff } from "lucide-react";
+import { Search, Filter, Layers, X, Settings, FileText, EyeOff } from "lucide-react";
+import * as LucideIcons from 'lucide-react';
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
@@ -27,13 +28,13 @@ interface FilterSidebarProps {
   models: Model[];
 }
 
-// Icon mapping for categories
-const iconMap: Record<string, typeof Package> = {
-  Package,
-  Gamepad2,
-  Wrench,
-  Flower,
-  Sword,
+// Helper to normalize user-provided icon names (e.g. "alert-circle" -> "AlertCircle")
+const normalizeIconName = (input?: string) => {
+  if (!input) return '';
+  const cleaned = input.trim().replace(/\.(svg|js|tsx?)$/i, '').replace(/[^a-z0-9-_ ]/gi, '');
+  if (!cleaned) return '';
+  const parts = cleaned.split(/[-_\s]+/).filter(Boolean);
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
 };
 
 export function FilterSidebar({
@@ -305,8 +306,9 @@ export function FilterSidebar({
                   <span>All Categories</span>
                 </Button>
                 
-                {categories.map((category) => {
-                  const Icon = iconMap[category.icon] || Package;
+                              {categories.map((category) => {
+                                const iconKey = normalizeIconName(category.icon);
+                                const Icon = (LucideIcons as any)[iconKey] as React.ComponentType<any> || (LucideIcons as any)['Folder'];
                   return (
                     <Button
                       key={category.id}

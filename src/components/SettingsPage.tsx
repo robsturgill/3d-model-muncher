@@ -20,15 +20,16 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Progress } from "./ui/progress";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
-import { 
-  ArrowLeft, 
-  GripVertical, 
-  Download, 
-  Upload, 
-  RefreshCw, 
-  Save, 
+import * as LucideIcons from 'lucide-react';
+const {
+  ArrowLeft,
+  GripVertical,
+  Download,
+  Upload,
+  RefreshCw,
+  Save,
   FolderOpen,
-  Settings as SettingsIcon,
+  Settings: SettingsIcon,
   AlertCircle,
   Tag,
   Edit2,
@@ -50,7 +51,7 @@ import {
   Clock,
   HardDrive,
   RotateCcw
-} from 'lucide-react';
+} = LucideIcons;
 import { toast } from 'sonner';
 
 // Icon component for model thumbnails
@@ -221,9 +222,11 @@ export function SettingsPage({
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isCategoryRenameDialogOpen, setIsCategoryRenameDialogOpen] = useState(false);
   const [renameCategoryValue, setRenameCategoryValue] = useState('');
+  const [renameCategoryIcon, setRenameCategoryIcon] = useState('Folder');
   // Add category state
   const [isAddCategoryDialogOpen, setIsAddCategoryDialogOpen] = useState(false);
   const [newCategoryLabel, setNewCategoryLabel] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('Folder');
   // Delete confirmation dialog state
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
@@ -501,7 +504,8 @@ export function SettingsPage({
       return;
     }
 
-  const newCat: Category = { id: uniqueId, label, icon: 'Tag' } as Category;
+  const normalizedIcon = normalizeIconName(newCategoryIcon || 'Folder');
+  const newCat: Category = { id: uniqueId, label, icon: normalizedIcon } as Category;
     const updatedCategories = [...localCategories, newCat];
     const updatedConfig: AppConfig = { ...localConfig, categories: updatedCategories };
 
@@ -519,6 +523,7 @@ export function SettingsPage({
       setStatusMessage(`Category "${label}" added`);
       setIsAddCategoryDialogOpen(false);
       setNewCategoryLabel('');
+      setNewCategoryIcon('Folder');
     } catch (error) {
       console.error('Failed to add category:', error);
       setSaveStatus('error');
@@ -529,6 +534,28 @@ export function SettingsPage({
       setSaveStatus('idle');
       setStatusMessage('');
     }, 2500);
+  };
+
+  // Helper: attempt to turn a user-provided icon name into a PascalCase Lucide export name
+  const normalizeIconName = (input?: string) => {
+    if (!input) return 'Folder';
+    const cleaned = input.trim().replace(/\.(svg|js|tsx?)$/i, '').replace(/[^a-z0-9-_ ]/gi, '');
+    if (!cleaned) return 'Folder';
+    const parts = cleaned.split(/[-_\s]+/).filter(Boolean);
+    const pascal = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+    return pascal || 'Folder';
+  };
+
+  const getLucideIconComponent = (iconName?: string) => {
+    const name = normalizeIconName(iconName);
+    const Comp = (LucideIcons as any)[name] as React.ComponentType<any> | undefined;
+    if (Comp) return Comp;
+    return (LucideIcons as any)['Folder'] as React.ComponentType<any>;
+  };
+
+  const iconExists = (iconName?: string) => {
+    const name = normalizeIconName(iconName);
+    return !!(LucideIcons as any)[name];
   };
 
   const handleSaveConfig = async (configToSave?: AppConfig) => {
@@ -928,9 +955,10 @@ export function SettingsPage({
     });
 
     // Update the category in the local categories list
+    const normalizedNewIcon = normalizeIconName(renameCategoryIcon);
     const updatedCategories = localCategories.map(cat => 
       cat.id === oldCategoryId 
-        ? { ...cat, id: newIdTrimmed, label: newLabelTrimmed }
+        ? { ...cat, id: newIdTrimmed, label: newLabelTrimmed, icon: normalizedNewIcon }
         : cat
     );
 
@@ -1018,6 +1046,7 @@ export function SettingsPage({
   const startRenameCategory = (category: Category) => {
     setSelectedCategory(category);
     setRenameCategoryValue(category.label);
+    setRenameCategoryIcon(category.icon || 'Folder');
     setIsCategoryRenameDialogOpen(true);
   };
 
@@ -1748,9 +1777,15 @@ export function SettingsPage({
                         `}
                       >
                         <GripVertical className="h-4 w-4 text-muted-foreground" />
-                        <Badge variant="outline" className="font-medium">
-                          {category.label}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const IconComp = getLucideIconComponent(category.icon);
+                            return <IconComp className="h-4 w-4 text-muted-foreground" />;
+                          })()}
+                          <Badge variant="outline" className="font-medium">
+                            {category.label}
+                          </Badge>
+                        </div>
                         <span className="text-sm text-muted-foreground">
                           <span className="text-sm text-muted-foreground hidden sm:inline">
                             ID: {category.id}
@@ -2639,6 +2674,29 @@ export function SettingsPage({
                     placeholder="Enter new category name"
                   />
                 </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rename-category-icon">Icon (Lucide name)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="rename-category-icon"
+                        value={renameCategoryIcon}
+                        onChange={(e) => setRenameCategoryIcon(e.target.value)}
+                        placeholder="e.g. tag, box, heart, alert-circle"
+                      />
+                      <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
+                        {(() => {
+                          const IconPreview = getLucideIconComponent(renameCategoryIcon);
+                          return <IconPreview className="h-4 w-4 text-muted-foreground" />;
+                        })()}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      See available icons at <a href="https://lucide.dev/icons" target="_blank" rel="noopener noreferrer" className="text-primary underline">lucide.dev/icons</a>
+                    </p>
+                    {!iconExists(renameCategoryIcon) && (
+                      <p className="text-xs text-red-600 mt-1">Icon not found — it will fall back to the Folder icon</p>
+                    )}
+                  </div>
               </div>
               <DialogFooter className="flex justify-between items-center">
                 <div className="flex-1 flex justify-start">
@@ -2661,7 +2719,12 @@ export function SettingsPage({
                         handleRenameCategory(selectedCategory.id, newId, renameCategoryValue.trim());
                       }
                     }}
-                    disabled={!renameCategoryValue.trim() || renameCategoryValue === selectedCategory?.label}
+                    disabled={
+                      !renameCategoryValue.trim() || (
+                        renameCategoryValue === selectedCategory?.label &&
+                        normalizeIconName(renameCategoryIcon) === (selectedCategory?.icon || 'Folder')
+                      )
+                    }
                   >
                     Rename Category
                   </Button>
@@ -2710,7 +2773,7 @@ export function SettingsPage({
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
-                    <div className="space-y-2 mt-4 mb-4">
+                    <div className="space-y-2 mt-4 mb-2">
                       <Label htmlFor="new-category">Category name</Label>
                       <Input
                         id="new-category"
@@ -2718,6 +2781,29 @@ export function SettingsPage({
                         onChange={(e) => setNewCategoryLabel(e.target.value)}
                         placeholder="Enter category name"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="new-category-icon">Icon (Lucide name)</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="new-category-icon"
+                          value={newCategoryIcon}
+                          onChange={(e) => setNewCategoryIcon(e.target.value)}
+                          placeholder="e.g. tag, box, heart, alert-circle"
+                        />
+                        <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
+                          {(() => {
+                            const IconPreview = getLucideIconComponent(newCategoryIcon);
+                            return <IconPreview className="h-4 w-4 text-muted-foreground" />;
+                          })()}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        See available icons at <a href="https://lucide.dev/icons" target="_blank" rel="noopener noreferrer" className="text-primary underline">lucide.dev/icons</a>
+                      </p>
+                      {!iconExists(newCategoryIcon) && (
+                        <p className="text-xs text-red-600 mt-1">Icon not found — it will fall back to the Folder icon</p>
+                      )}
                     </div>
                   </div>
                   <DialogFooter>
