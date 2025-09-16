@@ -69,18 +69,57 @@ app.post('/api/save-model', (req, res) => {
     
     console.log('Resolved file path for saving:', absoluteFilePath);
     
-    // Load existing model JSON
+    // Load existing model JSON (be defensive against corrupt or partial files)
     let existing = {};
     if (fs.existsSync(absoluteFilePath)) {
-      existing = JSON.parse(fs.readFileSync(absoluteFilePath, 'utf-8'));
+      try {
+        const raw = fs.readFileSync(absoluteFilePath, 'utf-8');
+        existing = raw ? JSON.parse(raw) : {};
+      } catch (parseErr) {
+        console.error(`Failed to parse existing model JSON at ${absoluteFilePath}:`, parseErr);
+        // If file is corrupted or partially written, continue with an empty object so we can
+        // overwrite with a clean, valid JSON. Do NOT hard-fail here to avoid blocking UI actions.
+        existing = {};
+      }
     }
     
     // Remove filePath and other computed properties from changes to prevent them from being saved
     const { filePath: _, modelUrl: __, ...cleanChanges } = changes;
     
+    // Normalize tags if provided: trim and dedupe case-insensitively while preserving
+    // the original casing of the first occurrence.
+    function normalizeTags(tags) {
+      if (!Array.isArray(tags)) return tags;
+      const seen = new Set();
+      const out = [];
+      for (const t of tags) {
+        if (typeof t !== 'string') continue;
+        const trimmed = t.trim();
+        const key = trimmed.toLowerCase();
+        if (!seen.has(key) && trimmed !== '') {
+          seen.add(key);
+          out.push(trimmed);
+        }
+      }
+      return out;
+    }
+
+    if (cleanChanges.tags) {
+      cleanChanges.tags = normalizeTags(cleanChanges.tags);
+    }
+
     // Merge changes (excluding computed properties)
     const updated = { ...existing, ...cleanChanges };
-    fs.writeFileSync(absoluteFilePath, JSON.stringify(updated, null, 2), 'utf-8');
+
+    // Ensure the directory exists
+    const dir = path.dirname(absoluteFilePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    // Write atomically: write to a temp file then rename it into place to avoid
+    // readers seeing a truncated/partial file during concurrent writes.
+    const tmpPath = absoluteFilePath + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf8');
+    fs.renameSync(tmpPath, absoluteFilePath);
     console.log('Model updated and saved to:', absoluteFilePath);
     res.json({ success: true });
   } catch (err) {
