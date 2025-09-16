@@ -2306,7 +2306,7 @@ export function SettingsPage({
                               return processed > 0 ? (
                                 <div key="gen-processed-count" className="flex items-center gap-2">
                                   <BarChart3 className="h-4 w-4 text-primary" />
-                                  <span className="text-sm">{processed} processed</span>
+                                  <span className="text-sm">{processed} total processed:</span>
                                 </div>
                               ) : null;
                             })()}
