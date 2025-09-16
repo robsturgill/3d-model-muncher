@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, Layers, X, Settings, FileText, EyeOff } from "lucide-react";
+import { Search, Filter, Layers, X, Settings, FileText, Eye, CircleCheck, FileBox, Tag } from "lucide-react";
 import * as LucideIcons from 'lucide-react';
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -330,7 +330,10 @@ export function FilterSidebar({
 
             {/* Print Status */}
             <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground">Print Status</label>
+              <div className="flex items-center gap-2">
+                <CircleCheck className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">Print Status</label>
+              </div>
               <Select value={selectedPrintStatus} onValueChange={handlePrintStatusChange}>
                 <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
                   <SelectValue />
@@ -345,7 +348,10 @@ export function FilterSidebar({
 
             {/* File Type Filter */}
             <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground">File Type</label>
+              <div className="flex items-center gap-2">
+                <FileBox className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">File Type</label>
+              </div>
               <Select value={selectedFileType} onValueChange={handleFileTypeChange}>
                 <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
                   <SelectValue placeholder="All File Types" />
@@ -383,7 +389,7 @@ export function FilterSidebar({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <EyeOff className="h-4 w-4 text-foreground" />
+                  <Eye className="h-4 w-4 text-foreground" />
                   <label className="text-sm font-medium text-foreground">Show Hidden Models</label>
                 </div>
                 <Switch
@@ -396,7 +402,10 @@ export function FilterSidebar({
 
             {/* Tags */}
             <div className="space-y-3">
-              <label className="text-sm font-medium text-foreground">Popular Tags</label>
+              <div className="flex items-center gap-2">
+                <Tag className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">Tags</label>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {availableTags.slice(0, 12).map((tag) => (
                   <Badge
