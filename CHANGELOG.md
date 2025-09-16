@@ -1,3 +1,18 @@
+# [0.7.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.6.0...v0.7.0) (2025-09-15)
+
+
+### Bug Fixes
+
+* fix for react-tree intrinsic type errors ([eb778e4](https://github.com/robsturgill/3d-model-muncher/commit/eb778e4b1f455550bbaebbd5908c64dc561a967b))
+* **modelviewer3d:** removed max zoom level ([233d88f](https://github.com/robsturgill/3d-model-muncher/commit/233d88fb51a1eece3832b543dfc286a716d4cbd5))
+
+
+### Features
+
+* added category deletion, fix renaming issue, fix filtering issue ([bc4fa83](https://github.com/robsturgill/3d-model-muncher/commit/bc4fa83063a687bb0932d9b53cea2d9679395a03)), closes [#12](https://github.com/robsturgill/3d-model-muncher/issues/12)
+* added file type filtering for model view ([6cb5fa7](https://github.com/robsturgill/3d-model-muncher/commit/6cb5fa760eb1a212d8b3605ff633b0eb45cacdfe))
+* choose icon for category ([d50dd3a](https://github.com/robsturgill/3d-model-muncher/commit/d50dd3a11959b6107e17a731798322e6fdbc9f39))
+
 # [0.6.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.5.2...v0.6.0) (2025-09-15)
 
 
