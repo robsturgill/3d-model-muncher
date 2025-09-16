@@ -7,7 +7,7 @@ export class ConfigManager {
   private static defaultConfig: AppConfig = {
     version: "1.0.0",
     categories: [
-      { id: "uncategorized", label: "Uncategorized", icon: "Tag" },
+      { id: "uncategorized", label: "Uncategorized", icon: "Folder" },
       { id: "miniatures", label: "Miniatures", icon: "Package" },
       { id: "utility", label: "Utility", icon: "Wrench" },
       { id: "decorative", label: "Decorative", icon: "Flower" },
@@ -18,7 +18,7 @@ export class ConfigManager {
       defaultTheme: "system",
       defaultView: "grid",
       defaultGridDensity: 4,
-      defaultModelView: "3d",
+      defaultModelView: "images",
       autoSave: true,
       modelDirectory: "./models",
     },
