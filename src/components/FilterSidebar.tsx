@@ -407,7 +407,7 @@ export function FilterSidebar({
                 <label className="text-sm font-medium text-foreground">Tags</label>
               </div>
               <div className="flex flex-wrap gap-2">
-                {availableTags.slice(0, 12).map((tag) => (
+                {availableTags.slice(0, 200).map((tag) => (
                   <Badge
                     key={tag}
                     variant={selectedTags.includes(tag) ? "default" : "secondary"}

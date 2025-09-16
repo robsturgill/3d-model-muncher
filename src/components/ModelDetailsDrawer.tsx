@@ -485,10 +485,14 @@ export function ModelDetailsDrawer({
 
   const handleAddTag = () => {
     if (!newTag.trim() || !editedModel) return;
-    
+
     const trimmedTag = newTag.trim();
     const currentTags = editedModel.tags || [];
-    if (!currentTags.includes(trimmedTag)) {
+    const lowerNew = trimmedTag.toLowerCase();
+
+    // Prevent duplicates case-insensitively
+    const exists = currentTags.some(t => t.toLowerCase() === lowerNew);
+    if (!exists) {
       setEditedModel({
         ...editedModel,
         tags: [...currentTags, trimmedTag]
@@ -517,15 +521,21 @@ export function ModelDetailsDrawer({
     if (!editedModel || !editedModel.category) return [];
     
     const suggestedTags = getCategoryTags(editedModel.category);
-    return suggestedTags.filter((tag: string) => !(editedModel.tags || []).includes(tag));
+    // Filter out tags that already exist on the editedModel (case-insensitive)
+    const existing = new Set((editedModel.tags || []).map(t => t.toLowerCase()));
+    return suggestedTags.filter((tag: string) => !existing.has(tag.toLowerCase()));
   };
 
   const handleSuggestedTagClick = (tag: string) => {
     if (!editedModel) return;
-    
+    // Prevent duplicates (case-insensitive)
+    const currentTags = editedModel.tags || [];
+    const lowerTag = tag.toLowerCase();
+    if (currentTags.some(t => t.toLowerCase() === lowerTag)) return;
+
     setEditedModel({
       ...editedModel,
-      tags: [...(editedModel.tags || []), tag]
+      tags: [...currentTags, tag]
     });
   };
 

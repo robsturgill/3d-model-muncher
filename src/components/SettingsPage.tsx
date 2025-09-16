@@ -50,19 +50,20 @@ const {
   FileText,
   Clock,
   HardDrive,
-  RotateCcw
+  RotateCcw,
+  X
 } = LucideIcons;
 import { toast } from 'sonner';
+import { ImageWithFallback } from './ImageWithFallback';
 
 // Icon component for model thumbnails
 const ModelThumbnail = ({ thumbnail, name }: { thumbnail: string | null | undefined; name: string }) => {
   if (thumbnail) {
     return (
-      <img
+      <ImageWithFallback
         src={thumbnail}
         alt={name}
         className="w-8 h-8 object-cover rounded border"
-        loading="lazy"
       />
     );
   }
@@ -184,6 +185,7 @@ export function SettingsPage({
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameTagValue, setRenameTagValue] = useState('');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
+  const tagInputRef = useRef<HTMLInputElement | null>(null);
   // Allow parent to control which tab is opened initially (e.g. "integrity")
   const [selectedTab, setSelectedTab] = useState<string>(initialTab ?? 'general');
 
@@ -1886,8 +1888,19 @@ export function SettingsPage({
                         placeholder="Search tags..."
                         value={tagSearchTerm}
                         onChange={(e) => setTagSearchTerm(e.target.value)}
-                        className="pl-10"
+                        ref={tagInputRef}
+                        className="pl-10 pr-10"
                       />
+                      {tagSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => { setTagSearchTerm(''); try { tagInputRef.current?.focus(); } catch (e) {} }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                          aria-label="Clear search"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2358,11 +2371,10 @@ export function SettingsPage({
                                         <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 bg-muted rounded-md gap-2">
                                           <div className="flex items-center gap-2 min-w-0 flex-1">
                                             {model.thumbnail ? (
-                                              <img
+                                              <ImageWithFallback
                                                 src={model.thumbnail}
                                                 alt={model.name}
                                                 className="w-8 h-8 object-cover rounded border"
-                                                loading="lazy"
                                               />
                                             ) : (
                                               <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
@@ -2527,10 +2539,9 @@ export function SettingsPage({
 
                   {/* Community */}
                   <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-                    <img 
+                    <ImageWithFallback
                       src="/images/munchie-side.png"
                       alt="Community mascot"
-                      width="200"
                       className="w-32 sm:w-[200px] h-auto flex-shrink-0 mx-auto sm:mx-0"
                     />                    
                     <div className="flex-1 w-full flex flex-col justify-center space-y-3 text-left">
@@ -2838,7 +2849,7 @@ export function SettingsPage({
                         setViewTagModels(null);
                       }}
                     >
-                      <img
+                      <ImageWithFallback
                         src={model.thumbnail}
                         alt={model.name}
                         className="w-12 h-12 object-cover rounded border"

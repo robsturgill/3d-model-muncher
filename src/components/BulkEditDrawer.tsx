@@ -276,15 +276,34 @@ export function BulkEditDrawer({
     if (!newTag.trim()) return;
 
     const trimmedTag = newTag.trim();
-    setEditState((prev) => ({
-      ...prev,
-      tags: {
-        add: [...(prev.tags?.add || []), trimmedTag],
-        remove: (prev.tags?.remove || []).filter(
-          (tag) => tag !== trimmedTag,
-        ),
-      },
-    }));
+    setEditState((prev) => {
+      const currentAdds = prev.tags?.add || [];
+      const currentRemoves = prev.tags?.remove || [];
+
+      // Prevent duplicates: check case-insensitively against currentAdds and allTags
+      const lowerNew = trimmedTag.toLowerCase();
+      const existingInAdds = currentAdds.some(t => t.toLowerCase() === lowerNew);
+      const existingInAllTags = allTags.some(t => t.toLowerCase() === lowerNew);
+
+      if (existingInAdds || existingInAllTags) {
+        // If tag is present in remove list, ensure it's removed from remove list
+        return {
+          ...prev,
+          tags: {
+            add: currentAdds,
+            remove: currentRemoves.filter((tag) => tag.toLowerCase() !== lowerNew),
+          },
+        };
+      }
+
+      return {
+        ...prev,
+        tags: {
+          add: [...currentAdds, trimmedTag],
+          remove: currentRemoves.filter((tag) => tag.toLowerCase() !== lowerNew),
+        },
+      };
+    });
     setNewTag("");
   };
 
