@@ -92,6 +92,36 @@ docker-compose up -d
 
 Each 3MF/STL file gets a corresponding `-munchie.json` metadata file containing extracted information like thumbnails, print settings, and user-defined tags. The system uses MD5 hashing for duplicate detection and preserves user data during rescans.
 
+## User-defined metadata (preserved on regeneration)
+
+When `-munchie.json` file metadata is regenerated (via "Regenerate" action in Bulk Edit drawer), the tool preserves user-defined metadata fields so your manual edits are not lost. The backend reads the existing JSON and merges certain user-managed fields into the newly generated metadata before writing the file back out.
+
+The following fields are preserved and will not be overwritten by a regeneration:
+
+- `tags` — array of user tags/categories applied to the model
+- `isPrinted` — boolean indicating if the model has been printed
+- `printTime` — user-entered or measured print time string
+- `filamentUsed` — filament usage string (e.g., grams)
+- `category` — user-assigned category name
+- `notes` — freeform notes and comments
+- `license` — user-specified license information
+- `hidden` — whether the model is hidden from normal listings
+- `source` — optional source/origin information entered by the user
+- `price` — user-defined price or cost value
+
+The following fields are computed or extracted from the model file and will be replaced when the munchie JSON is recreated. 
+
+- `hash` — MD5 checksum of the model file (used for duplicate detection)
+- `thumbnail` — embedded thumbnail image extracted from the 3MF (stored as a base64 data URL)
+- `images` — additional embedded images or auxiliary pictures packaged in the 3MF
+- `modelUrl` — the path/URL to the model file under the `models/` directory
+- `fileSize` — human-readable file size derived from the model file
+- `name` — title parsed from the 3MF metadata (or derived from the filename for STLs)
+- `description` — description parsed from 3MF metadata
+- `printSettings` — parsed printing profile values (for example: `layerHeight`, `infill`, `nozzle`)
+
+If you rely on any other custom or non-standard fields, consider exporting a backup before regenerating munchie files; the regeneration process only guarantees preservation of the explicitly listed user-managed fields.
+
 ## Troubleshooting
 
 **Common Issues:**
