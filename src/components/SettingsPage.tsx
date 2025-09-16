@@ -201,16 +201,19 @@ export function SettingsPage({
     if (!settingsAction) return;
     // Switch to the integrity tab so the user sees progress/results
     setSelectedTab('integrity');
-    // Ensure file type selection reflects action
-    setSelectedFileType(settingsAction.fileType);
+    // Capture fileType locally and ensure handlers use it directly to avoid
+    // a React state update race (setSelectedFileType is async)
+    const actionFileType = settingsAction.fileType;
+    setSelectedFileType(actionFileType);
 
     (async () => {
       try {
         if (settingsAction.type === 'hash-check') {
-          // handleRunHashCheck is synchronous but triggers state updates/fetch
-          handleRunHashCheck();
+          // Call the hash check with the explicit file type
+          handleRunHashCheck(actionFileType);
         } else if (settingsAction.type === 'generate') {
-          await handleGenerateModelJson();
+          // Call the generate handler with the explicit file type
+          await handleGenerateModelJson(actionFileType);
         }
       } catch (err) {
         console.error('Error running settingsAction:', err);
@@ -323,16 +326,17 @@ export function SettingsPage({
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
   const [generateResult, setGenerateResult] = useState<{ skipped: number } | null>(null);
   
-  const handleGenerateModelJson = async () => {
+  const handleGenerateModelJson = async (fileType?: "3mf" | "stl") => {
+    const effectiveFileType = fileType || selectedFileType;
     setIsGeneratingJson(true);
     setGenerateResult(null);
-    const fileTypeText = selectedFileType === "3mf" ? ".3mf" : ".stl";
+    const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
     setStatusMessage(`Generating JSON for all ${fileTypeText} files...`);
     try {
       const response = await fetch('/api/scan-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileType: selectedFileType })
+        body: JSON.stringify({ fileType: effectiveFileType })
       });
       const data = await response.json();
       if (response.ok && data.success) {
@@ -1149,17 +1153,18 @@ export function SettingsPage({
   };
 
   // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
-  const handleRunHashCheck = () => {
+  const handleRunHashCheck = (fileType?: "3mf" | "stl") => {
     // Clear any previous generate results so the UI doesn't show stale "skipped" counts
     if (generateResult) setGenerateResult(null);
     setIsHashChecking(true);
     setHashCheckProgress(0);
-    const fileTypeText = selectedFileType === "3mf" ? ".3mf" : ".stl";
+    const effectiveFileType = fileType || selectedFileType;
+    const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
     setStatusMessage(`Rescanning ${fileTypeText} files and comparing hashes...`);
     fetch('/api/hash-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileType: selectedFileType })
+      body: JSON.stringify({ fileType: effectiveFileType })
     })
       .then(resp => resp.json())
       .then(data => {
@@ -2203,7 +2208,7 @@ export function SettingsPage({
                       </div>
                       <div className="flex gap-2">
                         <Button 
-                          onClick={handleRunHashCheck}
+                          onClick={() => handleRunHashCheck()}
                           disabled={isHashChecking}
                           className="gap-2"
                         >
@@ -2215,7 +2220,7 @@ export function SettingsPage({
                           {isHashChecking ? 'Checking...' : 'Run Check'}
                         </Button>
                         <Button
-                          onClick={handleGenerateModelJson}
+                          onClick={() => handleGenerateModelJson()}
                           disabled={isGeneratingJson}
                           className="gap-2"
                           variant="secondary"
