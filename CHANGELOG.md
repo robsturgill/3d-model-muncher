@@ -1,3 +1,19 @@
+## [0.7.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.7.0...v0.7.1) (2025-09-16)
+
+
+### Bug Fixes
+
+* added missing icons to filter sheet ([7f6e97f](https://github.com/robsturgill/3d-model-muncher/commit/7f6e97f113fbf4c0d4609509cdbfbde84a6bf94e))
+* clarify processed item count display in settings page ([0bebd94](https://github.com/robsturgill/3d-model-muncher/commit/0bebd94b4d629b433bfca2877f4e7871eca1d0a9))
+* correct uncategorized icon ([a9aea87](https://github.com/robsturgill/3d-model-muncher/commit/a9aea8768cac3452cde88e81893b57f471d46b6c))
+* enhance debugging and sanitization of jsonFilePath in BulkEditDrawer ([29634a2](https://github.com/robsturgill/3d-model-muncher/commit/29634a2cf266635adf5f93c177f5dadc7023086f))
+* enhance file integrity result handling and status display counts ([4afd439](https://github.com/robsturgill/3d-model-muncher/commit/4afd439d4f7aaf3ba8d2ed69c0aecaea4709c294))
+* enhance logging by adding sanitization and truncating large outputs ([8f12a8f](https://github.com/robsturgill/3d-model-muncher/commit/8f12a8f48915f31586e384f92f7d5983a400da29))
+* enhance model saving logic to handle corrupt files and normalize tags ([3450058](https://github.com/robsturgill/3d-model-muncher/commit/3450058c3812888930a51d7e2b9a8a2006754f9b))
+* improve handling of file types in settings file integrity actions ([54a91f4](https://github.com/robsturgill/3d-model-muncher/commit/54a91f455c082f0c29cb75c56da25594355b2b10))
+* positioning of print status in tag view models dialog ([89a494f](https://github.com/robsturgill/3d-model-muncher/commit/89a494f5b05504faa89607da90ee93567a8ec78d))
+* prevent duplicate tags, increase tag display limit in filter sidebar ([67f40cf](https://github.com/robsturgill/3d-model-muncher/commit/67f40cf8092d0b371bf8f22d8ef52f6098173539))
+
 # [0.7.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.6.0...v0.7.0) (2025-09-15)
 
 
