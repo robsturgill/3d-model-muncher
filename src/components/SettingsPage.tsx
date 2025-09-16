@@ -2856,13 +2856,17 @@ export function SettingsPage({
                       />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{model.name}</p>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Badge variant="outline" className="text-xs">
-                            {model.category}
-                          </Badge>
-                          <span className={model.isPrinted ? 'text-green-600' : 'text-yellow-600'}>
-                            {model.isPrinted ? 'Printed' : 'Not Printed'}
-                          </span>
+                        <div className="flex flex-col text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {model.category}
+                            </Badge>
+                          </div>
+                          <div>
+                            <span className={model.isPrinted ? 'text-green-600' : 'text-yellow-600'}>
+                              {model.isPrinted ? 'Printed' : 'Not Printed'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
