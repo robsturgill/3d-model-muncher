@@ -11,6 +11,61 @@ const { ConfigManager } = require('./dist-backend/utils/configManager');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Helper: sanitize objects before logging to avoid dumping large base64 images
+function sanitizeForLog(value, options = {}) {
+  const maxStringLength = options.maxStringLength || 200; // truncate long strings
+  const base64Pattern = /^(data:\w+\/[\w+.-]+;base64,)?[A-Za-z0-9+/=\s]{200,}$/; // heuristic
+
+  function sanitize(v, seen = new Set()) {
+    if (v == null) return v;
+    if (typeof v === 'string') {
+      // If looks like base64 or very long, truncate and replace
+      const trimmed = v.trim();
+      if (trimmed.length > maxStringLength || base64Pattern.test(trimmed)) {
+        return trimmed.substring(0, 64) + '...[TRUNCATED ' + trimmed.length + ' chars]';
+      }
+      return v;
+    }
+    if (typeof v === 'number' || typeof v === 'boolean') return v;
+    if (Array.isArray(v)) {
+      return v.map(i => sanitize(i, seen));
+    }
+    if (typeof v === 'object') {
+      if (seen.has(v)) return '[Circular]';
+      seen.add(v);
+      const out = {};
+      for (const k of Object.keys(v)) {
+        // Skip very large keys that commonly contain image data
+        if (/(thumbnail|image|data|base64)/i.test(k) && typeof v[k] === 'string') {
+          const s = v[k].trim();
+          if (s.length > 40 || base64Pattern.test(s)) {
+            out[k] = '[BASE64 TRUNCATED ' + s.length + ' chars]';
+            continue;
+          }
+        }
+        out[k] = sanitize(v[k], seen);
+      }
+      return out;
+    }
+    return v;
+  }
+
+  try {
+    return sanitize(value);
+  } catch (e) {
+    return '[Unable to sanitize]';
+  }
+}
+
+function safeLog(...args) {
+  const sanitized = args.map(a => {
+    if (typeof a === 'object' && a !== null) return sanitizeForLog(a);
+    if (typeof a === 'string' && a.length > 400) return a.substring(0, 200) + '...[TRUNCATED ' + a.length + ' chars]';
+    return a;
+  });
+  console.log.apply(console, sanitized);
+}
+
 // Configure multer for backup file uploads
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -53,7 +108,7 @@ function getAbsoluteModelsPath() {
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
   const { filePath, id, ...changes } = req.body;
-  console.log('Save model request:', { filePath, changes });
+  safeLog('Save model request:', { filePath, changes });
   if (!filePath) {
     return res.status(400).json({ success: false, error: 'No filePath provided' });
   }
@@ -120,7 +175,7 @@ app.post('/api/save-model', (req, res) => {
     const tmpPath = absoluteFilePath + '.tmp';
     fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf8');
     fs.renameSync(tmpPath, absoluteFilePath);
-    console.log('Model updated and saved to:', absoluteFilePath);
+  console.log('Model updated and saved to:', absoluteFilePath);
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving model:', err);
@@ -132,7 +187,7 @@ app.post('/api/save-model', (req, res) => {
 app.get('/api/models', async (req, res) => {
   try {
     const absolutePath = getAbsoluteModelsPath();
-    console.log(`API /models scanning directory: ${absolutePath}`);
+  console.log(`API /models scanning directory: ${absolutePath}`);
     
     let models = [];
     
@@ -187,7 +242,7 @@ app.get('/api/models', async (req, res) => {
                   model.modelUrl = modelUrl;
                   model.filePath = filePath;
                   
-                  console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
+                    console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
                   models.push(model);
                 } else {
                   console.log(`Skipping ${fullPath} - corresponding .stl/.STL file not found`);
@@ -220,7 +275,7 @@ app.get('/api/models', async (req, res) => {
               }
             }
           } catch (error) {
-            console.error(`Error reading model file ${fullPath}:`, error);
+                console.error(`Error reading model file ${fullPath}:`, error);
           }
         }
       }
@@ -899,9 +954,9 @@ app.delete('/api/models/delete', async (req, res) => {
       }
     }
 
-    console.log(`Deletion summary: ${deleted.length} files deleted, ${errors.length} errors`);
-    console.log('Deleted files:', deleted);
-    console.log('Errors:', errors);
+  console.log(`Deletion summary: ${deleted.length} files deleted, ${errors.length} errors`);
+  safeLog('Deleted files:', deleted);
+  safeLog('Errors:', errors);
 
     res.json({ 
       success: errors.length === 0, 
@@ -1130,7 +1185,8 @@ app.post('/api/restore-munchie-files', async (req, res) => {
       summary: `Restored ${results.restored.length} files, skipped ${results.skipped.length}, ${results.errors.length} errors`
     });
 
-    console.log(`Restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
+  console.log(`Restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
+  safeLog('Restore details:', results);
     
   } catch (error) {
     console.error('Restore error:', error);
@@ -1304,7 +1360,8 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
       summary: `Restored ${results.restored.length} files, skipped ${results.skipped.length}, ${results.errors.length} errors`
     });
 
-    console.log(`File upload restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
+  console.log(`File upload restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
+  safeLog('File upload restore details:', results);
     
   } catch (error) {
     console.error('File upload restore error:', error);
