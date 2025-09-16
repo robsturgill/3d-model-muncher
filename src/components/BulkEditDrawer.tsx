@@ -519,7 +519,34 @@ export function BulkEditDrawer({
           jsonFilePath = `${model.name}-munchie.json`;
         }
 
-        console.log(`[BulkEdit] Processing model: ${model.name}, jsonFilePath: ${jsonFilePath}`);
+  // Debug: show the original computed jsonFilePath
+  console.log(`[BulkEdit][DEBUG] Original computed jsonFilePath for ${model.name}:`, jsonFilePath);
+
+  // Sanitize jsonFilePath: some malformed model paths include extra suffixes
+        // like `-munchie.json_1.stl` (created by other tools or previous bugs). If
+        // present, strip the trailing `_...` and any appended `.stl`/`.3mf` so we
+        // write to the canonical `-munchie.json` or `-stl-munchie.json` file.
+        const sanitizeJsonFilePath = (p: string) => {
+          if (!p) return p;
+          // Normalize backslashes for detection
+          const normalized = p;
+          const stlPattern = '-stl-munchie.json_';
+          const threeMfPattern = '-munchie.json_';
+          let idx = normalized.indexOf(stlPattern);
+          if (idx !== -1) {
+            return normalized.substring(0, idx + stlPattern.length - 1); // keep '-stl-munchie.json'
+          }
+          idx = normalized.indexOf(threeMfPattern);
+          if (idx !== -1) {
+            return normalized.substring(0, idx + threeMfPattern.length - 1); // keep '-munchie.json'
+          }
+          return p;
+        };
+
+  const sanitized = sanitizeJsonFilePath(jsonFilePath);
+  jsonFilePath = sanitized;
+
+  console.log(`[BulkEdit][DEBUG] Sanitized jsonFilePath for ${model.name}:`, jsonFilePath);
         console.log(`[BulkEdit] Model details:`, { id: model.id, name: model.name, modelUrl: model.modelUrl, category: model.category });
 
         // Create updated model with changes applied
@@ -528,19 +555,26 @@ export function BulkEditDrawer({
         // Apply bulk tag changes if selected
         if (fieldSelection.tags && editState.tags) {
           let newTags = [...(model.tags || [])];
+          console.log(`[BulkEdit][DEBUG] Existing tags for ${model.name}:`, newTags);
           
           // Remove tags
           if (editState.tags?.remove) {
-            newTags = newTags.filter(tag => !editState.tags?.remove?.includes(tag));
+            const toRemove = editState.tags.remove || [];
+            console.log(`[BulkEdit][DEBUG] Removing tags for ${model.name}:`, toRemove);
+            newTags = newTags.filter(tag => !toRemove.includes(tag));
+            console.log(`[BulkEdit][DEBUG] Tags after removal for ${model.name}:`, newTags);
           }
           
           // Add new tags
           if (editState.tags?.add) {
-            editState.tags.add.forEach(tag => {
+            const toAdd = editState.tags.add || [];
+            console.log(`[BulkEdit][DEBUG] Adding tags for ${model.name}:`, toAdd);
+            toAdd.forEach(tag => {
               if (!newTags.includes(tag)) {
                 newTags.push(tag);
               }
             });
+            console.log(`[BulkEdit][DEBUG] Tags after addition for ${model.name}:`, newTags);
           }
           
           updatedModel.tags = newTags;
@@ -553,8 +587,10 @@ export function BulkEditDrawer({
           }
         });
 
-        // Save to file
-        await saveModelToFile(updatedModel, model);
+  // Debug: show what will be saved
+  console.log(`[BulkEdit][DEBUG] Saving model ${model.name} -> file: ${updatedModel.filePath}, tags:`, updatedModel.tags);
+  // Save to file
+  await saveModelToFile(updatedModel, model);
       }
 
       // If regeneration was part of the operation, refresh models
