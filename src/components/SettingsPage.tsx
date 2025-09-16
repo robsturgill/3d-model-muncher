@@ -324,11 +324,16 @@ export function SettingsPage({
 
   // State and handler for generating model JSONs via backend API
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
-  const [generateResult, setGenerateResult] = useState<{ skipped: number } | null>(null);
+  const [generateResult, setGenerateResult] = useState<{ skipped?: number; generated?: number; verified?: number; processed?: number } | null>(null);
   
   const handleGenerateModelJson = async (fileType?: "3mf" | "stl") => {
     const effectiveFileType = fileType || selectedFileType;
+    // Capture previous generated count before clearing the result so we can infer verified on subsequent runs
+    const prevGenerated = generateResult?.generated || 0;
+    // Clear any previous hash check results so the UI doesn't show stale verified counts
+    if (hashCheckResult) setHashCheckResult(null);
     setIsGeneratingJson(true);
+    // Clear previous generation result so UI shows fresh status while running
     setGenerateResult(null);
     const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
     setStatusMessage(`Generating JSON for all ${fileTypeText} files...`);
@@ -342,7 +347,34 @@ export function SettingsPage({
       if (response.ok && data.success) {
         setSaveStatus('saved');
         setStatusMessage('Model JSON files generated successfully.');
-        setGenerateResult({ skipped: data.skipped || 0 });
+        // Backend may provide different field names; support common ones and fallback
+        const skipped = typeof data.skipped === 'number' ? data.skipped : (data.skippedCount ?? 0);
+        let generated = typeof data.generated === 'number' ? data.generated : (data.created ?? data.added ?? data.new ?? null);
+        const verified = typeof data.verified === 'number' ? data.verified : (data.verifiedCount ?? null);
+
+        // Processed may be reported by the backend; if present, prefer it. Otherwise infer later.
+        const processedFromBackend = typeof data.processed === 'number' ? data.processed : (data.processedCount ?? null);
+
+        // Determine newly-generated count and make `processed` reflect only newly-created items
+        let finalGenerated: number = 0;
+        if (typeof generated === 'number') {
+          finalGenerated = generated;
+        } else if (processedFromBackend !== null) {
+          // If backend provided 'processed' and 'generated' is missing, treat 'processed' as the
+          // count of newly-generated files (the backend's processed value represents created files).
+          finalGenerated = processedFromBackend;
+        }
+
+        // If verified not provided and this run generated nothing but previous run did, promote previous generated -> verified
+        if ((typeof verified !== 'number' || verified === null) && finalGenerated === 0 && prevGenerated > 0) {
+          setGenerateResult({ skipped, generated: 0, verified: prevGenerated, processed: 0 });
+          return;
+        }
+
+        const finalVerified = typeof verified === 'number' ? verified : 0;
+        const finalProcessed = finalGenerated; // processed should be the count of newly-created files
+
+        setGenerateResult({ skipped, generated: finalGenerated, verified: finalVerified, processed: finalProcessed });
       } else {
         setSaveStatus('error');
         setStatusMessage(data.message || 'Failed to generate model JSON files.');
@@ -1154,8 +1186,10 @@ export function SettingsPage({
 
   // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
   const handleRunHashCheck = (fileType?: "3mf" | "stl") => {
-    // Clear any previous generate results so the UI doesn't show stale "skipped" counts
+    // Clear any previous generate or duplicate results so the UI doesn't show stale counts
     if (generateResult) setGenerateResult(null);
+    setDuplicateGroups([]);
+    setHashCheckResult(null);
     setIsHashChecking(true);
     setHashCheckProgress(0);
     const effectiveFileType = fileType || selectedFileType;
@@ -1170,7 +1204,8 @@ export function SettingsPage({
       .then(data => {
       if (!data.success) throw new Error(data.error || 'Hash check failed');
       // Map backend results to hash check result
-      let verified = 0;
+      // Backend may include an overall verified count; prefer it if present
+      let verified = typeof data.verified === 'number' ? data.verified : 0;
       let corrupted = 0;
       const corruptedFiles: CorruptedFile[] = [];
       const duplicateGroups: DuplicateGroup[] = [];
@@ -2263,11 +2298,37 @@ export function SettingsPage({
                             )}
                           </>
                         )}
-                        {generateResult && generateResult.skipped > 0 && (
-                          <div key="gen-skipped-count" className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-gray-600" />
-                            <span className="text-sm">{generateResult.skipped} skipped</span>
-                          </div>
+                        {generateResult && (
+                          <>
+                            {/* Calculate processed count: sum of generated, verified, skipped */}
+                            {(() => {
+                              const processed = (generateResult.generated || 0) + (generateResult.verified || 0) + (generateResult.skipped || 0);
+                              return processed > 0 ? (
+                                <div key="gen-processed-count" className="flex items-center gap-2">
+                                  <BarChart3 className="h-4 w-4 text-primary" />
+                                  <span className="text-sm">{processed} processed</span>
+                                </div>
+                              ) : null;
+                            })()}
+                            {((generateResult.generated || 0) > 0) && (
+                              <div key="gen-generated-count" className="flex items-center gap-2">
+                                <HardDrive className="h-4 w-4 text-green-600" />
+                                <span className="text-sm">{generateResult.generated || 0} generated</span>
+                              </div>
+                            )}
+                            {((generateResult.verified || 0) > 0) && (
+                              <div key="gen-verified-count" className="flex items-center gap-2">
+                                <FileCheck className="h-4 w-4 text-blue-600" />
+                                <span className="text-sm">{generateResult.verified || 0} verified</span>
+                              </div>
+                            )}
+                            {((generateResult.skipped || 0) > 0) && (
+                              <div key="gen-skipped-count" className="flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-gray-600" />
+                                <span className="text-sm">{generateResult.skipped || 0} skipped</span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
