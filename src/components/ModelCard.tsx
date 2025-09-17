@@ -12,6 +12,7 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { Model } from "../types/model";
 import { ImageWithFallback } from "./ImageWithFallback";
+import { triggerDownload, normalizeModelPath } from "../utils/downloadUtils";
 
 interface ModelCardProps {
   model: Model;
@@ -38,38 +39,15 @@ export function ModelCard({
 
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Use the model's URL which already includes the correct path
-    const filePath = model.modelUrl;
-    // Extract the filename from the full path
-    const fileName = filePath.split('/').pop() || '';
-    // Create a temporary link and trigger download
-    const link = document.createElement('a');
-    link.href = filePath;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Use shared triggerDownload which normalizes paths and triggers the browser download
+    triggerDownload(model.modelUrl, e.nativeEvent);
   };
 
   const downloadUrl = (url: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!url) return;
-    // Normalize the incoming url/path so that relative paths and bare filenames
-    // resolve to the server's /models/ URL prefix as done in ModelDetailsDrawer
-    let resolved = url;
-    // If URL starts with '/models/' already, keep as-is
-    if (url.startsWith('/models/')) {
-      resolved = url;
-    } else if (url.startsWith('models/')) {
-      // relative without leading slash
-      resolved = '/' + url;
-    } else {
-      // If it's a bare filename or a path without models prefix, make it /models/<path>
-      // Strip any leading slashes to avoid double slashes
-      const trimmed = url.replace(/^\/+/, '');
-      resolved = '/models/' + trimmed;
-    }
-
+    // reuse normalization helper when building menu items' download links
+    const resolved = normalizeModelPath(url);
+    if (!resolved) return;
     const fileName = resolved.split('/').pop() || '';
     const link = document.createElement('a');
     link.href = resolved;

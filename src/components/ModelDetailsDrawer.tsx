@@ -19,6 +19,7 @@ import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban } from "lucide-react";
 import { Download } from "lucide-react";
+import { triggerDownload } from "../utils/downloadUtils";
 
 interface ModelDetailsDrawerProps {
   model: Model | null;
@@ -658,13 +659,8 @@ export function ModelDetailsDrawer({
     let filePath = currentModel!.filePath
       ? `/models/${fileName}`
       : currentModel!.modelUrl || `/models/${fileName}`;
-    // Create a temporary link and trigger download
-    const link = document.createElement('a');
-    link.href = filePath;
-      link.download = fileName || `model${defaultExtension}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Use shared triggerDownload to normalize and trigger the download
+    triggerDownload(filePath, e.nativeEvent);
   };
 
   // Intercept Sheet open/close changes so that if the user tries to close the
@@ -1410,15 +1406,8 @@ export function ModelDetailsDrawer({
                       <div className="flex items-center gap-2">
                         <Button size="sm" onClick={(e) => {
                           e.stopPropagation();
-                          // Create a link and trigger download. Prefer /models/ prefix if path looks like a models-relative path
-                          const href = path.startsWith('/models/') ? path : path.startsWith('/') ? path : `/models/${path}`;
-                          const a = document.createElement('a');
-                          a.href = href;
-                          // Extract filename
-                          a.download = path.split(/[\/]/).pop() || `file`;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
+                          // Use shared triggerDownload which will normalize the path and trigger the browser download
+                          triggerDownload(path, e.nativeEvent);
                         }}>
                           Download
                         </Button>
