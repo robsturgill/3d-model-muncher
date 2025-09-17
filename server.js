@@ -108,7 +108,6 @@ function getAbsoluteModelsPath() {
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
   const { filePath, id, ...changes } = req.body;
-  safeLog('Save model request:', { filePath, changes });
   if (!filePath) {
     return res.status(400).json({ success: false, error: 'No filePath provided' });
   }
@@ -137,9 +136,31 @@ app.post('/api/save-model', (req, res) => {
         existing = {};
       }
     }
+
+    // Migration: if an existing file accidentally contains a top-level `changes` object
+    // (caused by the previous API mismatch where the client sent { filePath, changes: {...} }),
+    // merge that object into the top-level and remove the wrapper so the file doesn't
+    // continue to contain a "changes" wrapper.
+    if (existing && typeof existing === 'object' && !Array.isArray(existing) && existing.changes && typeof existing.changes === 'object') {
+      try {
+        const migrated = { ...existing, ...existing.changes };
+        delete migrated.changes;
+        existing = migrated;
+        console.log(`Migrated embedded 'changes' object for ${absoluteFilePath}`);
+      } catch (e) {
+        console.warn(`Failed to migrate embedded 'changes' for ${absoluteFilePath}:`, e);
+      }
+    }
     
-    // Remove filePath and other computed properties from changes to prevent them from being saved
-    const { filePath: _, modelUrl: __, ...cleanChanges } = changes;
+    // Some clients send { filePath, changes: { ... } } while others send flattened top-level change fields.
+    // Support both shapes: prefer req.body.changes when present, otherwise use the flattened rest.
+    let incomingChanges = changes;
+    if (req.body && req.body.changes && typeof req.body.changes === 'object') {
+      incomingChanges = req.body.changes;
+    }
+
+    // Remove filePath and other computed properties from incomingChanges to prevent them from being saved
+    const { filePath: _, modelUrl: __, ...cleanChanges } = incomingChanges;
     
     // Normalize tags if provided: trim and dedupe case-insensitively while preserving
     // the original casing of the first occurrence.
@@ -163,6 +184,74 @@ app.post('/api/save-model', (req, res) => {
       cleanChanges.tags = normalizeTags(cleanChanges.tags);
     }
 
+    function normalizeRelatedFiles(arr) {
+      const cleaned = [];
+      const rejected = [];
+      if (!Array.isArray(arr)) return { cleaned, rejected };
+      const seen = new Set();
+      for (let raw of arr) {
+        if (typeof raw !== 'string') continue;
+        let s = raw.trim();
+        if (s === '') {
+          rejected.push(raw);
+          continue; // drop empty entries
+        }
+
+        // Reject path traversal
+        if (s.includes('..')) {
+          rejected.push(raw);
+          continue;
+        }
+
+        // Normalize backslashes to forward slashes for consistent URLs
+        s = s.replace(/\\/g, '/');
+
+        // Reject UNC paths (starting with //) for security reasons
+        if (s.startsWith('//')) {
+          rejected.push(raw);
+          continue;
+        }
+
+        // Reject absolute Windows drive paths (e.g., C:/ or C:\) for security
+        if (/^[a-zA-Z]:\//.test(s) || /^[a-zA-Z]:\\/.test(raw)) {
+          // treat as rejected
+          rejected.push(raw);
+          continue;
+        } else {
+          // Strip a single leading slash if present to make it relative to /models when used
+          if (s.startsWith('/')) s = s.substring(1);
+          if (s.startsWith('/')) s = s.substring(1); // double-check
+        }
+
+        // Deduplicate by normalized form
+        const key = s.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          cleaned.push(s);
+        } else {
+          // duplicate silently dropped
+        }
+      }
+      return { cleaned, rejected };
+    }
+
+    let rejectedRelatedFiles = [];
+    if (cleanChanges.related_files) {
+      const nf = normalizeRelatedFiles(cleanChanges.related_files);
+      cleanChanges.related_files = nf.cleaned;
+      rejectedRelatedFiles = nf.rejected;
+    }
+
+    // At this point we've computed the cleaned changes. Log a concise message:
+    if (!cleanChanges || Object.keys(cleanChanges).length === 0) {
+      safeLog('Save model request: No changes to apply for', { filePath });
+      console.log('No changes to apply for', absoluteFilePath);
+      return res.json({ success: true, message: 'No changes' });
+    } else {
+      // Only log the cleaned changes (no computed props) to avoid noisy or nested payloads
+      safeLog('Save model request:', { filePath, changes: sanitizeForLog(cleanChanges) });
+    }
+
     // Merge changes (excluding computed properties)
     const updated = { ...existing, ...cleanChanges };
 
@@ -175,8 +264,9 @@ app.post('/api/save-model', (req, res) => {
     const tmpPath = absoluteFilePath + '.tmp';
     fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf8');
     fs.renameSync(tmpPath, absoluteFilePath);
-  console.log('Model updated and saved to:', absoluteFilePath);
-    res.json({ success: true });
+    console.log('Model updated and saved to:', absoluteFilePath);
+    // Return cleaned and rejected related_files for client feedback
+    res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles });
   } catch (err) {
     console.error('Error saving model:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -741,6 +831,50 @@ app.post('/api/delete-models', (req, res) => {
     }
   });
   res.json({ success: errors.length === 0, deleted, errors });
+});
+
+// API endpoint to verify a related file path (used by frontend Verify button)
+app.post('/api/verify-file', (req, res) => {
+  try {
+    const { path: incomingPath } = req.body || {};
+    if (!incomingPath || typeof incomingPath !== 'string') {
+      return res.status(400).json({ success: false, error: 'Path required' });
+    }
+
+    // Basic normalization similar to other server helpers
+    let s = incomingPath.trim();
+    if (s === '') return res.status(400).json({ success: false, error: 'Empty path' });
+    // Strip quotes
+    if (/^['"].*['"]$/.test(s)) s = s.replace(/^['"]|['"]$/g, '').trim();
+    // Reject traversal
+    if (s.includes('..')) return res.status(400).json({ success: false, error: 'Path traversal not allowed' });
+    // Normalize slashes
+    s = s.replace(/\\/g, '/');
+    // Reject UNC
+    if (s.startsWith('//')) return res.status(400).json({ success: false, error: 'UNC paths not allowed' });
+    // Reject Windows drive-letter absolutes
+    if (/^[a-zA-Z]:\//.test(s) || /^[a-zA-Z]:\\/.test(incomingPath)) return res.status(400).json({ success: false, error: 'Absolute Windows paths not allowed' });
+    // Strip leading slash to make relative
+    if (s.startsWith('/')) s = s.substring(1);
+
+    const modelsDir = getAbsoluteModelsPath();
+    const candidate = path.join(modelsDir, s);
+    // Ensure candidate path is within models dir
+    const resolved = path.resolve(candidate);
+    if (!resolved.startsWith(path.resolve(modelsDir))) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+
+    if (!fs.existsSync(resolved)) {
+      return res.json({ success: true, exists: false, path: s });
+    }
+
+    const stat = fs.statSync(resolved);
+    return res.json({ success: true, exists: true, isFile: stat.isFile(), isDirectory: stat.isDirectory(), size: stat.size, path: s });
+  } catch (err) {
+    console.error('verify-file error:', err);
+    return res.status(500).json({ success: false, error: 'Server error' });
+  }
 });
 
 // API endpoint to validate a specific 3MF file

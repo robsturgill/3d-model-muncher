@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-// Remove Node.js fs import; use backend API instead
 import { Model } from "../types/model";
 import { Category } from "../types/category";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "./ui/sheet";
@@ -18,7 +17,7 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban } from "lucide-react";
 import { Download } from "lucide-react";
 
 interface ModelDetailsDrawerProps {
@@ -40,7 +39,11 @@ export function ModelDetailsDrawer({
 }: ModelDetailsDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedModel, setEditedModel] = useState<Model | null>(null);
+  const [invalidRelated, setInvalidRelated] = useState<string[]>([]);
+  const [serverRejectedRelated, setServerRejectedRelated] = useState<string[]>([]);
+  const [relatedVerifyStatus, setRelatedVerifyStatus] = useState<Record<number, {loading: boolean; ok?: boolean; message?: string}>>({});
   const [newTag, setNewTag] = useState("");
+  const [focusRelatedIndex, setFocusRelatedIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'3d' | 'images'>(defaultModelView);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
@@ -357,41 +360,29 @@ export function ModelDetailsDrawer({
     }
   }, [selectedImageIndex, isWindowFullscreen]);
 
-  if (!model) return null;
   const currentModel = editedModel || model;
-  // Display path: prefer filePath (JSON path), fall back to modelUrl (trim leading /models/) or a default filename
-  const displayModelPath = currentModel.filePath
-    ? currentModel.filePath
-    : currentModel.modelUrl
-    ? currentModel.modelUrl.replace(/^\/models\//, '')
-    : `${currentModel.name}.3mf`;
-  // Defensive: ensure printSettings is always an object with string fields
-  const safePrintSettings = {
-    layerHeight: currentModel.printSettings?.layerHeight || '',
-    infill: currentModel.printSettings?.infill || '',
-    nozzle: currentModel.printSettings?.nozzle || ''
-  };
 
   const startEditing = () => {
     // Ensure filePath is present for saving - convert to JSON file path
     let jsonFilePath;
-    if (model.filePath) {
+    const srcModel = model!;
+    if (srcModel.filePath) {
       // Convert from .3mf/.stl path to -munchie.json path
-      if (model.filePath.endsWith('.3mf')) {
-        jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
-      } else if (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL')) {
+      if (srcModel.filePath.endsWith('.3mf')) {
+        jsonFilePath = srcModel.filePath.replace('.3mf', '-munchie.json');
+      } else if (srcModel.filePath.endsWith('.stl') || srcModel.filePath.endsWith('.STL')) {
         // Handle both lowercase and uppercase STL extensions
-        jsonFilePath = model.filePath.replace(/\.stl$/i, '-stl-munchie.json');
-      } else if (model.filePath.endsWith('-munchie.json') || model.filePath.endsWith('-stl-munchie.json')) {
+        jsonFilePath = srcModel.filePath.replace(/\.stl$/i, '-stl-munchie.json');
+      } else if (srcModel.filePath.endsWith('-munchie.json') || srcModel.filePath.endsWith('-stl-munchie.json')) {
         // Already a JSON path, use as-is
-        jsonFilePath = model.filePath;
+        jsonFilePath = srcModel.filePath;
       } else {
         // Assume it's a base name and add the JSON extension
-        jsonFilePath = `${model.filePath}-munchie.json`;
+        jsonFilePath = `${srcModel.filePath}-munchie.json`;
       }
-    } else if (model.modelUrl) {
+    } else if (srcModel.modelUrl) {
       // Construct the path based on the modelUrl to match the actual JSON file location
-      let relativePath = model.modelUrl.replace('/models/', '');
+      let relativePath = srcModel.modelUrl.replace('/models/', '');
       // Replace .3mf/.stl extension with appropriate -munchie.json
       if (relativePath.endsWith('.3mf')) {
         relativePath = relativePath.replace('.3mf', '-munchie.json');
@@ -408,13 +399,13 @@ export function ModelDetailsDrawer({
       jsonFilePath = relativePath;
     } else {
       // Fallback to using the model name
-      jsonFilePath = `${model.name}-munchie.json`;
+      jsonFilePath = `${srcModel.name}-munchie.json`;
     }
     setEditedModel({ 
-      ...model, 
+      ...srcModel, 
       filePath: jsonFilePath,
-      tags: model.tags || [] // Ensure tags is always an array
-    });
+      tags: srcModel.tags || [] // Ensure tags is always an array
+    } as Model);
     // Clear any previous image selections when entering edit mode
     setSelectedImageIndexes([]);
     setIsEditing(true);
@@ -427,34 +418,108 @@ export function ModelDetailsDrawer({
     setSelectedImageIndexes([]);
   };
 
+  // Validate and normalize related_files. Returns { cleaned, invalid }.
+  // Rules:
+  const validateAndNormalizeRelatedFiles = (arr?: string[]) => {
+    const cleaned: string[] = [];
+    const invalid: string[] = [];
+    if (!Array.isArray(arr)) return { cleaned, invalid };
+    const seen = new Set<string>();
+    for (const raw of arr) {
+      if (typeof raw !== 'string') {
+        invalid.push(String(raw));
+        continue;
+      }
+      let s = raw.trim();
+      if (s === '') {
+        invalid.push(raw);
+        continue;
+      }
+      // Remove surrounding single or double quotes for validation purposes
+      const hadOuterQuotes = /^['"].*['"]$/.test(s);
+      if (hadOuterQuotes) {
+        s = s.replace(/^['"]|['"]$/g, '').trim();
+        if (s === '') {
+          invalid.push(raw);
+          continue;
+        }
+      }
+      if (s.includes('..')) {
+        invalid.push(raw);
+        continue;
+      }
+      s = s.replace(/\\/g, '/');
+      // Reject UNC paths for security (\\server\share -> //server/share)
+      if (s.startsWith('//')) {
+        invalid.push(raw);
+        continue;
+      }
+      // Reject absolute Windows drive paths (e.g., C:/something or C:\something)
+      if (/^[a-zA-Z]:\//.test(s)) {
+        invalid.push(raw);
+        continue;
+      }
+      // Strip a single leading slash for relative paths
+      if (s.startsWith('/')) s = s.substring(1);
+      const key = s.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        cleaned.push(s);
+      }
+    }
+    return { cleaned, invalid };
+  };
+
   // Helper to send only changed fields to backend
   const saveModelToFile = async (edited: Model, original: Model) => {
     if (!edited.filePath) {
       console.error("No filePath specified for model");
       return;
     }
+    // Use component-scope validateAndNormalizeRelatedFiles
+
+    // Apply validation/normalization
+    const editedForSave: any = { ...edited };
+    const { cleaned, invalid } = validateAndNormalizeRelatedFiles(editedForSave.related_files as any);
+    setInvalidRelated(invalid);
+    if (invalid.length > 0) {
+      // Block save client-side; caller can decide what to do
+      return { success: false, error: 'validation_failed', invalid } as any;
+    }
+    editedForSave.related_files = cleaned;
+
     // Compute changed fields (excluding computed properties like filePath and modelUrl)
-    const changes: any = { filePath: edited.filePath, id: edited.id };
-    Object.keys(edited).forEach(key => {
+    const changes: any = { filePath: editedForSave.filePath, id: editedForSave.id };
+    Object.keys(editedForSave).forEach(key => {
       if (key === 'filePath' || key === 'id' || key === 'modelUrl') return;
-      const editedValue = JSON.stringify((edited as any)[key]);
+      const editedValue = JSON.stringify((editedForSave as any)[key]);
       const originalValue = JSON.stringify((original as any)[key]);
       if (editedValue !== originalValue) {
-        changes[key] = (edited as any)[key];
+        changes[key] = (editedForSave as any)[key];
       }
     });
+
     try {
       const response = await fetch('/api/save-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(changes)
+        body: JSON.stringify({ filePath: editedForSave.filePath, changes })
       });
       const result = await response.json();
       if (!result.success) {
         throw new Error(result.error || 'Failed to save model');
       }
-    } catch (err) {
+      // Show any server-side rejections (e.g., UNC paths removed)
+      if (result && Array.isArray(result.rejected_related_files) && result.rejected_related_files.length > 0) {
+        setServerRejectedRelated(result.rejected_related_files);
+      } else {
+        setServerRejectedRelated([]);
+      }
+      return { success: true, serverResponse: result };
+    } catch (err: unknown) {
       console.error("Failed to save model to file:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg } as any;
     }
   };
 
@@ -473,13 +538,30 @@ export function ModelDetailsDrawer({
         const newImages = remaining.slice(1);
         finalModel = { ...editedModel, thumbnail: newThumbnail, images: newImages } as Model;
       }
+      // Validate related_files before applying to the app state and saving
+      const { cleaned, invalid } = validateAndNormalizeRelatedFiles(finalModel.related_files as any);
+      setInvalidRelated(invalid);
+      if (invalid.length > 0) {
+        // Block save and keep user in edit mode
+        return;
+      }
 
-      onModelUpdate(finalModel);
-      await saveModelToFile(finalModel, model); // Only send changed fields
-      setIsEditing(false);
-      setEditedModel(null);
-      setNewTag("");
-      setSelectedImageIndexes([]);
+      // Replace with cleaned values before persisting
+      finalModel = { ...finalModel, related_files: cleaned } as Model;
+
+      // Persist to server first. After successful save, update the app state.
+  const result = await saveModelToFile(finalModel, model!); // Only send changed fields
+      if (result && result.success) {
+        onModelUpdate(finalModel);
+        setIsEditing(false);
+        setEditedModel(null);
+        setNewTag("");
+        setSelectedImageIndexes([]);
+      } else {
+        // Save failed (network/server error). Keep editedModel so user can retry.
+        // Optionally display error (saveModelToFile already logs).
+        return;
+      }
     }
   };
 
@@ -501,14 +583,7 @@ export function ModelDetailsDrawer({
     setNewTag("");
   };
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    if (!editedModel) return;
-    
-    setEditedModel({
-      ...editedModel,
-      tags: (editedModel.tags || []).filter(tag => tag !== tagToRemove)
-    });
-  };
+
 
   const handleTagKeyPress = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -516,6 +591,29 @@ export function ModelDetailsDrawer({
       handleAddTag();
     }
   };
+
+  // Live-validate related_files whenever the edited model's related_files changes
+  useEffect(() => {
+    if (!editedModel) {
+      setInvalidRelated([]);
+      return;
+    }
+    const { invalid } = validateAndNormalizeRelatedFiles(editedModel.related_files as any);
+    setInvalidRelated(invalid);
+  }, [editedModel?.related_files]);
+
+  // Focus newly-added related_files input when created
+  useEffect(() => {
+    if (focusRelatedIndex === null) return;
+    // Query the input with the data attribute and focus it
+    const selector = `input[data-related-index=\"${focusRelatedIndex}\"]`;
+    const el = document.querySelector<HTMLInputElement>(selector);
+    if (el) {
+      try { el.focus(); el.select(); } catch (e) { /* ignore */ }
+    }
+    // Clear the target so we don't refocus later
+    setFocusRelatedIndex(null);
+  }, [focusRelatedIndex]);
 
   const getSuggestedTags = () => {
     if (!editedModel || !editedModel.category) return [];
@@ -552,14 +650,14 @@ export function ModelDetailsDrawer({
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     // Determine default extension based on modelUrl if available
-    const defaultExtension = currentModel.modelUrl?.endsWith('.stl') ? '.stl' : '.3mf';
+    const defaultExtension = currentModel!.modelUrl?.endsWith('.stl') ? '.stl' : '.3mf';
     // Prefer filePath, fallback to modelUrl or name
-      let fileName = currentModel.filePath
-        ? currentModel.filePath.split(/[/\\]/).pop() || `${currentModel.name}${defaultExtension}`
-        : currentModel.modelUrl?.replace('/models/', '') || `${currentModel.name}${defaultExtension}`;
-    let filePath = currentModel.filePath
+      let fileName = currentModel!.filePath
+        ? currentModel!.filePath.split(/[/\\]/).pop() || `${currentModel!.name}${defaultExtension}`
+        : currentModel!.modelUrl?.replace('/models/', '') || `${currentModel!.name}${defaultExtension}`;
+    let filePath = currentModel!.filePath
       ? `/models/${fileName}`
-      : currentModel.modelUrl || `/models/${fileName}`;
+      : currentModel!.modelUrl || `/models/${fileName}`;
     // Create a temporary link and trigger download
     const link = document.createElement('a');
     link.href = filePath;
@@ -597,6 +695,21 @@ export function ModelDetailsDrawer({
       setIsWindowFullscreen(false);
     }
   };
+  // Ensure we have a model to render. Keep this check after all hooks so hook order remains stable.
+  if (!currentModel) return null;
+
+  // Display path: prefer filePath (JSON path), fall back to modelUrl (trim leading /models/) or a default filename
+  const displayModelPath = currentModel.filePath
+    ? currentModel.filePath
+    : currentModel.modelUrl
+    ? currentModel.modelUrl.replace(/^\/models\//, '')
+    : `${currentModel.name}.3mf`;
+  // Defensive: ensure printSettings is always an object with string fields
+  const safePrintSettings = {
+    layerHeight: currentModel.printSettings?.layerHeight || '',
+    infill: currentModel.printSettings?.infill || '',
+    nozzle: currentModel.printSettings?.nozzle || ''
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
@@ -623,7 +736,7 @@ export function ModelDetailsDrawer({
             <div className="flex items-center gap-2 shrink-0">
               {isEditing ? (
                 <>
-                  <Button onClick={saveChanges} size="sm" className="gap-2">
+                  <Button onClick={saveChanges} size="sm" className="gap-2" disabled={invalidRelated.length > 0} title={invalidRelated.length > 0 ? 'Cannot save: fix invalid related files' : undefined}>
                     <Save className="h-4 w-4" />
                     Save
                   </Button>
@@ -1083,27 +1196,6 @@ export function ModelDetailsDrawer({
                     </Button>
                   </div>
 
-                  {/* Current Tags */}
-                  {editedModel && (editedModel.tags || []).length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Current tags:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {(editedModel.tags || []).map((tag, index) => (
-                          <Badge
-                            key={`${tag}-${index}`}
-                            variant="secondary"
-                            className="text-sm gap-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                            onClick={() => handleRemoveTag(tag)}
-                          >
-                            {tag}
-                            <X className="h-3 w-3" />
-                          </Badge>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Click on a tag to remove it</p>
-                    </div>
-                  )}
-
                   {/* Suggested Tags */}
                   {getSuggestedTags().length > 0 && (
                     <div className="space-y-2">
@@ -1122,6 +1214,113 @@ export function ModelDetailsDrawer({
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Related Files Editing Section */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <Label>Related files</Label>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">Provide a relative path to a file in the `models/` folder (or any public path). In view mode these become download links.</p>
+
+                  <div className="space-y-2">
+                    {(editedModel?.related_files || []).map((rf, idx) => (
+                      <div key={`related-${idx}`} className="flex items-center gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => setEditedModel(prev => {
+                          if (!prev) return prev;
+                          const arr = Array.isArray(prev.related_files) ? prev.related_files.slice() : [];
+                          arr.splice(idx, 1);
+                          return { ...prev, related_files: arr } as Model;
+                        })} aria-label={`Remove related file ${idx}`} title="Remove this related file">
+                          <X className="h-4 w-4" />
+                        </Button>                        
+                        <Input
+                          data-related-index={idx}
+                          value={rf}
+                          placeholder={"path/to/related_file.zip"}
+                          onChange={(e) => setEditedModel(prev => {
+                            if (!prev) return prev;
+                            const arr = Array.isArray(prev.related_files) ? prev.related_files.slice() : [];
+                            arr[idx] = e.target.value;
+                            return { ...prev, related_files: arr } as Model;
+                          })}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="min-w-[64px] flex items-center gap-2"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setRelatedVerifyStatus(prev => ({ ...prev, [idx]: { loading: true } }));
+                              try {
+                                const resp = await fetch('/api/verify-file', {
+                                  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: rf })
+                                });
+                                const j = await resp.json();
+                                if (j && j.success) {
+                                  setRelatedVerifyStatus(prev => ({ ...prev, [idx]: { loading: false, ok: !!j.exists, message: j.exists ? `Found (${j.size} bytes)` : 'Not found' } }));
+                                } else {
+                                  setRelatedVerifyStatus(prev => ({ ...prev, [idx]: { loading: false, ok: false, message: j && j.error ? String(j.error) : 'Error' } }));
+                                }
+                              } catch (err: any) {
+                                setRelatedVerifyStatus(prev => ({ ...prev, [idx]: { loading: false, ok: false, message: String(err?.message || err) } }));
+                              }
+                            }}
+                            title={relatedVerifyStatus[idx]?.loading
+                              ? 'Checking...'
+                              : relatedVerifyStatus[idx] && typeof relatedVerifyStatus[idx].ok !== 'undefined'
+                                ? (relatedVerifyStatus[idx].ok ? 'Found' : 'Not found')
+                                : 'Verify'}
+                          >
+                            {relatedVerifyStatus[idx]?.loading ? (
+                              'Checking...'
+                            ) : relatedVerifyStatus[idx] && typeof relatedVerifyStatus[idx].ok !== 'undefined' ? (
+                              relatedVerifyStatus[idx].ok ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Ban className="h-4 w-4 text-destructive" />
+                            ) : (
+                              'Verify'
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex items-center gap-2">
+                      {/* When Add is clicked we push an empty editable input with a helpful placeholder and focus it */}
+                      <Button size="sm" onClick={() => {
+                        setEditedModel(prev => {
+                          if (!prev) return prev;
+                          const arr = Array.isArray(prev.related_files) ? prev.related_files.slice() : [];
+                          const newIdx = arr.length;
+                          arr.push("");
+                          // set focus target for effect after render
+                          setTimeout(() => setFocusRelatedIndex(newIdx), 0);
+                          return { ...prev, related_files: arr } as Model;
+                        });
+                      }}>
+                        Add
+                      </Button>
+                    </div>
+                    {/* Validation feedback for related files */}
+                    {(invalidRelated && invalidRelated.length > 0) && (
+                      <div className="text-sm text-destructive mt-2">
+                        <strong>Invalid related files (remove or correct to save):</strong>
+                        <ul className="list-disc pl-5 mt-1">
+                          {invalidRelated.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {(serverRejectedRelated && serverRejectedRelated.length > 0) && (
+                      <div className="text-sm text-yellow-700 mt-2">
+                        <strong>Server rejected these entries (they were removed):</strong>
+                        <ul className="list-disc pl-5 mt-1">
+                          {serverRejectedRelated.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Notes Editing Section */}
@@ -1167,7 +1366,7 @@ export function ModelDetailsDrawer({
                     <X className="h-4 w-4" />
                     Cancel
                   </Button>
-                  <Button onClick={saveChanges} className="gap-2">
+                  <Button onClick={saveChanges} className="gap-2" disabled={invalidRelated.length > 0} title={invalidRelated.length > 0 ? 'Cannot save: fix invalid related files' : undefined}>
                     <Save className="h-4 w-4" />
                     Save Changes
                   </Button>
@@ -1192,6 +1391,45 @@ export function ModelDetailsDrawer({
 
               </div>
             )}
+          
+          {/* Related files (view mode) */}
+          {(!isEditing && Array.isArray(currentModel.related_files) && currentModel.related_files.length > 0) && (
+            <>
+              <Separator />
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-lg text-card-foreground">Related Files</h3>
+                </div>
+                <div className="space-y-2">
+                  {currentModel.related_files.map((path, idx) => (
+                    <div key={`view-related-${idx}`} className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg border">
+                      <div className="min-w-0">
+                        <p className="font-medium break-all">{path}</p>
+                        <p className="text-xs text-muted-foreground">Relative path (downloadable)</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={(e) => {
+                          e.stopPropagation();
+                          // Create a link and trigger download. Prefer /models/ prefix if path looks like a models-relative path
+                          const href = path.startsWith('/models/') ? path : path.startsWith('/') ? path : `/models/${path}`;
+                          const a = document.createElement('a');
+                          a.href = href;
+                          // Extract filename
+                          a.download = path.split(/[\/]/).pop() || `file`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}>
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           </div>
 
 
