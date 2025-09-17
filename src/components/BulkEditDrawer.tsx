@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { LICENSES, type License } from '../constants/licenses';
 import { Switch } from "./ui/switch";
 import { Separator } from "./ui/separator";
 import { Checkbox } from "./ui/checkbox";
@@ -56,7 +57,7 @@ interface BulkEditDrawerProps {
 
 interface BulkEditState {
   category?: string;
-  license?: string;
+  license?: License | string;
   isPrinted?: boolean;
   hidden?: boolean;
   tags?: {
@@ -111,17 +112,8 @@ export function BulkEditDrawer({
   const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Available licenses
-  const availableLicenses = [
-    "Creative Commons - Attribution",
-    "Creative Commons - Attribution-ShareAlike",
-    "Creative Commons - Attribution-NonCommercial",
-    "MIT License",
-    "GNU GPL v3",
-    "Apache License 2.0",
-    "BSD 3-Clause License",
-    "Public Domain",
-  ];
+  // Available licenses (centralized)
+  const availableLicenses = LICENSES;
 
   // Get common values across selected models
   const getCommonValues = () => {

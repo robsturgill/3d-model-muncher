@@ -1,3 +1,5 @@
+import type { License } from '../constants/licenses';
+
 export interface Model {
   filePath: string;
   id: string;
@@ -12,7 +14,7 @@ export interface Model {
   description: string;
   fileSize: string;
   modelUrl: string;
-  license: string;
+  license: License | string;
   notes?: string;
   source?: string;
   price?: number;

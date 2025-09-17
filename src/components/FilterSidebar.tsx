@@ -3,6 +3,7 @@ import { Search, Filter, Layers, X, Settings, FileText, Eye, CircleCheck, FileBo
 import * as LucideIcons from 'lucide-react';
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { LICENSES } from '../constants/licenses';
 import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
 import { Button } from "./ui/button";
@@ -79,17 +80,8 @@ export function FilterSidebar({
 
   const availableTags = getAllTags();
 
-  // Available licenses
-  const availableLicenses = [
-    "Creative Commons - Attribution",
-    "Creative Commons - Attribution-ShareAlike",
-    "Creative Commons - Attribution-NonCommercial",
-    "MIT License",
-    "GNU GPL v3",
-    "Apache License 2.0",
-    "BSD 3-Clause License",
-    "Public Domain"
-  ];
+  // Available licenses (centralized)
+  const availableLicenses = LICENSES;
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);

@@ -10,6 +10,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { LICENSES, isKnownLicense } from '../constants/licenses';
 import { Switch } from "./ui/switch";
 import { Separator } from "./ui/separator";
 import { AspectRatio } from "./ui/aspect-ratio";
@@ -1085,14 +1086,17 @@ export function ModelDetailsDrawer({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Creative Commons - Attribution">Creative Commons - Attribution</SelectItem>
-                        <SelectItem value="Creative Commons - Attribution-ShareAlike">Creative Commons - Attribution-ShareAlike</SelectItem>
-                        <SelectItem value="Creative Commons - Attribution-NonCommercial">Creative Commons - Attribution-NonCommercial</SelectItem>
-                        <SelectItem value="MIT License">MIT License</SelectItem>
-                        <SelectItem value="GNU GPL v3">GNU GPL v3</SelectItem>
-                        <SelectItem value="Apache License 2.0">Apache License 2.0</SelectItem>
-                        <SelectItem value="BSD 3-Clause License">BSD 3-Clause License</SelectItem>
-                        <SelectItem value="Public Domain">Public Domain</SelectItem>
+                        {/* If the current edited license isn't in the known set, show it as a disabled item
+                            so the SelectTrigger displays the value instead of an empty placeholder. */}
+                        {editedModel?.license && !isKnownLicense(editedModel.license) && (
+                          <SelectItem value={editedModel.license} disabled>
+                            {editedModel.license} (unknown)
+                          </SelectItem>
+                        )}
+
+                        {LICENSES.map((lic) => (
+                          <SelectItem key={lic} value={lic}>{lic}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

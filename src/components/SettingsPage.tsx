@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { LICENSES } from '../constants/licenses';
 import { Switch } from "./ui/switch";
 import { Separator } from "./ui/separator";
 import { Badge } from "./ui/badge";
@@ -1763,12 +1764,9 @@ export function SettingsPage({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">All Licenses</SelectItem>
-                            <SelectItem value="Creative Commons - Attribution">CC Attribution</SelectItem>
-                            <SelectItem value="Creative Commons - Attribution-ShareAlike">CC Attribution-ShareAlike</SelectItem>
-                            <SelectItem value="MIT License">MIT License</SelectItem>
-                            <SelectItem value="GNU GPL v3">GNU GPL v3</SelectItem>
-                            <SelectItem value="Apache License 2.0">Apache License 2.0</SelectItem>
-                            <SelectItem value="Public Domain">Public Domain</SelectItem>
+                            {LICENSES.map((lic) => (
+                              <SelectItem key={lic} value={lic}>{lic}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
