@@ -594,6 +594,13 @@ export function ModelDetailsDrawer({
     }
   };
 
+  // Remove a tag from the editedModel (case-insensitive)
+  const handleRemoveTag = (tagToRemove: string) => {
+    if (!editedModel) return;
+    const filtered = (editedModel.tags || []).filter(t => t.toLowerCase() !== tagToRemove.toLowerCase());
+    setEditedModel({ ...editedModel, tags: filtered });
+  };
+
   // Live-validate related_files whenever the edited model's related_files changes
   useEffect(() => {
     if (!editedModel) {
@@ -1214,6 +1221,27 @@ export function ModelDetailsDrawer({
                       </div>
                     </div>
                   )}
+
+                  {/* Current Tags (click to remove) */}
+                  {editedModel && (editedModel.tags || []).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Current tags:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(editedModel.tags || []).map((tag, index) => (
+                          <Badge
+                            key={`${tag}-${index}`}
+                            variant="secondary"
+                            className="text-sm gap-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                            onClick={() => handleRemoveTag(tag)}
+                          >
+                            {tag}
+                            <X className="h-3 w-3" />
+                          </Badge>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Click on a tag to remove it</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Related Files Editing Section */}
@@ -1425,7 +1453,7 @@ export function ModelDetailsDrawer({
           </div>
 
 
-          {Array.isArray(currentModel.tags) && currentModel.tags.length > 0 && (
+          {!isEditing && Array.isArray(currentModel.tags) && currentModel.tags.length > 0 && (
             <>
               <Separator />
               {/* Tags Display */}
