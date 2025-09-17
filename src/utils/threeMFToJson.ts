@@ -23,6 +23,7 @@ interface ModelMetadata {
   fileSize: string;
   modelUrl: string;
   license: string;
+  designer?: string;
   notes: string;
   hash: string;
   printSettings: PrintSettings;
@@ -161,6 +162,11 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
             metadata.name = decodeHtmlEntities(value);
           }
 
+          if (key === "designer") {
+            // Preserve original (unescaped) designer string, but strip HTML tags/entities
+            metadata.designer = decodeHtmlEntities(value).trim();
+          }
+
           if (key === "description") {
             // Double decode because the XML contains &amp;lt; which needs to be decoded twice
             metadata.description = decodeHtmlEntities(decodeHtmlEntities(value));
@@ -215,6 +221,10 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
             const infillMatch = value.match(/(\d+)% infill/);
             if (infillMatch) metadata.printSettings.infill = infillMatch[1] + "%";
           }
+        }
+
+        if (key === "designer") {
+          metadata.designer = decodeHtmlEntities(value).trim();
         }
 
         if (key.includes("license")) {

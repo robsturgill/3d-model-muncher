@@ -12,6 +12,7 @@ import { Model } from "./types/model";
 import { Category } from "./types/category";
 import { AppConfig } from "./types/config";
 import { ConfigManager } from "./utils/configManager";
+import { applyFiltersToModels, FilterState } from "./utils/filterUtils";
 import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box } from "lucide-react";
 import { Button } from "./components/ui/button";
 import {
@@ -124,9 +125,20 @@ function AppContent() {
         }
         const loadedModels = await response.json();
         setModels(loadedModels);
-        // Filter out hidden models by default
-        const visibleModels = loadedModels.filter((model: Model) => !model.hidden);
-        setFilteredModels(visibleModels);
+        // Apply configured default filters (from appConfig) when initializing filteredModels
+        const defaultFilters = config.filters || { defaultCategory: 'all', defaultPrintStatus: 'all', defaultLicense: 'all' };
+        const initialFilterState = {
+          search: '',
+          category: defaultFilters.defaultCategory,
+          printStatus: defaultFilters.defaultPrintStatus,
+          license: defaultFilters.defaultLicense,
+          fileType: 'all',
+          tags: [] as string[],
+          showHidden: false,
+        };
+
+  const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
+  setFilteredModels(visibleModels);
       } catch (error) {
         console.error('Failed to load configuration or models:', error);
         // Use default categories if config fails to load
@@ -138,6 +150,8 @@ function AppContent() {
 
     loadInitialData();
   }, []);
+
+  // use centralized applyFiltersToModels from utils/filterUtils
 
   const handleModelClick = (model: Model) => {
     if (currentView === 'models' && isSelectionMode) {
@@ -671,6 +685,15 @@ function AppContent() {
           onSettingsClick={handleSettingsClick}
           categories={categories}
           models={models}
+          initialFilters={{
+            search: '',
+            category: appConfig?.filters?.defaultCategory || 'all',
+            printStatus: appConfig?.filters?.defaultPrintStatus || 'all',
+            license: appConfig?.filters?.defaultLicense || 'all',
+            fileType: 'all',
+            tags: [],
+            showHidden: false,
+          }}
         />
       </div>
 

@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { LICENSES, type License } from '../constants/licenses';
 import { Switch } from "./ui/switch";
 import { Separator } from "./ui/separator";
 import { Checkbox } from "./ui/checkbox";
@@ -56,7 +57,8 @@ interface BulkEditDrawerProps {
 
 interface BulkEditState {
   category?: string;
-  license?: string;
+  license?: License | string;
+  designer?: string;
   isPrinted?: boolean;
   hidden?: boolean;
   tags?: {
@@ -73,6 +75,7 @@ interface BulkEditState {
 interface FieldSelection {
   category: boolean;
   license: boolean;
+  designer: boolean;
   isPrinted: boolean;
   hidden: boolean;
   tags: boolean;
@@ -98,6 +101,7 @@ export function BulkEditDrawer({
     useState<FieldSelection>({
       category: false,
       license: false,
+      designer: false,
       isPrinted: false,
       hidden: false,
       tags: false,
@@ -111,17 +115,8 @@ export function BulkEditDrawer({
   const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Available licenses
-  const availableLicenses = [
-    "Creative Commons - Attribution",
-    "Creative Commons - Attribution-ShareAlike",
-    "Creative Commons - Attribution-NonCommercial",
-    "MIT License",
-    "GNU GPL v3",
-    "Apache License 2.0",
-    "BSD 3-Clause License",
-    "Public Domain",
-  ];
+  // Available licenses (centralized)
+  const availableLicenses = LICENSES;
 
   // Get common values across selected models
   const getCommonValues = () => {
@@ -173,6 +168,13 @@ export function BulkEditDrawer({
       common.printTime = firstModel.printTime;
     }
 
+    // Check designer
+    if (
+      models.every((model) => model.designer === firstModel.designer)
+    ) {
+      common.designer = firstModel.designer;
+    }
+
     // Check filamentUsed
     if (
       models.every((model) => model.filamentUsed === firstModel.filamentUsed)
@@ -203,6 +205,7 @@ export function BulkEditDrawer({
       setFieldSelection({
         category: false,
         license: false,
+        designer: false,
         isPrinted: false,
         hidden: false,
         tags: false,
@@ -239,6 +242,10 @@ export function BulkEditDrawer({
 
   const handleLicenseChange = (value: string) => {
     setEditState((prev) => ({ ...prev, license: value }));
+  };
+
+  const handleDesignerChange = (value: string) => {
+    setEditState((prev) => ({ ...prev, designer: value }));
   };
 
   const handlePrintStatusChange = (checked: boolean) => {
@@ -384,6 +391,10 @@ export function BulkEditDrawer({
 
       if (fieldSelection.license && editState.license) {
         updates.license = editState.license;
+      }
+
+      if (fieldSelection.designer && editState.designer !== undefined) {
+        updates.designer = editState.designer;
       }
 
       if (
@@ -770,6 +781,42 @@ export function BulkEditDrawer({
               </div>
             )}
           </div>
+
+          {/* Designer Field */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="designer-field"
+                checked={fieldSelection.designer}
+                onCheckedChange={() =>
+                  handleFieldToggle("designer")
+                }
+              />
+              <Label
+                htmlFor="designer-field"
+                className="font-medium flex items-center gap-2"
+              >
+                <Users className="h-4 w-4" />
+                Designer
+              </Label>
+            </div>
+
+            {fieldSelection.designer && (
+              <div className="ml-6 space-y-2">
+                <Input
+                  placeholder="Designer name"
+                  value={editState.designer || ""}
+                  onChange={(e) => handleDesignerChange(e.target.value)}
+                />
+                {commonValues.designer && (
+                  <p className="text-xs text-muted-foreground">
+                    Current: {commonValues.designer}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
 
           {/* Print Status Field */}
           <div className="space-y-4">

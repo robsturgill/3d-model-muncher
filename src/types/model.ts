@@ -1,3 +1,5 @@
+import type { License } from '../constants/licenses';
+
 export interface Model {
   filePath: string;
   id: string;
@@ -12,11 +14,14 @@ export interface Model {
   description: string;
   fileSize: string;
   modelUrl: string;
-  license: string;
+  license: License | string;
+  designer?: string;
   notes?: string;
   source?: string;
   price?: number;
   hidden?: boolean;
+  // List of user-provided related files (relative paths). Example: "prints/part-supports.zip"
+  related_files?: string[];
   printSettings: {
     layerHeight: string;
     infill: string;
