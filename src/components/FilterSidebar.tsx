@@ -27,6 +27,15 @@ interface FilterSidebarProps {
   onSettingsClick: () => void;
   categories: Category[];
   models: Model[];
+  initialFilters?: {
+    search: string;
+    category: string;
+    printStatus: string;
+    license: string;
+    fileType: string;
+    tags: string[];
+    showHidden: boolean;
+  };
 }
 
 // Helper to normalize user-provided icon names (e.g. "alert-circle" -> "AlertCircle")
@@ -45,14 +54,29 @@ export function FilterSidebar({
   onSettingsClick,
   categories,
   models
+  , initialFilters
 }: FilterSidebarProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedPrintStatus, setSelectedPrintStatus] = useState("all");
-  const [selectedLicense, setSelectedLicense] = useState("all");
-  const [selectedFileType, setSelectedFileType] = useState("all");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [showHidden, setShowHidden] = useState(false);
+  // Initialize filter UI from `initialFilters` (do not persist to localStorage here)
+  // Helper to map persisted/default category (which may be id or label) to the category label used by the UI
+  const normalizeCategoryToLabel = (raw?: string | null) => {
+    if (!raw) return 'all';
+    if (raw === 'all') return 'all';
+    // Try to find by id or label
+    const byId = categories.find(c => c.id === raw);
+    if (byId) return byId.label;
+    const byLabel = categories.find(c => c.label === raw);
+    if (byLabel) return byLabel.label;
+    // Fallback to raw string
+    return raw;
+  };
+
+  const [searchTerm, setSearchTerm] = useState(initialFilters?.search ?? "");
+  const [selectedCategory, setSelectedCategory] = useState(normalizeCategoryToLabel(initialFilters?.category ?? "all"));
+  const [selectedPrintStatus, setSelectedPrintStatus] = useState(initialFilters?.printStatus ?? "all");
+  const [selectedLicense, setSelectedLicense] = useState(initialFilters?.license ?? "all");
+  const [selectedFileType, setSelectedFileType] = useState(initialFilters?.fileType ?? "all");
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialFilters?.tags ?? []);
+  const [showHidden, setShowHidden] = useState(initialFilters?.showHidden ?? false);
 
   // Dynamically get all unique tags from the models
   const getAllTags = (): string[] => {
@@ -97,10 +121,13 @@ export function FilterSidebar({
   };
 
   const handleCategoryChange = (value: string) => {
-    setSelectedCategory(value);
+    // value may be category id or label; normalize to label for UI and filtering
+    const cat = categories.find(c => c.id === value) || categories.find(c => c.label === value);
+    const labelToUse = cat ? cat.label : value;
+    setSelectedCategory(labelToUse);
     onFilterChange({
       search: searchTerm,
-      category: value,
+      category: labelToUse,
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: selectedFileType,
