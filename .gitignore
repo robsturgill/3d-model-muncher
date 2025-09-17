@@ -3,3 +3,4 @@ models/
 dist-backend/
 build/
 data/*
+.env
