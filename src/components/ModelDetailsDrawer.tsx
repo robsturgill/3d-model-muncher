@@ -1244,6 +1244,25 @@ export function ModelDetailsDrawer({
                   )}
                 </div>
 
+                {/* Notes Editing Section */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <StickyNote className="h-4 w-4 text-muted-foreground" />
+                    <Label htmlFor="edit-notes">Notes</Label>
+                  </div>
+                  <Textarea
+                    id="edit-notes"
+                    placeholder="Add your personal notes about this model..."
+                    value={editedModel?.notes || ""}
+                    onChange={(e) => setEditedModel(prev => prev ? { ...prev, notes: e.target.value } : null)}
+                    rows={4}
+                    className="resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use notes to track print settings, modifications, or reminders.
+                  </p>
+                </div>
+
                 {/* Related Files Editing Section */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -1351,25 +1370,6 @@ export function ModelDetailsDrawer({
                   </div>
                 </div>
 
-                {/* Notes Editing Section */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <StickyNote className="h-4 w-4 text-muted-foreground" />
-                    <Label htmlFor="edit-notes">Notes</Label>
-                  </div>
-                  <Textarea
-                    id="edit-notes"
-                    placeholder="Add your personal notes about this model..."
-                    value={editedModel?.notes || ""}
-                    onChange={(e) => setEditedModel(prev => prev ? { ...prev, notes: e.target.value } : null)}
-                    rows={4}
-                    className="resize-none"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Use notes to track print settings, modifications, or reminders.
-                  </p>
-                </div>
-
                 {/* Source Editing Section */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -1420,36 +1420,7 @@ export function ModelDetailsDrawer({
               </div>
             )}
           
-          {/* Related files (view mode) */}
-          {(!isEditing && Array.isArray(currentModel.related_files) && currentModel.related_files.length > 0) && (
-            <>
-              <Separator />
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="font-semibold text-lg text-card-foreground">Related Files</h3>
-                </div>
-                <div className="space-y-2">
-                  {currentModel.related_files.map((path, idx) => (
-                    <div key={`view-related-${idx}`} className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg border">
-                      <div className="min-w-0">
-                        <p className="font-medium break-all">{path}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" onClick={(e) => {
-                          e.stopPropagation();
-                          // Use shared triggerDownload which will normalize the path and trigger the browser download
-                          triggerDownload(path, e.nativeEvent);
-                        }}>
-                          Download
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          
           </div>
 
 
@@ -1488,6 +1459,37 @@ export function ModelDetailsDrawer({
                   <p className="text-foreground leading-relaxed whitespace-pre-wrap">
                     {currentModel.notes}
                   </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Related files (view mode) */}
+          {(!isEditing && Array.isArray(currentModel.related_files) && currentModel.related_files.length > 0) && (
+            <>
+              <Separator />
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-lg text-card-foreground">Related Files</h3>
+                </div>
+                <div className="space-y-2">
+                  {currentModel.related_files.map((path, idx) => (
+                    <div key={`view-related-${idx}`} className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg border">
+                      <div className="min-w-0">
+                        <p className="font-medium break-all">{path}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={(e) => {
+                          e.stopPropagation();
+                          // Use shared triggerDownload which will normalize the path and trigger the browser download
+                          triggerDownload(path, e.nativeEvent);
+                        }}>
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </>
