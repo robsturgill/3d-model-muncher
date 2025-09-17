@@ -1,6 +1,4 @@
-import { useState, useRef, useEffect } from "react";
-
-// ...existing code...
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { Category } from "../types/category";
 import { AppConfig } from "../types/config";
 import { Model, DuplicateGroup, HashCheckResult, CorruptedFile } from "../types/model";
@@ -306,6 +304,9 @@ export function SettingsPage({
 
   // File type selection state - "3mf" or "stl" only
   const [selectedFileType, setSelectedFileType] = useState<"3mf" | "stl">("3mf");
+
+  // Lazy load experimental tab component from separate file
+  const ExperimentalTab = lazy(() => import('./ExperimentalTab'));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
@@ -1585,6 +1586,7 @@ export function SettingsPage({
               <TabsTrigger value="integrity" className="flex-shrink-0">File Integrity</TabsTrigger>
               <TabsTrigger value="support" className="flex-shrink-0">Support</TabsTrigger>
               <TabsTrigger value="config" className="flex-shrink-0">Configuration</TabsTrigger>
+              <TabsTrigger value="experimental" className="flex-shrink-0">Experimental</TabsTrigger>
             </TabsList>
 
             {/* General Settings Tab */}
@@ -2675,6 +2677,12 @@ export function SettingsPage({
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+            {/* Experimental Tab (lazy loaded from separate file) */}
+            <TabsContent value="experimental" className="space-y-6">
+              <Suspense fallback={<div>Loading experimental features...</div>}>
+                <ExperimentalTab />
+              </Suspense>
             </TabsContent>
           </Tabs>
 
