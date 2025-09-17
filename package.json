@@ -1,6 +1,6 @@
 {
       "name": "3d-model-muncher",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "private": true,
       "dependencies": {
             "@radix-ui/react-accordion": "^1.2.3",

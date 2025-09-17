@@ -1,3 +1,19 @@
+# [0.8.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.7.1...v0.8.0) (2025-09-17)
+
+
+### Bug Fixes
+
+* centralize license types with constant, update components, unknown values will display for edit ([a4a1a38](https://github.com/robsturgill/3d-model-muncher/commit/a4a1a38797ffeb5f87eff552d60352e7d250f192))
+* restore remove tags from edited model in ModelDetailsDrawer ([2b05dc9](https://github.com/robsturgill/3d-model-muncher/commit/2b05dc9d8cb0c622ce5642678553913c0515a7a2))
+* settings default filters now apply on reload, sets active filters in UI ([8d5b43d](https://github.com/robsturgill/3d-model-muncher/commit/8d5b43d61b518ff1dc74714c13d3f2385691891d))
+
+
+### Features
+
+* add designer field to model and update related components ([7d14bb7](https://github.com/robsturgill/3d-model-muncher/commit/7d14bb79fbb4d2111995daa0515e58467efc4d49))
+* add dropdown for related files download in ModelCard component ([796f085](https://github.com/robsturgill/3d-model-muncher/commit/796f08542a10ca14616a41df91dc53d2c3e64eb9))
+* can add related files to a model, validation and saving enhancements ([65f7af6](https://github.com/robsturgill/3d-model-muncher/commit/65f7af6f89e5a0323d36404b70c9c0c038d55751))
+
 ## [0.7.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.7.0...v0.7.1) (2025-09-16)
 
 
