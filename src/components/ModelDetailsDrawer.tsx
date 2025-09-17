@@ -18,7 +18,7 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User } from "lucide-react";
 import { Download } from "lucide-react";
 import { triggerDownload } from "../utils/downloadUtils";
 
@@ -1042,7 +1042,7 @@ export function ModelDetailsDrawer({
             <h3 className="font-semibold text-lg text-card-foreground">Details</h3>
             {isEditing ? (
               <div className="grid gap-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-name">Model Name</Label>
                     <Input
@@ -1051,7 +1051,9 @@ export function ModelDetailsDrawer({
                       onChange={(e) => setEditedModel(prev => prev ? { ...prev, name: e.target.value } : null)}
                     />
                   </div>
-                  
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-category">Category</Label>
                     <Select
@@ -1069,6 +1071,18 @@ export function ModelDetailsDrawer({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-designer">Designer</Label>
+                    <Input
+                      id="edit-designer"
+                      // Model type doesn't currently include `designer`/`Designer` optional property.
+                      // Use a safe any-cast to read legacy metadata if present (e.g., Designer from 3mf metadata).
+                        value={editedModel?.designer ?? ""}
+                        onChange={(e) => setEditedModel(prev => prev ? ({ ...prev, designer: e.target.value } as any) as Model : null)}
+                      placeholder="Designer name"
+                    />
                   </div>
                 </div>
 
@@ -1178,7 +1192,6 @@ export function ModelDetailsDrawer({
                 {/* Tags Editing Section */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-muted-foreground" />
                     <Label>Tags</Label>
                   </div>
                   
@@ -1247,7 +1260,6 @@ export function ModelDetailsDrawer({
                 {/* Notes Editing Section */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <StickyNote className="h-4 w-4 text-muted-foreground" />
                     <Label htmlFor="edit-notes">Notes</Label>
                   </div>
                   <Textarea
@@ -1266,7 +1278,6 @@ export function ModelDetailsDrawer({
                 {/* Related Files Editing Section */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
                     <Label>Related files</Label>
                   </div>
 
@@ -1373,7 +1384,6 @@ export function ModelDetailsDrawer({
                 {/* Source Editing Section */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
                     <Label htmlFor="edit-source">Source URL</Label>
                   </div>
                   <Input
@@ -1406,17 +1416,27 @@ export function ModelDetailsDrawer({
                   {currentModel.description}
                 </p>
 
-                {/* License Information (hidden when not set) */}
-                {currentModel.license && (
-                  <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg border">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">License:</span>
-                    <Badge variant="outline" className="font-medium">
-                      {currentModel.license}
-                    </Badge>
-                  </div>
-                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* License Information (hidden when not set) */}
+                  {currentModel.license && (
+                    <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg border">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">License:</span>
+                      <Badge variant="outline" className="font-medium">
+                        {currentModel.license}
+                      </Badge>
+                    </div>
+                  )}
 
+                  {/* Designer (if present) */}
+                  {currentModel.designer && (
+                    <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg border">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Designer:</span>
+                      <span className="font-medium">{currentModel.designer}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           

@@ -15,6 +15,7 @@ export interface Model {
   fileSize: string;
   modelUrl: string;
   license: License | string;
+  designer?: string;
   notes?: string;
   source?: string;
   price?: number;
