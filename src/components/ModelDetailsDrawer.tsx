@@ -1406,7 +1406,6 @@ export function ModelDetailsDrawer({
                     <div key={`view-related-${idx}`} className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg border">
                       <div className="min-w-0">
                         <p className="font-medium break-all">{path}</p>
-                        <p className="text-xs text-muted-foreground">Relative path (downloadable)</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button size="sm" onClick={(e) => {

@@ -1,7 +1,14 @@
-import { Check, Clock, Download } from "lucide-react";
+import * as React from "react";
+import { Check, Clock, Download, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu";
 import { Checkbox } from "./ui/checkbox";
 import { Model } from "../types/model";
 import { ImageWithFallback } from "./ImageWithFallback";
@@ -38,6 +45,34 @@ export function ModelCard({
     // Create a temporary link and trigger download
     const link = document.createElement('a');
     link.href = filePath;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadUrl = (url: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!url) return;
+    // Normalize the incoming url/path so that relative paths and bare filenames
+    // resolve to the server's /models/ URL prefix as done in ModelDetailsDrawer
+    let resolved = url;
+    // If URL starts with '/models/' already, keep as-is
+    if (url.startsWith('/models/')) {
+      resolved = url;
+    } else if (url.startsWith('models/')) {
+      // relative without leading slash
+      resolved = '/' + url;
+    } else {
+      // If it's a bare filename or a path without models prefix, make it /models/<path>
+      // Strip any leading slashes to avoid double slashes
+      const trimmed = url.replace(/^\/+/, '');
+      resolved = '/models/' + trimmed;
+    }
+
+    const fileName = resolved.split('/').pop() || '';
+    const link = document.createElement('a');
+    link.href = resolved;
     link.download = fileName;
     document.body.appendChild(link);
     link.click();
@@ -138,17 +173,50 @@ export function ModelCard({
       {/* Only show footer actions when not in selection mode */}
       {!isSelectionMode && (
         <CardFooter className="p-4 pt-0">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={handleDownloadClick}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Download
-          </Button>
+          {/* Split button: primary left downloads main model file, right shows related files menu (if any) */}
+          <div className="w-full relative">
+            <div className="flex w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 flex items-center justify-center"
+                onClick={handleDownloadClick}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+
+              {/* Related files trigger - only render if related_files exists and has length */}
+              {(model as any).related_files && (model as any).related_files.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                      className="ml-2 w-9"
+                      aria-label="Related files"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {((model as any).related_files || []).map((f: any, i: number) => {
+                      const item = typeof f === 'string' ? { name: f.split('/').pop() || f, url: f } : { name: f.name || (f.url || '').split('/').pop() || 'file', url: f.url || f.path || '' };
+                      return (
+                        <DropdownMenuItem key={i} onClick={(e: any) => downloadUrl(item.url, e)}>
+                          {item.name}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          </div>
         </CardFooter>
       )}
     </Card>
   );
 }
+ 
