@@ -772,12 +772,21 @@ app.get('/api/load-model', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing file path' });
     }
 
-    // Resolve the path relative to the application root
-    const fullPath = path.resolve(filePath);
+    // If filePath is absolute, resolve it directly. If relative, treat it as relative to the models directory
+    const modelsDir = path.resolve(getModelsDirectory());
+    let fullPath;
+    if (path.isAbsolute(filePath)) {
+      fullPath = path.resolve(filePath);
+    } else {
+      // Normalize incoming slashes and strip leading slash if present
+      let rel = filePath.replace(/\\/g, '/').replace(/^\//, '');
+      // Prevent traversal attempts
+      if (rel.includes('..')) return res.status(400).json({ success: false, error: 'Invalid relative path' });
+      fullPath = path.join(modelsDir, rel);
+    }
     console.log('Resolved path:', fullPath);
 
     // Ensure the path is within the models directory for security
-    const modelsDir = path.resolve(getModelsDirectory());
     if (!fullPath.startsWith(modelsDir)) {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
@@ -960,6 +969,140 @@ async function getAllModels(modelsDirectory) {
   
   return models;
 }
+
+// API endpoint: Gemini suggestion (provider-backed with mock fallback)
+app.post('/api/gemini-suggest', async (req, res) => {
+  try {
+    const { imageBase64, mimeType, prompt } = req.body || {};
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ success: false, error: 'Prompt is required' });
+    }
+
+    // imageBase64 is optional; validate shape if provided
+    if (imageBase64 && typeof imageBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'imageBase64 must be a base64 string' });
+    }
+
+    const requestedProvider = (req.body && req.body.provider) || process.env.GEMINI_PROVIDER;
+    safeLog('Received /api/gemini-suggest request', { prompt, mimeType, provider: requestedProvider });
+
+    // Try provider adapter (pass requested provider)
+    let genaiResult = null;
+    try {
+      const adapter = require('./server-utils/genaiAdapter');
+      genaiResult = await adapter.suggest({ prompt, imageBase64, mimeType, provider: requestedProvider });
+    } catch (e) {
+      console.warn('GenAI adapter error or not configured:', e && e.message);
+      genaiResult = null;
+    }
+
+    if (genaiResult) {
+      // Normalize result
+      const suggestion = {
+        description: genaiResult.description || '',
+        category: genaiResult.category || '',
+        tags: Array.isArray(genaiResult.tags) ? genaiResult.tags : []
+      };
+      return res.json({ success: true, suggestion, raw: genaiResult.raw || null });
+    }
+
+    // Fallback mock behavior (previous heuristic)
+    const lower = prompt.toLowerCase();
+    const words = Array.from(new Set(lower.replace(/[\W_]+/g, ' ').split(/\s+/).filter(w => w.length > 3)));
+    const tags = words.slice(0, 6);
+    const description = `AI suggestion (mock) based on prompt: ${prompt}`;
+    const category = tags.length ? tags[0] : '';
+
+    const suggestion = {
+      description,
+      category,
+      tags
+    };
+
+    return res.json({ success: true, suggestion, raw: null });
+  } catch (err) {
+    console.error('/api/gemini-suggest error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API endpoint: Save an "experiment" to the model's munchie JSON
+app.post('/api/save-experiment', async (req, res) => {
+  try {
+    const { modelId, experiment } = req.body || {};
+    if (!modelId || typeof modelId !== 'string') {
+      return res.status(400).json({ success: false, error: 'modelId is required' });
+    }
+    if (!experiment || typeof experiment !== 'object') {
+      return res.status(400).json({ success: false, error: 'experiment object is required' });
+    }
+
+    const modelsDir = getAbsoluteModelsPath();
+    let foundPath = null;
+
+    // Recursively find the munchie.json file with matching id
+    function findById(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          const r = findById(fullPath);
+          if (r) return r;
+        } else if (entry.name.toLowerCase().endsWith('-munchie.json') || entry.name.toLowerCase().endsWith('-stl-munchie.json')) {
+          try {
+            const raw = fs.readFileSync(fullPath, 'utf8');
+            if (!raw || raw.trim().length === 0) continue;
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.id === modelId) {
+              return fullPath;
+            }
+          } catch (e) {
+            // ignore parse errors for files we can't read
+          }
+        }
+      }
+      return null;
+    }
+
+    foundPath = findById(modelsDir);
+
+    if (!foundPath) {
+      return res.status(404).json({ success: false, error: 'Model munchie.json not found for id: ' + modelId });
+    }
+
+    safeLog('Saving experiment for modelId', { modelId, file: foundPath });
+
+    // Load existing JSON defensively
+    let existing = {};
+    try {
+      const raw = fs.readFileSync(foundPath, 'utf8');
+      existing = raw && raw.trim().length ? JSON.parse(raw) : {};
+    } catch (e) {
+      existing = {};
+    }
+
+    // Ensure experiments array exists
+    if (!Array.isArray(existing.experiments)) existing.experiments = [];
+
+    // Add timestamp to experiment
+    const toSave = { ...experiment, savedAt: new Date().toISOString() };
+    existing.experiments.push(toSave);
+
+    // Atomic write
+    const tmpPath = foundPath + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(existing, null, 2), 'utf8');
+    fs.renameSync(tmpPath, foundPath);
+
+    safeLog('Experiment saved to', { file: foundPath, experiment: sanitizeForLog(toSave) });
+
+    res.json({ success: true, path: foundPath, experiment: toSave });
+  } catch (err) {
+    console.error('/api/save-experiment error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 // API endpoint to delete models by ID (deletes specified file types)
 app.delete('/api/models/delete', async (req, res) => {

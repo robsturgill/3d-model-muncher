@@ -136,3 +136,9 @@ If you rely on any other custom or non-standard fields, consider exporting a bac
 **3MF File Requirements:**
 - `3D/3dmodel.model` - Main 3D model data
 - `[Content_Types].xml` - Content type definitions
+
+## Recent experimental updates
+
+- Added an "Experimental" tab with a integrated generative suggestion workflow supporting Google Gemini, OpenAI, and a local mock provider; suggestions can be applied and saved in existing JSON.
+
+These features are experimental — back up your metadata before using them in production.
