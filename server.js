@@ -121,6 +121,25 @@ app.post('/api/save-model', (req, res) => {
     }
     
     console.log('Resolved file path for saving:', absoluteFilePath);
+
+    // Require relative filePath and ensure the target is inside the configured models directory
+    if (path.isAbsolute(filePath)) {
+      console.warn('Rejected absolute filePath in /api/save-model:', filePath);
+      return res.status(400).json({ success: false, error: 'Absolute file paths are not allowed' });
+    }
+
+    try {
+      const resolvedTarget = path.resolve(absoluteFilePath);
+      const modelsDirResolved = path.resolve(getModelsDirectory());
+      const relative = path.relative(modelsDirResolved, resolvedTarget);
+      if (relative.startsWith('..') || relative === '' && resolvedTarget !== modelsDirResolved) {
+        console.warn('Attempt to save model outside models directory blocked:', resolvedTarget, 'relativeToModelsDir=', relative);
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+    } catch (e) {
+      console.error('Error resolving paths for save-model containment check:', e);
+      return res.status(400).json({ success: false, error: 'Invalid file path' });
+    }
     
     // Load existing model JSON (be defensive against corrupt or partial files)
     let existing = {};
