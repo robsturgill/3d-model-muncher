@@ -7,6 +7,8 @@ import { Textarea } from "./ui/textarea";
 import { ScrollArea } from "./ui/scroll-area";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select";
 import { Sheet, SheetContent, SheetHeader } from "./ui/sheet";
+import { Switch } from "./ui/switch";
+import { Label } from "./ui/label";
 import { toast } from 'sonner';
 import { Separator } from "./ui/separator";
 
@@ -93,6 +95,11 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
   const [provider, setProvider] = useState<'gemini' | 'openai' | 'mock'>('mock');
   // Prompt options determine which supporting fields are sent to the provider
   const [promptOption, setPromptOption] = useState<'image_description' | 'translate_description' | 'rewrite_description' | 'other'>('image_description');
+
+  // Whether to include the image when sending to Gemini/OpenAI. Default true to preserve existing behaviour.
+  const [sendImage, setSendImage] = useState(true);
+  // Whether to include the model name/filename in the payload. Default true.
+  const [includeModelName, setIncludeModelName] = useState(true);
 
   // Editable fields shown in the dialog
   const [editDescription, setEditDescription] = useState("");
@@ -184,12 +191,17 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
       try {
         // Try to fetch and resize the thumbnail so the mock flow also shows the "image sent" preview
         try {
-          const imgUrl = selected?.thumbnail ?? "";
-          if (imgUrl) {
-            const imgRes = await fetch(imgUrl);
-            const imgBlob = await imgRes.blob();
-            const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
-            setResizedPreview(resizedDataUrl);
+          // Only fetch/resize preview when the user asked to send the image
+          if (sendImage) {
+            const imgUrl = selected?.thumbnail ?? "";
+            if (imgUrl) {
+              const imgRes = await fetch(imgUrl);
+              const imgBlob = await imgRes.blob();
+              const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
+              setResizedPreview(resizedDataUrl);
+            }
+          } else {
+            setResizedPreview(null);
           }
         } catch (e) {
           // non-fatal: ignore preview errors for mock
@@ -211,28 +223,37 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
       return;
     }
     try {
-      // Fetch image as base64
-  const imgUrl = selected?.thumbnail ?? "";
-  // Don't send the generic placeholder to Gemini — treat it as missing
-  const PLACEHOLDER = '/images/placeholder.svg';
-  if (!imgUrl || imgUrl === PLACEHOLDER) throw new Error("Model requires a thumbnail for AI assistance");
-      const imgRes = await fetch(imgUrl);
-      const imgBlob = await imgRes.blob();
-      // Resize to 512x512 before sending to the backend to save bandwidth and keep consistent input size
-      const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
-      // store preview for UI
-      setResizedPreview(resizedDataUrl);
-      const base64 = resizedDataUrl.split(',')[1] ?? '';
+      // Conditionally fetch and resize the image only if the user opted to send it
+      let base64 = '';
+      let mimeType = '';
+      if (sendImage) {
+        const imgUrl = selected?.thumbnail ?? "";
+        // Don't send the generic placeholder to Gemini — treat it as missing
+        const PLACEHOLDER = '/images/placeholder.svg';
+        if (!imgUrl || imgUrl === PLACEHOLDER) throw new Error("Model requires a thumbnail for AI assistance");
+        const imgRes = await fetch(imgUrl);
+        const imgBlob = await imgRes.blob();
+        // Resize to 512x512 before sending to the backend to save bandwidth and keep consistent input size
+        const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
+        // store preview for UI
+        setResizedPreview(resizedDataUrl);
+        base64 = resizedDataUrl.split(',')[1] ?? '';
+        mimeType = imgBlob.type;
+      } else {
+        // clear any previous preview when not sending image
+        setResizedPreview(null);
+      }
       // Build payload based on selected prompt option
       const filename = selected?.name ?? selected?.id ?? "";
       const payloadBody: any = {
         provider,
         promptOption,
-        imageBase64: base64,
-        mimeType: imgBlob.type,
       };
+      if (sendImage) {
+        (payloadBody as any).imageBase64 = base64;
+        (payloadBody as any).mimeType = mimeType;
+      }
       if (promptOption === 'image_description') {
-        payloadBody.filename = filename;
         // Use the description shown in the UI (editDescription). Note: editDescription
         // may intentionally be an empty string; treat that as the authoritative
         // user-provided description. Only fall back to the model's top-level
@@ -244,13 +265,19 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
           payloadBody.prompt = geminiPrompt || `Create a printable model description for the file ${filename} using the image.`;
         }
       } else if (promptOption === 'translate_description') {
-        payloadBody.filename = filename;
         payloadBody.description = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
         payloadBody.prompt = geminiPrompt || `Translate the following model description into clear, user-facing language:\n\n${typeof editDescription === 'string' ? editDescription : (selected?.description ?? '')}`;
       } else if (promptOption === 'rewrite_description') {
-        payloadBody.filename = filename;
         payloadBody.description = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
         payloadBody.prompt = geminiPrompt || `Rewrite the following model description to be clear, concise, and user-focused:\n\n${typeof editDescription === 'string' ? editDescription : (selected?.description ?? '')}`;
+      } else if (promptOption === 'other') {
+        // For 'Other' allow the user-provided prompt to be sent verbatim (may be empty)
+        payloadBody.prompt = geminiPrompt || '';
+      }
+
+      // Conditionally include the filename/model name only when the user opted in
+      if (includeModelName) {
+        payloadBody.filename = filename;
       }
 
       // Log final constructed payload/prompt for debugging (browser console)
@@ -641,12 +668,32 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                         </div>
                       </div>
 
-                        {/* Show Other Prompt only when user selects the 'Other' template */}
+                        {/* Show Other Prompt and related options only when user selects the 'Other' template */}
                         {promptOption === 'other' && (
                           <div className="mt-4">
                             <label className="text-sm font-medium">Other Prompt</label>
                             <div className="mt-1">
                               <Input placeholder="Describe what you want Gemini to do" value={geminiPrompt} onChange={e=>setGeminiPrompt((e.target as HTMLInputElement).value)} className="flex-1 input-sm" />
+                            </div>
+
+                            <div className="mt-3">
+                              <div className="flex items-center gap-3">
+                                <Switch
+                                  checked={sendImage}
+                                  onCheckedChange={(checked: boolean) => setSendImage(checked)}
+                                  id="send-image-switch"
+                                />
+                                <Label htmlFor="send-image-switch" className="text-sm text-foreground/90">Include image</Label>
+                              </div>
+
+                              <div className="mt-2 flex items-center gap-3">
+                                <Switch
+                                  checked={includeModelName}
+                                  onCheckedChange={(checked: boolean) => setIncludeModelName(checked)}
+                                  id="include-name-switch"
+                                />
+                                <Label htmlFor="include-name-switch" className="text-sm text-foreground/90">Include model name</Label>
+                              </div>
                             </div>
                           </div>
                         )}
