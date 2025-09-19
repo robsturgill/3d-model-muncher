@@ -2681,7 +2681,7 @@ export function SettingsPage({
             {/* Experimental Tab (lazy loaded from separate file) */}
             <TabsContent value="experimental" className="space-y-6">
               <Suspense fallback={<div>Loading experimental features...</div>}>
-                <ExperimentalTab />
+                <ExperimentalTab categories={localCategories} />
               </Suspense>
             </TabsContent>
           </Tabs>

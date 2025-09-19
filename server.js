@@ -89,7 +89,6 @@ app.get('/api/health', (req, res) => {
 const config = ConfigManager.loadConfig();
 // Always serve from the source models directory for single source of truth
 const modelDir = (config.settings && config.settings.modelDirectory) || './models';
-
 const absoluteModelPath = path.isAbsolute(modelDir) ? modelDir : path.join(process.cwd(), modelDir);
 console.log(`Serving models from: ${absoluteModelPath} (single source of truth)`);
 app.use('/models', express.static(absoluteModelPath));
@@ -575,8 +574,6 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
     });
   }
 });
-
-// --- API: Get all -munchie.json files and their hashes ---
 
 // --- API: Get all -munchie.json files and their hashes ---
 app.get('/api/munchie-files', (req, res) => {
@@ -1085,9 +1082,14 @@ app.post('/api/save-experiment', async (req, res) => {
     // Ensure experiments array exists
     if (!Array.isArray(existing.experiments)) existing.experiments = [];
 
-    // Add timestamp to experiment
+    // Prepare experiment to save: keep client-provided fields intact, server will add savedAt
     const toSave = { ...experiment, savedAt: new Date().toISOString() };
-    existing.experiments.push(toSave);
+    // If overwrite flag provided, replace the experiments array to ensure exactly one entry
+    if (req.body && req.body.overwrite) {
+      existing.experiments = [toSave];
+    } else {
+      existing.experiments.push(toSave);
+    }
 
     // Atomic write
     const tmpPath = foundPath + '.tmp';
@@ -1102,7 +1104,6 @@ app.post('/api/save-experiment', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
 
 // API endpoint to delete models by ID (deletes specified file types)
 app.delete('/api/models/delete', async (req, res) => {
