@@ -50,7 +50,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
             name: m.name ?? m.title ?? "",
             description: m.description ?? m.desc ?? "",
             thumbnail: m.thumbnail ?? m.image ?? m.preview ?? undefined,
-            category: m.category ?? m.categories?.[0] ?? "",
+            category: m.category ?? "",
             // preserve underlying file path / modelUrl when provided so we can derive munchie.json
             filePath: m.filePath ?? m.file ?? undefined,
             modelUrl: m.modelUrl ?? m.url ?? undefined,
@@ -98,6 +98,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -318,7 +319,9 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
     const defaultCategory = selected.category && selected.category.trim() ? selected.category : 'Uncategorized';
 
     // Try to read the model's munchie.json to get the authoritative category
+    // Show loading state while we query the server so the Select can be disabled
     (async () => {
+      setCategoryLoading(true);
       try {
         // Build raw relative candidate paths (no encoding yet). We'll URL-encode once when calling the API.
         const candidatesRaw: string[] = [];
@@ -369,13 +372,15 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
         }
 
         if (fetched) {
-          const cat = fetched.category ?? (Array.isArray(fetched.categories) ? fetched.categories[0] : undefined);
+          const cat = fetched.category ?? undefined;
           setEditCategory(cat && cat.toString().trim() ? cat.toString() : defaultCategory);
         } else {
           setEditCategory(defaultCategory);
         }
       } catch (e) {
         setEditCategory(defaultCategory);
+      } finally {
+        setCategoryLoading(false);
       }
     })();
   }, [selected]);
@@ -512,19 +517,27 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                 </div>
 
                 <label className="text-sm font-medium">Category</label>
-                <div className="flex gap-2 mt-2 mb-4">
+                <div className="flex items-center gap-2 mt-2 mb-4">
                   {/* Bind the select directly to editCategory and ensure a value is always present.
                       We force a default of 'Uncategorized' elsewhere, so there is no '(none)' option. */}
-                  <Select value={editCategory || 'Uncategorized'} onValueChange={(v: string) => setEditCategory(v)}>
-                    <SelectTrigger size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map(c => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex-1">
+                    <Select value={editCategory || 'Uncategorized'} onValueChange={(v: string) => setEditCategory(v)} disabled={categoryLoading}>
+                      <SelectTrigger size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map(c => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {categoryLoading && (
+                    <svg className="animate-spin h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" aria-hidden>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                  )}
                 </div>
 
                 {/* Add New Tag - matches ModelDetailsDrawer styling */}
@@ -695,31 +708,31 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                     if(saving) return; // prevent duplicate saves while request is in-flight
                     setSaving(true);
                     setGeminiError('');
-                    const toastId = toast.loading('Saving experiment data...');
+                    const toastId = toast.loading('Saving user-defined data...');
                     try{
                       const payload = {
                         modelId: selected?.id ?? selected?.name,
-                        overwrite: true, // request backend to overwrite any existing experiment entry for this model
-                        experiment: {
+                        overwrite: true,
+                        // Apply these to the top-level munchie.json properties
+                        category: editCategory || selected?.category || undefined,
+                        tags: editTags.length > 0 ? editTags : (selected?.tags ?? undefined),
+                        userDefined: {
+                          id: selected?.id || undefined,
+                          title: selected?.name || undefined,
                           description: editDescription || selected?.description || "",
-                          category: editCategory || selected?.category || "",
-                          tags: editTags.length>0 ? editTags : (selected?.tags ?? []),
-                          source: 'gemini',
+                          images: resizedPreview ? [resizedPreview] : undefined,
                         }
-                      ,
-                        // Also send topLevelTags explicitly so server can update the munchie.json top-level tags
-                        topLevelTags: editTags.length>0 ? editTags : (selected?.tags ?? [])
                       };
-                      const r = await fetch('/api/save-experiment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                      const r = await fetch('/api/save-user-defined', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
                       if(!r.ok) throw new Error('Save failed');
                       await r.json();
-                      setGeminiResult('Experiment data saved to munchie.json');
-                      toast.success('Experiment saved', { id: toastId });
+                      setGeminiResult('User-defined data saved to munchie.json');
+                      toast.success('User-defined saved', { id: toastId });
                     }catch(e:any){ setGeminiError(e?.message ?? 'Save error');
                       try { toast.error(e?.message ?? 'Save error'); } catch {}
                     }
                     finally{ setSaving(false); }
-                  }} disabled={saving}>{saving ? 'Saving...' : 'Save Experiment Data'}</Button>
+                  }} disabled={saving}>{saving ? 'Saving...' : 'Save User Data'}</Button>
                   <Button size="sm" variant="ghost" onClick={()=>{ setEditDescription(''); setEditCategory(''); setEditTags([]); }}>Reset</Button>
                 </div>
               </div>

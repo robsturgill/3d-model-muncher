@@ -139,6 +139,7 @@ If you rely on any other custom or non-standard fields, consider exporting a bac
 
 ## Recent experimental updates
 
-- Added an "Experimental" tab with a integrated generative suggestion workflow supporting Google Gemini, OpenAI, and a local mock provider; suggestions can be applied and saved in existing JSON.
+- Added an "Experimental" tab with an integrated generative suggestion workflow supporting Google Gemini
+- AI suggestions for categories, tags, and a description can be applied and saved to the munchie JSON.
 
 These features are experimental — back up your metadata before using them in production.

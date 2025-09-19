@@ -1024,15 +1024,16 @@ app.post('/api/gemini-suggest', async (req, res) => {
   }
 });
 
-// API endpoint: Save an "experiment" to the model's munchie JSON
-app.post('/api/save-experiment', async (req, res) => {
+// API endpoint: Save a "userDefined" entry to the model's munchie JSON
+const saveUserDefinedHandler = async (req, res) => {
   try {
-    const { modelId, experiment } = req.body || {};
+    const { modelId } = req.body || {};
+    const payloadUserDefined = (req.body && req.body.userDefined) || null;
     if (!modelId || typeof modelId !== 'string') {
       return res.status(400).json({ success: false, error: 'modelId is required' });
     }
-    if (!experiment || typeof experiment !== 'object') {
-      return res.status(400).json({ success: false, error: 'experiment object is required' });
+    if (!payloadUserDefined || typeof payloadUserDefined !== 'object') {
+      return res.status(400).json({ success: false, error: 'userDefined object is required' });
     }
 
     const modelsDir = getAbsoluteModelsPath();
@@ -1068,7 +1069,7 @@ app.post('/api/save-experiment', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Model munchie.json not found for id: ' + modelId });
     }
 
-    safeLog('Saving experiment for modelId', { modelId, file: foundPath });
+    safeLog('Saving userDefined for modelId', { modelId, file: foundPath });
 
     // Load existing JSON defensively
     let existing = {};
@@ -1079,44 +1080,53 @@ app.post('/api/save-experiment', async (req, res) => {
       existing = {};
     }
 
-    // Ensure experiments array exists
-    if (!Array.isArray(existing.experiments)) existing.experiments = [];
+    // Ensure userDefined array exists
+    if (!Array.isArray(existing.userDefined)) existing.userDefined = [];
 
-    // Prepare experiment to save: keep client-provided fields intact, server will add savedAt
-    const toSave = { ...experiment, savedAt: new Date().toISOString() };
-    // If overwrite flag provided, replace the experiments array to ensure exactly one entry
+    // Prepare userDefined entry to save: only persist the description field (per spec)
+  const toSave = { description: '' };
+  if (payloadUserDefined && typeof payloadUserDefined.description === 'string') {
+    toSave.description = payloadUserDefined.description;
+  }
+    // If overwrite flag provided, replace the userDefined array to ensure exactly one entry
     if (req.body && req.body.overwrite) {
-      existing.experiments = [toSave];
+      existing.userDefined = [toSave];
     } else {
-      existing.experiments.push(toSave);
+      existing.userDefined.push(toSave);
     }
 
-    // If the client provided a category in the experiment, update the model's top-level category
-    // This will overwrite existing.category and keep existing.categories in sync.
-    if (req.body && req.body.experiment && Object.prototype.hasOwnProperty.call(req.body.experiment, 'category')) {
-      const newCat = req.body.experiment.category;
-      if (typeof newCat === 'string') {
-        existing.category = newCat;
-        if (newCat && newCat.trim()) {
-          existing.categories = [newCat];
-        } else {
-          // Clear categories array if empty string provided
-          existing.categories = [];
+    // If client supplied top-level `category` or `tags`, overwrite the model's top-level fields
+    // Normalize tags (trim and dedupe case-insensitively)
+    function normalizeTags(tags) {
+      if (!Array.isArray(tags)) return undefined;
+      const seen = new Set();
+      const out = [];
+      for (const t of tags) {
+        if (typeof t !== 'string') continue;
+        const trimmed = t.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push(trimmed);
         }
+      }
+      return out;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'category')) {
+      const newCat = req.body.category;
+      if (typeof newCat === 'string') {
+        // Overwrite only the singular top-level `category` field.
+        existing.category = newCat;
       }
     }
 
-    // If the client provided topLevelTags explicitly, prefer those to update the model's top-level tags
-    const providedTopLevel = req.body && Object.prototype.hasOwnProperty.call(req.body, 'topLevelTags') ? req.body.topLevelTags : undefined;
-    const providedExperimentTags = req.body && req.body.experiment && Object.prototype.hasOwnProperty.call(req.body.experiment, 'tags') ? req.body.experiment.tags : undefined;
-    const tagsToApply = providedTopLevel !== undefined ? providedTopLevel : providedExperimentTags;
-    if (tagsToApply !== undefined) {
-      if (Array.isArray(tagsToApply)) {
-        existing.tags = tagsToApply.slice();
-      } else if (typeof tagsToApply === 'string' && tagsToApply.trim()) {
-        existing.tags = tagsToApply.split(',').map(t => t.trim()).filter(Boolean);
-      } else {
-        existing.tags = [];
+    if (Object.prototype.hasOwnProperty.call(req.body, 'tags')) {
+      const newTags = req.body.tags;
+      const normalized = Array.isArray(newTags) ? normalizeTags(newTags) : undefined;
+      if (normalized !== undefined) {
+        existing.tags = normalized;
       }
     }
 
@@ -1125,14 +1135,18 @@ app.post('/api/save-experiment', async (req, res) => {
     fs.writeFileSync(tmpPath, JSON.stringify(existing, null, 2), 'utf8');
     fs.renameSync(tmpPath, foundPath);
 
-    safeLog('Experiment saved to', { file: foundPath, experiment: sanitizeForLog(toSave) });
+  safeLog('UserDefined saved to', { file: foundPath, userDefined: sanitizeForLog(toSave), appliedCategory: existing.category, appliedTags: existing.tags });
 
-    res.json({ success: true, path: foundPath, experiment: toSave });
+  // Respond with the stored object and the final top-level category/tags
+  res.json({ success: true, path: foundPath, userDefined: toSave, category: existing.category, tags: existing.tags });
   } catch (err) {
-    console.error('/api/save-experiment error:', err);
+    console.error('/api/save-user-defined error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+
+// Register the new route for saving user-defined data
+app.post('/api/save-user-defined', saveUserDefinedHandler);
 
 // API endpoint to delete models by ID (deletes specified file types)
 app.delete('/api/models/delete', async (req, res) => {
