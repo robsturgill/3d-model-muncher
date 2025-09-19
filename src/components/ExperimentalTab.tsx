@@ -83,17 +83,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
     return filtered;
   }, [filtered, query, showAll]);
 
-  // Use categories passed from SettingsPage when available, otherwise derive from models
-  const categories = useMemo(() => {
-    const src = propCategories && propCategories.length > 0 ? propCategories.map(c => c.label) : Array.from(new Set(models.map(m => m.category).filter(Boolean))) as string[];
-    // Always ensure there is an 'Uncategorized' option and keep it first
-    const set = new Set<string>();
-    set.add('Uncategorized');
-    for (const s of src) {
-      if (s && s.trim() && s !== 'Uncategorized') set.add(s);
-    }
-    return Array.from(set);
-  }, [models, propCategories]);
+  // ...existing code...
   // Gemini prompt state and handler
   const [geminiPrompt, setGeminiPrompt] = useState("");
   const [geminiResult, setGeminiResult] = useState("");
@@ -117,6 +107,23 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
   const [suggestionTags, setSuggestionTags] = useState<string[]>([]);
   // Data URL of the resized image for a small preview in the UI
   const [resizedPreview, setResizedPreview] = useState<string | null>(null);
+
+  // Use categories passed from SettingsPage when available, otherwise derive from models
+  // Include the current editCategory and any suggestionCategory so Update Fields will be selectable/displayed
+  const categories = useMemo(() => {
+    const src = propCategories && propCategories.length > 0
+      ? propCategories.map(c => c.label)
+      : Array.from(new Set(models.map(m => m.category).filter(Boolean))) as string[];
+    // Always ensure there is an 'Uncategorized' option and keep it first
+    const set = new Set<string>();
+    set.add('Uncategorized');
+    for (const s of src) {
+      if (s && s.trim() && s !== 'Uncategorized') set.add(s);
+    }
+    if (editCategory && editCategory.trim() && editCategory !== 'Uncategorized') set.add(editCategory);
+    if (suggestionCategory && suggestionCategory.trim() && suggestionCategory !== 'Uncategorized') set.add(suggestionCategory);
+    return Array.from(set);
+  }, [models, propCategories, editCategory, suggestionCategory]);
 
   // Resize an image Blob to a square canvas (512x512 by default) and return a data URL
   async function resizeImageBlobToDataUrl(blob: Blob, targetW = 512, targetH = 512, mimeType?: string): Promise<string> {
@@ -699,6 +706,9 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                           tags: editTags.length>0 ? editTags : (selected?.tags ?? []),
                           source: 'gemini',
                         }
+                      ,
+                        // Also send topLevelTags explicitly so server can update the munchie.json top-level tags
+                        topLevelTags: editTags.length>0 ? editTags : (selected?.tags ?? [])
                       };
                       const r = await fetch('/api/save-experiment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
                       if(!r.ok) throw new Error('Save failed');

@@ -1091,6 +1091,35 @@ app.post('/api/save-experiment', async (req, res) => {
       existing.experiments.push(toSave);
     }
 
+    // If the client provided a category in the experiment, update the model's top-level category
+    // This will overwrite existing.category and keep existing.categories in sync.
+    if (req.body && req.body.experiment && Object.prototype.hasOwnProperty.call(req.body.experiment, 'category')) {
+      const newCat = req.body.experiment.category;
+      if (typeof newCat === 'string') {
+        existing.category = newCat;
+        if (newCat && newCat.trim()) {
+          existing.categories = [newCat];
+        } else {
+          // Clear categories array if empty string provided
+          existing.categories = [];
+        }
+      }
+    }
+
+    // If the client provided topLevelTags explicitly, prefer those to update the model's top-level tags
+    const providedTopLevel = req.body && Object.prototype.hasOwnProperty.call(req.body, 'topLevelTags') ? req.body.topLevelTags : undefined;
+    const providedExperimentTags = req.body && req.body.experiment && Object.prototype.hasOwnProperty.call(req.body.experiment, 'tags') ? req.body.experiment.tags : undefined;
+    const tagsToApply = providedTopLevel !== undefined ? providedTopLevel : providedExperimentTags;
+    if (tagsToApply !== undefined) {
+      if (Array.isArray(tagsToApply)) {
+        existing.tags = tagsToApply.slice();
+      } else if (typeof tagsToApply === 'string' && tagsToApply.trim()) {
+        existing.tags = tagsToApply.split(',').map(t => t.trim()).filter(Boolean);
+      } else {
+        existing.tags = [];
+      }
+    }
+
     // Atomic write
     const tmpPath = foundPath + '.tmp';
     fs.writeFileSync(tmpPath, JSON.stringify(existing, null, 2), 'utf8');
