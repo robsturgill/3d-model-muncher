@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Bot, Plus } from "lucide-react";
-import { Badge } from "./ui/badge";
-import { Input } from "./ui/input";
-import { Button } from "./ui/button";
-import { Textarea } from "./ui/textarea";
-import { ScrollArea } from "./ui/scroll-area";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select";
-import { Sheet, SheetContent, SheetHeader } from "./ui/sheet";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
+import { Badge } from "../ui/badge";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
+import { ScrollArea } from "../ui/scroll-area";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../ui/select";
+import { Sheet, SheetContent, SheetHeader } from "../ui/sheet";
+import { Switch } from "../ui/switch";
+import { Label } from "../ui/label";
 import { toast } from 'sonner';
-import { Separator } from "./ui/separator";
+import { Separator } from "../ui/separator";
 
 type ModelEntry = {
   id?: string;
@@ -23,7 +23,7 @@ type ModelEntry = {
   tags?: string[];
 };
 
-import type { Category } from '../types/category';
+import type { Category } from '../../types/category';
 
 interface ExperimentalTabProps {
   categories?: Category[];
@@ -92,7 +92,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
   const [geminiLoading, setGeminiLoading] = useState(false);
   const [geminiError, setGeminiError] = useState("");
   // Provider selection: 'gemini' (Google), 'openai', or 'mock'
-  const [provider, setProvider] = useState<'gemini' | 'openai' | 'mock'>('mock');
+  const [provider, setProvider] = useState<'gemini' | 'openai' | 'mock'>('gemini');
   // Prompt options determine which supporting fields are sent to the provider
   const [promptOption, setPromptOption] = useState<'image_description' | 'translate_description' | 'rewrite_description' | 'other'>('image_description');
 
@@ -369,7 +369,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
         if (!fetched) {
           // Build candidate munchie.json relative paths using shared helper
           // NOTE: dynamic import to avoid circular/top-level import ordering issues in some build environments
-          const helper = await import('../utils/munchiePath');
+          const helper = await import('../../utils/munchiePath');
           const candidatesRaw: string[] = helper.deriveMunchieCandidates({ filePath: (selected as any)?.filePath, modelUrl: (selected as any)?.modelUrl, id: (selected as any)?.id, name: (selected as any)?.name });
 
           for (const rel of candidatesRaw) {
@@ -416,19 +416,13 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
 
       <div className="prose max-w-none text-sm text-foreground/90">
         <p>
-          This area contains experimental settings and features which may change, be
-          removed, or behave unexpectedly. Use with caution. Experimental options
-          are not guaranteed to be stable and may be modified or deleted in future
-          releases.
-        </p>
-        <p>
-          If you rely on any functionality here consider backing up your data before
-          enabling or changing settings. Feedback is welcome — please file issues or
-          feature requests in the project repository.
+          This area contains experimental settings and features which may change, be removed, or behave unexpectedly. Use with caution. Experimental options are not guaranteed to be stable and may be modified or deleted in future releases.
         </p>
       </div>
 
       <Separator />
+
+      {/* API key management area */}
 
       <div className="space-y-2">
         <h3>AI Metadata Generation</h3>
@@ -639,7 +633,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="mock">Mock (local test)</SelectItem>
+                              <SelectItem value="mock">Simulated (fake)</SelectItem>
                               <SelectItem value="gemini">Google Gemini</SelectItem>
                               {/* <SelectItem value="openai">OpenAI</SelectItem> */}
                             </SelectContent>

@@ -321,7 +321,7 @@ export function SettingsPage({
   const [selectedFileType, setSelectedFileType] = useState<"3mf" | "stl">("3mf");
 
   // Lazy load experimental tab component from separate file
-  const ExperimentalTab = lazy(() => import('./ExperimentalTab'));
+  const ExperimentalTab = lazy(() => import('./settings/ExperimentalTab'));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
