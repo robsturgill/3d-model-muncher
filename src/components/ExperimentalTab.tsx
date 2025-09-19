@@ -323,51 +323,35 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
     (async () => {
       setCategoryLoading(true);
       try {
-        // Build raw relative candidate paths (no encoding yet). We'll URL-encode once when calling the API.
-        const candidatesRaw: string[] = [];
-        const seen = new Set<string>();
-
-        // If filePath is available, derive the json path from it
-        const fp = (selected as any).filePath || (selected as any).file || undefined;
-        const mu = (selected as any).modelUrl || (selected as any).url || undefined;
-        if (fp && typeof fp === 'string') {
-          let rel = fp.replace(/\\/g, '/');
-          rel = rel.replace(/^\/?models\//, '');
-          if (rel.endsWith('.3mf')) rel = rel.replace(/\.3mf$/i, '-munchie.json');
-          else if (/\.stl$/i.test(rel)) rel = rel.replace(/\.stl$/i, '-stl-munchie.json');
-          else if (!(rel.endsWith('-munchie.json') || rel.endsWith('-stl-munchie.json'))) rel = `${rel}-munchie.json`;
-          if (!seen.has(rel)) { seen.add(rel); candidatesRaw.push(rel); }
-        }
-
-        // If modelUrl is present, derive from it
-        if (mu && typeof mu === 'string') {
-          let rel = mu.replace(/^\/?models\//, '');
-          if (rel.endsWith('.3mf')) rel = rel.replace(/\.3mf$/i, '-munchie.json');
-          else if (/\.stl$/i.test(rel)) rel = rel.replace(/\.stl$/i, '-stl-munchie.json');
-          else if (!(rel.endsWith('-munchie.json') || rel.endsWith('-stl-munchie.json'))) rel = `${rel}-munchie.json`;
-          if (!seen.has(rel)) { seen.add(rel); candidatesRaw.push(rel); }
-        }
-
-        // Fallback to name-based candidates (keep for compatibility)
-        const nameBase = selected.name || selected.id || '';
-        if (nameBase) {
-          const a = `${nameBase}-munchie.json`;
-          const b = `${nameBase}-stl-munchie.json`;
-          if (!seen.has(a)) { seen.add(a); candidatesRaw.push(a); }
-          if (!seen.has(b)) { seen.add(b); candidatesRaw.push(b); }
-        }
-
         let fetched: any = null;
-        for (const rel of candidatesRaw) {
+
+        // Prefer id-based lookup which is more robust (server will scan munchie files)
+        if ((selected as any)?.id) {
           try {
-            // Use server API which resolves and validates file paths securely; encode once here
-            const url = `/api/load-model?filePath=${encodeURIComponent(rel)}`;
+            const url = `/api/load-model?id=${encodeURIComponent((selected as any).id)}`;
             const res = await fetch(url);
-            if (!res.ok) continue;
-            fetched = await res.json();
-            if (fetched) break;
+            if (res.ok) fetched = await res.json();
           } catch (e) {
-            // ignore and try next
+            // ignore and fall back to filePath candidates
+          }
+        }
+
+        if (!fetched) {
+          // Build candidate munchie.json relative paths using shared helper
+          // NOTE: dynamic import to avoid circular/top-level import ordering issues in some build environments
+          const helper = await import('../utils/munchiePath');
+          const candidatesRaw: string[] = helper.deriveMunchieCandidates({ filePath: (selected as any)?.filePath, modelUrl: (selected as any)?.modelUrl, id: (selected as any)?.id, name: (selected as any)?.name });
+
+          for (const rel of candidatesRaw) {
+            try {
+              const url = `/api/load-model?filePath=${encodeURIComponent(rel)}`;
+              const res = await fetch(url);
+              if (!res.ok) continue;
+              fetched = await res.json();
+              if (fetched) break;
+            } catch (e) {
+              // ignore and try next
+            }
           }
         }
 
@@ -700,7 +684,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                 </div>
 
                 <div className="prose max-w-none text-sm text-foreground/90">
-                  <p>Saving data writes to the munchie.json in a separate section to not override anything.</p>
+                  <p>Saving overwrites any existing model data.</p>
                 </div>
 
                 <div className="flex gap-2 mt-3">
@@ -708,26 +692,30 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                     if(saving) return; // prevent duplicate saves while request is in-flight
                     setSaving(true);
                     setGeminiError('');
-                    const toastId = toast.loading('Saving user-defined data...');
+                    const toastId = toast.loading('Saving updates...');
                     try{
-                      const payload = {
-                        modelId: selected?.id ?? selected?.name,
-                        overwrite: true,
-                        // Apply these to the top-level munchie.json properties
+                      // Prefer id-based saves; no need to derive munchie path here
+                      // no-op: prefer id-based saves; helper not needed in this handler
+                      const toSave: any = {
+                        description: editDescription || selected?.description || "",
+                      };
+                      if (resizedPreview) toSave.images = [resizedPreview];
+
+                      // Build request body for /api/save-model: prefer sending model id and use filePath only as fallback
+                      // Prefer a stable id when available; fall back to name so server can find by name
+                      const body: any = {
+                        id: selected?.id ?? selected?.name ?? undefined,
                         category: editCategory || selected?.category || undefined,
                         tags: editTags.length > 0 ? editTags : (selected?.tags ?? undefined),
-                        userDefined: {
-                          id: selected?.id || undefined,
-                          title: selected?.name || undefined,
-                          description: editDescription || selected?.description || "",
-                          images: resizedPreview ? [resizedPreview] : undefined,
-                        }
+                        // overwrite userDefined array with a single entry (experimental behavior)
+                        userDefined: [ toSave ]
                       };
-                      const r = await fetch('/api/save-user-defined', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-                      if(!r.ok) throw new Error('Save failed');
-                      await r.json();
-                      setGeminiResult('User-defined data saved to munchie.json');
-                      toast.success('User-defined saved', { id: toastId });
+
+                      const r = await fetch('/api/save-model', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+                      const result = await r.json();
+                      if (!result.success) throw new Error(result.error || 'Save failed');
+                      setGeminiResult('Saved to munchie.json');
+                      toast.success('Changes saved', { id: toastId });
                     }catch(e:any){ setGeminiError(e?.message ?? 'Save error');
                       try { toast.error(e?.message ?? 'Save error'); } catch {}
                     }

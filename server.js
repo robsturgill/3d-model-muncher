@@ -106,33 +106,73 @@ function getAbsoluteModelsPath() {
 
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
-  const { filePath, id, ...changes } = req.body;
-  if (!filePath) {
-    return res.status(400).json({ success: false, error: 'No filePath provided' });
+  let { filePath, id, ...changes } = req.body || {};
+  // Require at least an id or a filePath so we know where to save
+  if (!filePath && !id) {
+    return res.status(400).json({ success: false, error: 'No filePath or id provided' });
   }
   try {
-    // Resolve relative paths to absolute paths
+    // If an id was provided without a filePath, try to locate the munchie JSON file by scanning the models directory
     let absoluteFilePath;
-    if (path.isAbsolute(filePath)) {
-      absoluteFilePath = filePath;
+    if (!filePath && id) {
+      try {
+        const modelsRoot = getAbsoluteModelsPath();
+        let found = null;
+        function walk(dir) {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (found) break;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              walk(full);
+            } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+              try {
+                const raw = fs.readFileSync(full, 'utf8');
+                const parsed = raw ? JSON.parse(raw) : null;
+                if (parsed && (parsed.id === id || parsed.name === id)) {
+                  found = full;
+                  break;
+                }
+              } catch (e) {
+                // ignore parse errors for individual files
+              }
+            }
+          }
+        }
+        walk(modelsRoot);
+        if (!found) {
+          return res.status(404).json({ success: false, error: 'Model id not found' });
+        }
+        absoluteFilePath = found;
+        // populate filePath (relative) for logging and downstream use
+        filePath = path.relative(modelsRoot, found).replace(/\\/g, '/');
+      } catch (e) {
+        console.error('Error searching for munchie by id:', e);
+        return res.status(500).json({ success: false, error: 'Internal error locating model by id' });
+      }
     } else {
-      // filePath should be relative to models directory (e.g., 'Munchie-munchie.json')
-      absoluteFilePath = path.join(absoluteModelPath, filePath);
+      // Resolve provided filePath to absolute path
+      if (path.isAbsolute(filePath)) {
+        absoluteFilePath = filePath;
+      } else {
+        absoluteFilePath = path.join(absoluteModelPath, filePath);
+      }
     }
-    
+
     console.log('Resolved file path for saving:', absoluteFilePath);
 
     // Require relative filePath and ensure the target is inside the configured models directory
-    if (path.isAbsolute(filePath)) {
+    if (path.isAbsolute(filePath) && !(filePath && filePath.startsWith('./') === false)) {
+      // If the client sent an absolute filePath string, reject it outright for safety
       console.warn('Rejected absolute filePath in /api/save-model:', filePath);
       return res.status(400).json({ success: false, error: 'Absolute file paths are not allowed' });
     }
 
     try {
       const resolvedTarget = path.resolve(absoluteFilePath);
-      const modelsDirResolved = path.resolve(getModelsDirectory());
+      const modelsDirResolved = path.resolve(getAbsoluteModelsPath());
       const relative = path.relative(modelsDirResolved, resolvedTarget);
-      if (relative.startsWith('..') || relative === '' && resolvedTarget !== modelsDirResolved) {
+      if (relative.startsWith('..') || (relative === '' && resolvedTarget !== modelsDirResolved)) {
         console.warn('Attempt to save model outside models directory blocked:', resolvedTarget, 'relativeToModelsDir=', relative);
         return res.status(403).json({ success: false, error: 'Access denied' });
       }
@@ -782,14 +822,59 @@ app.post('/api/hash-check', async (req, res) => {
 // API endpoint to load a model from a munchie.json file
 app.get('/api/load-model', async (req, res) => {
   try {
-    const { filePath } = req.query;
-    console.log('Load model request for:', filePath);
+    const { filePath, id } = req.query;
+    // Prefer id-based lookup when provided (more robust)
+    const modelsDir = path.resolve(getModelsDirectory());
+
+    // If `id` provided, try scanning for a munchie.json with matching id
+    if (id && typeof id === 'string' && id.trim().length > 0) {
+      safeLog('Load model by id requested', { id });
+      // Recursively search munchie files for matching id
+      function findById(dir) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            const r = findById(full);
+            if (r) return r;
+          } else if (entry.name.toLowerCase().endsWith('-munchie.json') || entry.name.toLowerCase().endsWith('-stl-munchie.json')) {
+            try {
+              const raw = fs.readFileSync(full, 'utf8');
+              if (!raw || raw.trim().length === 0) continue;
+              const parsed = JSON.parse(raw);
+              if (parsed && (parsed.id === id || parsed.name === id)) {
+                return full;
+              }
+            } catch (e) {
+              // ignore parse/read errors
+            }
+          }
+        }
+        return null;
+      }
+
+      try {
+        const found = findById(modelsDir);
+        if (found) {
+          const content = fs.readFileSync(found, 'utf8');
+          const parsed = JSON.parse(content);
+          return res.json(parsed);
+        }
+        // If search completed without finding a match, return 404 to indicate not found
+        return res.status(404).json({ success: false, error: 'Model not found for id' });
+      } catch (e) {
+        console.error('Error during id lookup for /api/load-model (falling back to filePath):', e);
+        // On unexpected errors, fall through to filePath handling below
+      }
+    }
+
+    console.log('Load model request for filePath:', filePath, 'id:', id);
+
     if (!filePath || typeof filePath !== 'string') {
       return res.status(400).json({ success: false, error: 'Missing file path' });
     }
 
     // If filePath is absolute, resolve it directly. If relative, treat it as relative to the models directory
-    const modelsDir = path.resolve(getModelsDirectory());
     let fullPath;
     if (path.isAbsolute(filePath)) {
       fullPath = path.resolve(filePath);
@@ -800,10 +885,12 @@ app.get('/api/load-model', async (req, res) => {
       if (rel.includes('..')) return res.status(400).json({ success: false, error: 'Invalid relative path' });
       fullPath = path.join(modelsDir, rel);
     }
-    console.log('Resolved path:', fullPath);
+    safeLog('Resolved path for /api/load-model', { resolved: fullPath });
 
     // Ensure the path is within the models directory for security
-    if (!fullPath.startsWith(modelsDir)) {
+    const resolvedModelsDir = modelsDir.endsWith(path.sep) ? modelsDir : modelsDir + path.sep;
+    const resolvedFull = fullPath;
+    if (!resolvedFull.startsWith(modelsDir) && !resolvedFull.startsWith(resolvedModelsDir)) {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
@@ -821,7 +908,6 @@ app.get('/api/load-model', async (req, res) => {
 
     // Read the file content first to check if it's valid
     const fileContent = fs.readFileSync(fullPath, 'utf8');
-    console.log('File content length:', fileContent.length);
     if (fileContent.trim().length === 0) {
       console.log('Empty file detected:', fullPath);
       return res.status(400).json({ success: false, error: 'Empty file' });
@@ -1043,129 +1129,6 @@ app.post('/api/gemini-suggest', async (req, res) => {
   }
 });
 
-// API endpoint: Save a "userDefined" entry to the model's munchie JSON
-const saveUserDefinedHandler = async (req, res) => {
-  try {
-    const { modelId } = req.body || {};
-    const payloadUserDefined = (req.body && req.body.userDefined) || null;
-    if (!modelId || typeof modelId !== 'string') {
-      return res.status(400).json({ success: false, error: 'modelId is required' });
-    }
-    if (!payloadUserDefined || typeof payloadUserDefined !== 'object') {
-      return res.status(400).json({ success: false, error: 'userDefined object is required' });
-    }
-
-    const modelsDir = getAbsoluteModelsPath();
-    let foundPath = null;
-
-    // Recursively find the munchie.json file with matching id
-    function findById(dir) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          const r = findById(fullPath);
-          if (r) return r;
-        } else if (entry.name.toLowerCase().endsWith('-munchie.json') || entry.name.toLowerCase().endsWith('-stl-munchie.json')) {
-          try {
-            const raw = fs.readFileSync(fullPath, 'utf8');
-            if (!raw || raw.trim().length === 0) continue;
-            const parsed = JSON.parse(raw);
-            if (parsed && parsed.id === modelId) {
-              return fullPath;
-            }
-          } catch (e) {
-            // ignore parse errors for files we can't read
-          }
-        }
-      }
-      return null;
-    }
-
-    foundPath = findById(modelsDir);
-
-    if (!foundPath) {
-      return res.status(404).json({ success: false, error: 'Model munchie.json not found for id: ' + modelId });
-    }
-
-    safeLog('Saving userDefined for modelId', { modelId, file: foundPath });
-
-    // Load existing JSON defensively
-    let existing = {};
-    try {
-      const raw = fs.readFileSync(foundPath, 'utf8');
-      existing = raw && raw.trim().length ? JSON.parse(raw) : {};
-    } catch (e) {
-      existing = {};
-    }
-
-    // Ensure userDefined array exists
-    if (!Array.isArray(existing.userDefined)) existing.userDefined = [];
-
-    // Prepare userDefined entry to save: only persist the description field (per spec)
-  const toSave = { description: '' };
-  if (payloadUserDefined && typeof payloadUserDefined.description === 'string') {
-    toSave.description = payloadUserDefined.description;
-  }
-    // If overwrite flag provided, replace the userDefined array to ensure exactly one entry
-    if (req.body && req.body.overwrite) {
-      existing.userDefined = [toSave];
-    } else {
-      existing.userDefined.push(toSave);
-    }
-
-    // If client supplied top-level `category` or `tags`, overwrite the model's top-level fields
-    // Normalize tags (trim and dedupe case-insensitively)
-    function normalizeTags(tags) {
-      if (!Array.isArray(tags)) return undefined;
-      const seen = new Set();
-      const out = [];
-      for (const t of tags) {
-        if (typeof t !== 'string') continue;
-        const trimmed = t.trim();
-        if (!trimmed) continue;
-        const key = trimmed.toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          out.push(trimmed);
-        }
-      }
-      return out;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body, 'category')) {
-      const newCat = req.body.category;
-      if (typeof newCat === 'string') {
-        // Overwrite only the singular top-level `category` field.
-        existing.category = newCat;
-      }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body, 'tags')) {
-      const newTags = req.body.tags;
-      const normalized = Array.isArray(newTags) ? normalizeTags(newTags) : undefined;
-      if (normalized !== undefined) {
-        existing.tags = normalized;
-      }
-    }
-
-    // Atomic write
-    const tmpPath = foundPath + '.tmp';
-    fs.writeFileSync(tmpPath, JSON.stringify(existing, null, 2), 'utf8');
-    fs.renameSync(tmpPath, foundPath);
-
-  safeLog('UserDefined saved to', { file: foundPath, userDefined: sanitizeForLog(toSave), appliedCategory: existing.category, appliedTags: existing.tags });
-
-  // Respond with the stored object and the final top-level category/tags
-  res.json({ success: true, path: foundPath, userDefined: toSave, category: existing.category, tags: existing.tags });
-  } catch (err) {
-    console.error('/api/save-user-defined error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-// Register the new route for saving user-defined data
-app.post('/api/save-user-defined', saveUserDefinedHandler);
 
 // API endpoint to delete models by ID (deletes specified file types)
 app.delete('/api/models/delete', async (req, res) => {
