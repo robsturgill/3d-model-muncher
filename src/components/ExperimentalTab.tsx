@@ -233,8 +233,11 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
       };
       if (promptOption === 'image_description') {
         payloadBody.filename = filename;
-        // If the model already has a description, include it as context and ask the model to improve or incorporate it.
-        const existingDesc = selected?.description ?? "";
+        // Use the description shown in the UI (editDescription). Note: editDescription
+        // may intentionally be an empty string; treat that as the authoritative
+        // user-provided description. Only fall back to the model's top-level
+        // description when editDescription is null/undefined.
+        const existingDesc = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
         if (existingDesc && existingDesc.trim().length > 0) {
           payloadBody.prompt = geminiPrompt || `Create a printable model description for the file ${filename} using the image. Use and improve the existing description where helpful. Existing description:\n\n"${existingDesc}"`;
         } else {
@@ -242,12 +245,12 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
         }
       } else if (promptOption === 'translate_description') {
         payloadBody.filename = filename;
-        payloadBody.description = selected?.description ?? "";
-        payloadBody.prompt = geminiPrompt || `Translate the following model description into clear, user-facing language:\n\n${selected?.description ?? ''}`;
+        payloadBody.description = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
+        payloadBody.prompt = geminiPrompt || `Translate the following model description into clear, user-facing language:\n\n${typeof editDescription === 'string' ? editDescription : (selected?.description ?? '')}`;
       } else if (promptOption === 'rewrite_description') {
         payloadBody.filename = filename;
-        payloadBody.description = selected?.description ?? "";
-        payloadBody.prompt = geminiPrompt || `Rewrite the following model description to be clear, concise, and user-focused:\n\n${selected?.description ?? ''}`;
+        payloadBody.description = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
+        payloadBody.prompt = geminiPrompt || `Rewrite the following model description to be clear, concise, and user-focused:\n\n${typeof editDescription === 'string' ? editDescription : (selected?.description ?? '')}`;
       }
 
       // Log final constructed payload/prompt for debugging (browser console)
@@ -358,6 +361,17 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
         if (fetched) {
           const cat = fetched.category ?? undefined;
           setEditCategory(cat && cat.toString().trim() ? cat.toString() : defaultCategory);
+          // If the authoritative munchie.json contains a userDefined entry, prefer
+          // its description field (even if it's an empty string) as the editable
+          // description. This matches ModelDetailsDrawer behavior.
+          try {
+            const ud = (fetched as any).userDefined;
+            if (Array.isArray(ud) && ud.length > 0 && typeof ud[0].description === 'string') {
+              setEditDescription(ud[0].description);
+            }
+          } catch (e) {
+            // ignore and keep existing editDescription
+          }
         } else {
           setEditCategory(defaultCategory);
         }
@@ -667,7 +681,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                       ) : (
                         <>
                           {suggestionDescription ? <div className="mt-2 whitespace-pre-line">{suggestionDescription}</div> : geminiResult ? <div className="mt-2 whitespace-pre-line">{geminiResult}</div> : null}
-                          {suggestionCategory && <div className="mt-2"><span className="font-medium">Category:</span> {suggestionCategory} <div className="text-muted-foreground">Must manually add new categories</div></div>}
+                          {suggestionCategory && <div className="mt-2"><span className="font-medium">Category:</span> {suggestionCategory} </div>}
                           {suggestionTags.length>0 && <div className="mt-2"><span className="font-medium">Tags:</span> {suggestionTags.join(', ')}</div>}
                           <div className="flex gap-2 mt-3">
                             <Button size="sm" variant="default" onClick={()=>{
@@ -699,7 +713,6 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                       const toSave: any = {
                         description: editDescription || selected?.description || "",
                       };
-                      if (resizedPreview) toSave.images = [resizedPreview];
 
                       // Build request body for /api/save-model: prefer sending model id and use filePath only as fallback
                       // Prefer a stable id when available; fall back to name so server can find by name
