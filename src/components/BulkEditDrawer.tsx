@@ -359,6 +359,12 @@ export function BulkEditDrawer({
         changes[key] = (edited as any)[key];
       }
     });
+    // Migrate description into userDefined for consistency with other components
+    if (typeof changes.description !== 'undefined') {
+      const desc = changes.description;
+      changes.userDefined = [{ description: desc }];
+      delete changes.description;
+    }
     
     console.log(`[BulkEdit] Saving model ${edited.name} with changes:`, changes);
     

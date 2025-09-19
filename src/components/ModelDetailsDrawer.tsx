@@ -48,6 +48,9 @@ export function ModelDetailsDrawer({
   const [focusRelatedIndex, setFocusRelatedIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'3d' | 'images'>(defaultModelView);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [restoreOriginalDescription, setRestoreOriginalDescription] = useState(false);
+  const originalTopLevelDescriptionRef = useRef<string | null>(null);
+  const originalUserDefinedDescriptionRef = useRef<string | null>(null);
 
   // Suggested tags for each category - now dynamically based on current categories
   const getCategoryTags = (categoryLabel: string): string[] => {
@@ -403,10 +406,35 @@ export function ModelDetailsDrawer({
       // Fallback to using the model name
       jsonFilePath = `${srcModel.name}-munchie.json`;
     }
+    // Prefer a user-provided description stored in userDefined (structured)
+    let initialDescription = (srcModel as any).description;
+    try {
+      const ud = (srcModel as any).userDefined;
+      // Accept a userDefined.description even if it's an empty string; that
+      // represents an explicit user value and should take precedence.
+      if (Array.isArray(ud) && ud.length > 0 && ud[0] && typeof ud[0].description === 'string') {
+        initialDescription = ud[0].description;
+      }
+    } catch (e) {
+      // ignore and fallback to top-level description
+    }
+    // stash originals so the edit UI can toggle restoring the top-level description
+    originalTopLevelDescriptionRef.current = typeof (srcModel as any).description === 'string' ? (srcModel as any).description : null;
+    try {
+      const ud = (srcModel as any).userDefined;
+      // Store the userDefined description even if empty string; use null to
+      // indicate absence of userDefined data.
+      originalUserDefinedDescriptionRef.current = Array.isArray(ud) && ud.length > 0 && ud[0] && typeof ud[0].description === 'string' ? ud[0].description : null;
+    } catch (e) {
+      originalUserDefinedDescriptionRef.current = null;
+    }
+    setRestoreOriginalDescription(false);
+
     setEditedModel({ 
       ...srcModel, 
       filePath: jsonFilePath,
-      tags: srcModel.tags || [] // Ensure tags is always an array
+      tags: srcModel.tags || [], // Ensure tags is always an array
+      description: initialDescription
     } as Model);
     // Clear any previous image selections when entering edit mode
     setSelectedImageIndexes([]);
@@ -501,6 +529,27 @@ export function ModelDetailsDrawer({
       }
     });
 
+    // Special-case: if the user explicitly checked "Restore original description"
+    // we want to remove any user-defined description. This is expressed by
+    // writing userDefined = [] into the changes payload. Otherwise, if the
+    // top-level description changed, persist it into userDefined as the
+    // canonical location for user edits (even if it's an empty string).
+    if (restoreOriginalDescription) {
+      changes.userDefined = [];
+      // Ensure we don't accidentally send the top-level description
+      delete changes.description;
+    } else if (typeof changes.description !== 'undefined') {
+      const desc = changes.description;
+      // ensure userDefined is an array with a single entry containing description
+      changes.userDefined = [{ description: desc }];
+      delete changes.description;
+    }
+
+  // Note: clearing is represented by writing userDefined = [] above when the
+  // user checks the "Restore original description" checkbox. We no longer
+  // rely on a local flag here — the post-save refresh below always fetches
+  // the authoritative model.
+
     try {
       const response = await fetch('/api/save-model', {
         method: 'POST',
@@ -517,7 +566,22 @@ export function ModelDetailsDrawer({
       } else {
         setServerRejectedRelated([]);
       }
-      return { success: true, serverResponse: result };
+      // Always refresh the authoritative model from the server after a
+      // successful save so the UI can show any server-side normalizations.
+      let refreshedModel: Model | undefined = undefined;
+      try {
+        const allResp = await fetch('/api/models');
+        if (allResp.ok) {
+          const all = await allResp.json();
+          // Prefer matching by id, fallback to matching by filePath if provided
+          const candidate = all.find((m: any) => (editedForSave.id && m.id === editedForSave.id) || (editedForSave.filePath && m.filePath === editedForSave.filePath));
+          if (candidate) refreshedModel = candidate as Model;
+        }
+      } catch (e) {
+        console.warn('Failed to refresh model after save:', e);
+      }
+
+      return { success: true, serverResponse: result, refreshedModel };
     } catch (err: unknown) {
       console.error("Failed to save model to file:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -554,7 +618,14 @@ export function ModelDetailsDrawer({
       // Persist to server first. After successful save, update the app state.
   const result = await saveModelToFile(finalModel, model!); // Only send changed fields
       if (result && result.success) {
-        onModelUpdate(finalModel);
+        // If the save returned a refreshedModel (e.g., user cleared userDefined.description),
+        // prefer that authoritative model from the server so the UI falls back to top-level description.
+        const refreshed: Model | undefined = (result as any).refreshedModel;
+        if (refreshed) {
+          onModelUpdate(refreshed);
+        } else {
+          onModelUpdate(finalModel);
+        }
         setIsEditing(false);
         setEditedModel(null);
         setNewTag("");
@@ -1094,6 +1165,39 @@ export function ModelDetailsDrawer({
                     onChange={(e) => setEditedModel(prev => prev ? { ...prev, description: e.target.value } : null)}
                     rows={3}
                   />
+                    {/* If there is a stored userDefined description (including empty string), allow restoring the original top-level description */}
+                    {originalUserDefinedDescriptionRef.current !== null && (
+                      <div className="pt-2">
+                        <div className="flex items-center space-x-3">
+                          <Switch
+                            checked={restoreOriginalDescription}
+                            onCheckedChange={(next: boolean) => {
+                              setRestoreOriginalDescription(next);
+                              setEditedModel(prev => {
+                                if (!prev) return prev;
+                                if (next) {
+                                  // Remove any userDefined description so save will clear it
+                                  const copy = { ...prev } as any;
+                                  copy.userDefined = [];
+                                  copy.description = originalTopLevelDescriptionRef.current || '';
+                                  return copy as Model;
+                                } else {
+                                  // Restore the previous userDefined description into the edit buffer
+                                  const copy = { ...prev } as any;
+                                  if (originalUserDefinedDescriptionRef.current !== null) {
+                                    copy.userDefined = [{ description: originalUserDefinedDescriptionRef.current }];
+                                    copy.description = originalUserDefinedDescriptionRef.current;
+                                  }
+                                  return copy as Model;
+                                }
+                              });
+                            }}
+                            id="restore-original-description"
+                          />
+                          <Label htmlFor="restore-original-description">Restore original description</Label>
+                        </div>
+                      </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1413,7 +1517,20 @@ export function ModelDetailsDrawer({
             ) : (
               <div className="space-y-4">
                 <p className="text-muted-foreground text-base leading-relaxed">
-                  {currentModel.description}
+                  {(() => {
+                    // Prefer userDefined[0].description when available (structured user data)
+                    try {
+                        const ud = (currentModel as any).userDefined;
+                        // Prefer the userDefined description even if it's an empty string
+                        // because that represents an explicit user-provided value.
+                        if (Array.isArray(ud) && ud.length > 0 && ud[0] && typeof ud[0].description === 'string') {
+                          return ud[0].description;
+                        }
+                      } catch (e) {
+                        // ignore and fall back
+                      }
+                    return currentModel.description;
+                  })()}
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
