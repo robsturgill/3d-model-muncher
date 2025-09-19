@@ -92,7 +92,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
   // Provider selection: 'gemini' (Google), 'openai', or 'mock'
   const [provider, setProvider] = useState<'gemini' | 'openai' | 'mock'>('mock');
   // Prompt options determine which supporting fields are sent to the provider
-  const [promptOption, setPromptOption] = useState<'image_description' | 'translate_description' | 'rewrite_description'>('image_description');
+  const [promptOption, setPromptOption] = useState<'image_description' | 'translate_description' | 'rewrite_description' | 'other'>('image_description');
 
   // Editable fields shown in the dialog
   const [editDescription, setEditDescription] = useState("");
@@ -623,29 +623,33 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                       <div className="mt-4">
                         <label className="text-sm font-medium">Prompt Template</label>
                         <div className="mt-1">
-                          <Select value={promptOption} onValueChange={(v: string) => setPromptOption(v as any)}>
+                          <Select value={promptOption} onValueChange={(v: string) => {
+                            setPromptOption(v as any);
+                            // Clear the Other Prompt when choosing any template other than 'other'
+                            if (v !== 'other') setGeminiPrompt('');
+                          }}>
                             <SelectTrigger>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="image_description">Create description from image</SelectItem>
-                              <SelectItem value="translate_description">Translate this description</SelectItem>
-                              <SelectItem value="rewrite_description">Rewrite description</SelectItem>
+                                <SelectItem value="image_description">Create description from image</SelectItem>
+                                <SelectItem value="translate_description">Translate this description</SelectItem>
+                                <SelectItem value="rewrite_description">Rewrite description</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
 
-                      <div className="mt-4">
-                        <label className="text-sm font-medium">Prompt Override</label>
-                        <div className="mt-1 flex items-center gap-2">
-                          <Input placeholder="Describe what you want Gemini to do (or leave blank if using template)" value={geminiPrompt} onChange={e=>setGeminiPrompt((e.target as HTMLInputElement).value)} className="flex-1 input-sm" />
-                          <Button size="sm" variant="default" onClick={handleGeminiSuggest} disabled={geminiLoading}>
-                            <Bot />
-                            {geminiLoading ? 'Sent...' : 'Send'}
-                          </Button>
-                        </div>
-                      </div>
+                        {/* Show Other Prompt only when user selects the 'Other' template */}
+                        {promptOption === 'other' && (
+                          <div className="mt-4">
+                            <label className="text-sm font-medium">Other Prompt</label>
+                            <div className="mt-1">
+                              <Input placeholder="Describe what you want Gemini to do" value={geminiPrompt} onChange={e=>setGeminiPrompt((e.target as HTMLInputElement).value)} className="flex-1 input-sm" />
+                            </div>
+                          </div>
+                        )}
                     </div>
                   </div>
                   {geminiError && <div className="mt-2 text-red-600 dark:text-red-400">{geminiError}</div>}
@@ -695,6 +699,13 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                       )}
                     </div>
                   )}
+                </div>
+
+                <div className="mt-3">
+                  <Button size="sm" variant="default" className="w-full justify-center" onClick={handleGeminiSuggest} disabled={geminiLoading}>
+                    <Bot />
+                    <span className="ml-2">{geminiLoading ? 'Sent...' : 'Send'}</span>
+                  </Button>
                 </div>
 
                 <div className="prose max-w-none text-sm text-foreground/90">
