@@ -113,6 +113,10 @@ export function ModelDetailsDrawer({
 
     // Image selection state for edit mode (holds indexes into the gallery array)
     const [selectedImageIndexes, setSelectedImageIndexes] = useState<number[]>([]);
+    // Number of parsed (original) images kept at top-level when entering edit mode.
+    // This is used to map gallery indexes to either top-level images (thumbnail + images)
+    // or user-added images stored in userDefined.images.
+    const parsedImageCountRef = useRef<number>(0);
     // Drag state for reordering thumbnails in edit mode
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
       // File input ref for adding new images in edit mode
@@ -163,35 +167,37 @@ export function ModelDetailsDrawer({
             setAddImageProgress({ processed: i + 1, total: files.length });
           }
 
-          // Apply to editedModel: first image becomes thumbnail if none exists
+          // Apply to editedModel: store user-added images under userDefined.images so
+          // server-side parsed images (top-level thumbnail/images) remain separate.
           setEditedModel(prev => {
             if (!prev) return prev;
-            const thumbnail = prev.thumbnail || newDataUrls[0] || '';
-            const imgs = Array.isArray(prev.images) ? prev.images.slice() : [];
-            const toAppend = prev.thumbnail ? newDataUrls : newDataUrls.slice(1);
-            return { ...prev, thumbnail, images: [...imgs, ...toAppend] } as Model;
+            // Ensure userDefined is an array with an object; use existing if present
+            const ud = Array.isArray((prev as any).userDefined) && (prev as any).userDefined.length > 0 ? (prev as any).userDefined.slice() : [{}];
+            // userDefined[0].images will hold user-added images (data URLs)
+            const existingUserImages = (ud[0] as any).images && Array.isArray((ud[0] as any).images) ? (ud[0] as any).images.slice() : [];
+
+            // If there was no top-level thumbnail, the UI historically used the first
+            // added image as the thumbnail. We'll still honor that visually by
+            // setting thumbnail if missing, but keep user images inside userDefined.
+            let newThumbnail = prev.thumbnail || '';
+            if (!prev.thumbnail && newDataUrls.length > 0) {
+              newThumbnail = newDataUrls[0];
+            }
+
+            existingUserImages.push(...newDataUrls);
+            ud[0] = { ...(ud[0] as any), images: existingUserImages };
+            return { ...prev, thumbnail: newThumbnail, userDefined: ud } as Model;
           });
 
-          // Compute the index of the last item added in the gallery deterministically
-          // (do not rely on closure-captured `allImages` or on the async state update)
-          const prevThumbExists = Boolean(editedModel?.thumbnail);
-          const prevImgsCount = Array.isArray(editedModel?.images) ? editedModel!.images!.length : 0;
-          let lastIndex = 0;
-          if (!prevThumbExists) {
-            // First new image becomes the thumbnail at index 0. If only one file was added,
-            // the last added item is the thumbnail. Otherwise, appended images follow after
-            // the thumbnail and any existing images.
-            if (newDataUrls.length === 1) {
-              lastIndex = 0;
-            } else {
-              lastIndex = prevImgsCount + newDataUrls.length - 1;
-            }
-          } else {
-            // Thumbnail existed before; gallery layout is [thumbnail, ...images]. New images
-            // are appended to images, so compute their final index accordingly.
-            lastIndex = 1 + prevImgsCount + newDataUrls.length - 1;
-          }
-          setSelectedImageIndex(Math.max(0, lastIndex));
+          // Compute the index of the last item added in the gallery deterministically.
+          // Gallery is constructed as: [top-level thumbnail, ...top-level images, ...userDefined.images]
+          const parsedCount = parsedImageCountRef.current;
+          // Count existing user images before this operation (use editedModel snapshot)
+          const userImagesBefore = Array.isArray(((editedModel as any)?.userDefined?.[0]?.images))
+            ? (editedModel as any).userDefined[0].images.length
+            : 0;
+          const lastIndex = Math.max(0, parsedCount + userImagesBefore + newDataUrls.length - 1);
+          setSelectedImageIndex(lastIndex);
         } catch (err: any) {
           console.error('Error adding images:', err);
           setAddImageError(String(err?.message || err));
@@ -207,7 +213,11 @@ export function ModelDetailsDrawer({
       const src = editedModel || model;
       if (!src) return [];
       const imgs = Array.isArray(src.images) ? src.images : [];
-      return [src.thumbnail, ...imgs];
+      // Append user-added images stored in userDefined[0].images (if present)
+      const userImgs = Array.isArray((src as any).userDefined && (src as any).userDefined[0] && (src as any).userDefined[0].images)
+        ? (src as any).userDefined[0].images
+        : [];
+      return [src.thumbnail, ...imgs, ...userImgs];
     })();
 
   // Key handling for in-window fullscreen navigation (Escape, ArrowLeft, ArrowRight)
@@ -302,9 +312,10 @@ export function ModelDetailsDrawer({
     if (isNaN(sourceIndex)) return setDragOverIndex(null);
     if (!editedModel) return setDragOverIndex(null);
 
-    // Build combined array and reorder
-    const imgs = Array.isArray(editedModel.images) ? editedModel.images.slice() : [];
-    const combined = [editedModel.thumbnail, ...imgs];
+  // Build combined array (parsed top-level images first, then user images)
+  const parsedImgs = Array.isArray(editedModel.images) ? editedModel.images.slice() : [];
+  const userImgs = Array.isArray((editedModel as any).userDefined?.[0]?.images) ? (editedModel as any).userDefined[0].images.slice() : [];
+  const combined = [editedModel.thumbnail, ...parsedImgs, ...userImgs];
     // bounds
     if (sourceIndex < 0 || sourceIndex >= combined.length || targetIndex < 0 || targetIndex >= combined.length) {
       setDragOverIndex(null);
@@ -313,10 +324,22 @@ export function ModelDetailsDrawer({
     const item = combined.splice(sourceIndex, 1)[0];
     combined.splice(targetIndex, 0, item);
 
-    // Apply new thumbnail and images to editedModel (do not persist yet)
+    // Apply new thumbnail and images to editedModel (do not persist yet).
+    // Need to split combined back into parsed top-level images and userDefined.images.
     const newThumbnail = combined[0] || '';
-    const newImages = combined.slice(1);
-    setEditedModel(prev => prev ? { ...prev, thumbnail: newThumbnail, images: newImages } as Model : prev);
+    const rest = combined.slice(1);
+    // Parsed images occupy the first parsedImageCountRef.current entries of rest
+    const parsedCount = parsedImageCountRef.current - (editedModel.thumbnail ? 1 : 0);
+    // parsedCount may be negative/NaN so clamp
+    const parsedCountSafe = Math.max(0, Number.isFinite(parsedCount) ? parsedCount : 0);
+    const newParsedImages = rest.slice(0, parsedCountSafe);
+    const newUserImages = rest.slice(parsedCountSafe);
+    setEditedModel(prev => {
+      if (!prev) return prev;
+      const ud = Array.isArray((prev as any).userDefined) && (prev as any).userDefined.length > 0 ? (prev as any).userDefined.slice() : [{}];
+      ud[0] = { ...(ud[0] as any), images: newUserImages };
+      return { ...prev, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
+    });
     // update preview index to the dropped location
     setSelectedImageIndex(targetIndex);
     // clear selection indexes because indexes changed
@@ -436,6 +459,9 @@ export function ModelDetailsDrawer({
       tags: srcModel.tags || [], // Ensure tags is always an array
       description: initialDescription
     } as Model);
+    // Capture how many images came from parsing (top-level thumbnail + images)
+    const parsedImgs = Array.isArray(srcModel.images) ? srcModel.images : [];
+    parsedImageCountRef.current = (srcModel.thumbnail ? 1 : 0) + parsedImgs.length;
     // Clear any previous image selections when entering edit mode
     setSelectedImageIndexes([]);
     setIsEditing(true);
@@ -535,14 +561,46 @@ export function ModelDetailsDrawer({
     // top-level description changed, persist it into userDefined as the
     // canonical location for user edits (even if it's an empty string).
     if (restoreOriginalDescription) {
-      changes.userDefined = [];
+      // Preserve any user-added images while removing only the user-defined description.
+      // If the edited model has userDefined images, keep them. Otherwise, clear userDefined.
+      const editedUserDefined = (editedForSave as any).userDefined;
+      const existingImages = Array.isArray(editedUserDefined?.[0]?.images) ? editedUserDefined[0].images : undefined;
+      if (existingImages !== undefined) {
+        // Preserve images but remove description
+        changes.userDefined = [{ ...(editedUserDefined?.[0] || {}), images: existingImages }];
+      } else {
+        // No user images present; clear userDefined entirely
+        changes.userDefined = [];
+      }
       // Ensure we don't accidentally send the top-level description
       delete changes.description;
     } else if (typeof changes.description !== 'undefined') {
       const desc = changes.description;
-      // ensure userDefined is an array with a single entry containing description
-      changes.userDefined = [{ description: desc }];
+      // If a userDefined change was already detected (for example user-added images),
+      // merge the description into that existing array entry rather than overwriting
+      // the whole userDefined array and losing images.
+      if (Array.isArray(changes.userDefined) && changes.userDefined.length > 0) {
+        // Merge description into the first userDefined object
+        changes.userDefined[0] = { ...(changes.userDefined[0] as any), description: desc };
+      } else {
+        // ensure userDefined is an array with a single entry containing description
+        changes.userDefined = [{ description: desc }];
+      }
       delete changes.description;
+    }
+
+    // Ensure that if the edited model contains user-defined images, they are included
+    // in the outgoing changes payload even if other userDefined fields weren't detected
+    // as changed by the generic diff (defensive). This guarantees user-added images
+    // are sent to the server.
+    const editedUD = (editedForSave as any).userDefined;
+    if (Array.isArray(editedUD) && editedUD.length > 0 && Array.isArray(editedUD[0].images) && editedUD[0].images.length > 0) {
+      // If changes.userDefined already exists, merge images into it, otherwise set it.
+      if (Array.isArray(changes.userDefined) && changes.userDefined.length > 0) {
+        changes.userDefined[0] = { ...(changes.userDefined[0] as any), images: editedUD[0].images };
+      } else {
+        changes.userDefined = [{ images: editedUD[0].images }];
+      }
     }
 
   // Note: clearing is represented by writing userDefined = [] above when the
@@ -551,6 +609,21 @@ export function ModelDetailsDrawer({
   // the authoritative model.
 
     try {
+      // Log a compact preview of the outgoing payload for debugging (avoid dumping full base64 blobs)
+      try {
+        const preview = { filePath: editedForSave.filePath, changes: { ...changes } } as any;
+        if (preview.changes && Array.isArray(preview.changes.userDefined) && preview.changes.userDefined.length > 0) {
+          const ud0 = preview.changes.userDefined[0];
+          if (ud0 && Array.isArray(ud0.images)) {
+            preview.changes.userDefined = [{ ...ud0, images: `[${ud0.images.length} images]` }];
+          }
+        }
+        console.debug('POST /api/save-model payload preview:', preview);
+      } catch (e) {
+        // Don't let logging break the save flow
+        console.warn('Failed to produce save-model preview log', e);
+      }
+
       const response = await fetch('/api/save-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -595,14 +668,21 @@ export function ModelDetailsDrawer({
       let finalModel = editedModel;
       if (selectedImageIndexes.length > 0) {
         const sel = new Set(selectedImageIndexes);
-        // Build remaining all images from the editedModel
-        const srcImgs = Array.isArray(editedModel.images) ? editedModel.images : [];
-        const combined = [editedModel.thumbnail, ...srcImgs];
+        // Build combined gallery [thumbnail, ...parsed images, ...user images]
+        const parsedImgs = Array.isArray(editedModel.images) ? editedModel.images : [];
+        const userImgs = Array.isArray((editedModel as any).userDefined?.[0]?.images) ? (editedModel as any).userDefined[0].images.slice() : [];
+        const combined = [editedModel.thumbnail, ...parsedImgs, ...userImgs];
         const remaining = combined.filter((_, idx) => !sel.has(idx));
-        // New thumbnail is first remaining, images are the rest
         const newThumbnail = remaining[0] || '';
-        const newImages = remaining.slice(1);
-        finalModel = { ...editedModel, thumbnail: newThumbnail, images: newImages } as Model;
+        const rest = remaining.slice(1);
+        // Split rest back into parsed and user based on original parsedImageCountRef
+        const originalParsedCount = parsedImageCountRef.current;
+        const parsedCountSafe = Math.max(0, originalParsedCount - (editedModel.thumbnail ? 1 : 0));
+        const newParsedImages = rest.slice(0, parsedCountSafe);
+        const newUserImages = rest.slice(parsedCountSafe);
+        const ud = Array.isArray((editedModel as any).userDefined) && (editedModel as any).userDefined.length > 0 ? (editedModel as any).userDefined.slice() : [{}];
+        ud[0] = { ...(ud[0] as any), images: newUserImages };
+        finalModel = { ...editedModel, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
       }
       // Validate related_files before applying to the app state and saving
       const { cleaned, invalid } = validateAndNormalizeRelatedFiles(finalModel.related_files as any);

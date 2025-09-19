@@ -22,6 +22,13 @@ export interface Model {
   hidden?: boolean;
   // List of user-provided related files (relative paths). Example: "prints/part-supports.zip"
   related_files?: string[];
+  // Structured user-provided data. The first element is used for user edits such as
+  // description and images (data URLs). Keep flexible to support additional fields.
+  userDefined?: Array<{
+    description?: string;
+    images?: string[];
+    [key: string]: any;
+  }>;
   printSettings: {
     layerHeight: string;
     infill: string;

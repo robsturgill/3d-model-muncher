@@ -107,6 +107,7 @@ function getAbsoluteModelsPath() {
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
   let { filePath, id, ...changes } = req.body || {};
+
   // Require at least an id or a filePath so we know where to save
   if (!filePath && !id) {
     return res.status(400).json({ success: false, error: 'No filePath or id provided' });
@@ -580,7 +581,10 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           license: currentData.license || "",
           hidden: currentData.hidden || false,
           source: currentData.source || "",
-          price: currentData.price || 0
+          price: currentData.price || 0,
+          // Preserve user-managed related files and any structured user data (images, descriptions)
+          related_files: Array.isArray(currentData.related_files) ? currentData.related_files : [],
+          userDefined: Array.isArray(currentData.userDefined) ? currentData.userDefined : []
         };
 
         // Generate new metadata
