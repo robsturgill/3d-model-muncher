@@ -11,6 +11,7 @@ import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { toast } from 'sonner';
 import { Separator } from "../ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
 type ModelEntry = {
   id?: string;
@@ -132,6 +133,18 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
     if (suggestionCategory && suggestionCategory.trim() && suggestionCategory !== 'Uncategorized') set.add(suggestionCategory);
     return Array.from(set);
   }, [models, propCategories, editCategory, suggestionCategory]);
+
+  // When the provider changes away from mock, clear any simulated suggestion state
+  useEffect(() => {
+    if (provider !== 'mock') {
+      setSuggestionDescription('');
+      setSuggestionCategory('');
+      setSuggestionTags([]);
+      setGeminiResult('');
+    }
+    // Also clear any previous geminiError when switching providers so user isn't stuck
+    setGeminiError('');
+  }, [provider]);
 
   // Resize an image Blob to a square canvas (512x512 by default) and return a data URL
   async function resizeImageBlobToDataUrl(blob: Blob, targetW = 512, targetH = 512, mimeType?: string): Promise<string> {
@@ -301,12 +314,65 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadBody),
       });
-      if (!res.ok) throw new Error("Gemini API error");
-      const data = await res.json();
+      // If the server responded with a non-2xx status try to parse the error body
+      if (!res.ok) {
+        let bodyText = '';
+        try {
+          // Try to parse JSON error body if present
+          const errJson = await res.json();
+          bodyText = (errJson && (errJson.error || errJson.message || errJson.detail)) ? (errJson.error || errJson.message || errJson.detail) : JSON.stringify(errJson);
+        } catch (e) {
+          // Fallback to plain text when JSON isn't returned
+          try { bodyText = await res.text(); } catch (_) { bodyText = ''; }
+        }
+
+        // Map known backend adapter message to friendly frontend message
+        if (typeof bodyText === 'string' && bodyText.includes('GenAI adapter error') && (bodyText.includes('GOOGLE_API_KEY') || bodyText.includes('GOOGLE_APPLICATION_CREDENTIALS'))) {
+          throw new Error('No API key configured');
+        }
+
+        throw new Error(bodyText || 'Gemini API error');
+      }
+
+      // Try to parse successful JSON response, but handle non-JSON safely
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        const text = await res.text();
+        data = { text };
+      }
+
+      // Some deployments may return the GenAI adapter error string with a 200
+      // status (plain text or JSON). Detect that and normalize to a friendly
+      // client-side error so the UI shows the warning.
+      const combinedText = (data && (data.text || data.result || data.error || data.message)) ? (data.text || data.result || data.error || data.message) : '';
+      const combinedTextLower = typeof combinedText === 'string' ? combinedText.toLowerCase() : '';
+      // Case-insensitive detection for adapter error variants
+      if (combinedTextLower.includes('genai adapter error') && (combinedTextLower.includes('google_api_key') || combinedTextLower.includes('google_application_credentials'))) {
+        console.debug('[GenAI] Detected adapter error in response:', combinedText);
+        throw new Error('No API key configured');
+      }
       // Accept either a plain text response or a structured suggestion object
       setGeminiResult(data.text ?? data.result ?? "No suggestion returned.");
       // If backend returns structured suggestion use it
       if (data.suggestion) {
+        // Detect server-side fallback mock response (server returns a helpful
+        // mock description when the adapter failed). When the user explicitly
+        // selected a real provider (e.g. 'gemini') treat this as an adapter
+        // error so the UI shows the 'No API key configured' message instead of
+        // the mock text. The server produces: "AI suggestion (mock) based on prompt: ..."
+        try {
+          const descRaw = String(data.suggestion.description ?? '').toLowerCase();
+          if (descRaw.includes('ai suggestion (mock) based on prompt')) {
+            console.debug('[GenAI] Server returned mock fallback while provider is not mock; treating as adapter error');
+            throw new Error('No API key configured');
+          }
+        } catch (e) {
+          // Re-throw to flow into catch handler which will set geminiError
+          throw e;
+        }
+
         setSuggestionDescription(data.suggestion.description ?? "");
         setSuggestionCategory(data.suggestion.category ?? "");
         setSuggestionTags(Array.isArray(data.suggestion.tags) ? data.suggestion.tags : (typeof data.suggestion.tags === 'string' && data.suggestion.tags ? data.suggestion.tags.split(',').map((s: string)=>s.trim()) : []));
@@ -317,7 +383,14 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
         setSuggestionTags([]);
       }
     } catch (err: any) {
+      // Show the error and clear any suggestion or preview content so the
+      // error banner is not visually masked by leftover mock/result text.
       setGeminiError(err?.message ?? "Unknown error");
+      setSuggestionDescription("");
+      setSuggestionCategory("");
+      setSuggestionTags([]);
+      setGeminiResult("");
+      setResizedPreview(null);
     }
     finally {
       setGeminiLoading(false);
@@ -498,7 +571,12 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
           <SheetContent className="w-full sm:max-w-2xl">
             <SheetHeader className="border-b p-4 sticky top-0 bg-background/95 backdrop-blur-sm z-20">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold px-2">{selected?.name}</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-semibold px-2">{selected?.name}</h3>
+                  {geminiError && (
+                    <div className="text-xs text-red-600 dark:text-red-400 px-2 py-1 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">AI: {geminiError}</div>
+                  )}
+                </div>
                 <button aria-label="Close" title="Close" className="btn btn-ghost p-2" onClick={() => setSelected(null)}>
                   <X className="h-4 w-4" />
                 </button>
@@ -639,6 +717,9 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                             </SelectContent>
                           </Select>
                         </div>
+                        {provider === 'mock' && (
+                          <div className="text-xs text-muted-foreground mt-2">Using simulated provider — results are mocked for testing.</div>
+                        )}
                       </div>
 
                       <div className="mt-4">
@@ -693,9 +774,18 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                         )}
                     </div>
                   </div>
-                  {geminiError && <div className="mt-2 text-red-600 dark:text-red-400">{geminiError}</div>}
+                  {geminiError && (
+                    <Alert variant="destructive" className="mt-2 border-red-500 text-red-700 dark:text-red-400">
+                      <AlertTitle>{geminiError === 'No API key configured' ? 'No API key configured' : 'Error'}</AlertTitle>
+                      <AlertDescription>
+                        {geminiError === 'No API key configured'
+                          ? 'The server requires GOOGLE_API_KEY or GOOGLE_APPLICATION_CREDENTIALS to be set for the Gemini provider.'
+                          : geminiError}
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
-                  {(suggestionDescription || suggestionCategory || suggestionTags.length>0 || geminiResult || geminiLoading) && (
+                  {(!geminiError && (suggestionDescription || suggestionCategory || suggestionTags.length>0 || geminiResult || geminiLoading)) && (
                     <div className="mt-3 p-3 rounded bg-muted text-sm">
                       <div className="flex items-center justify-between">
                         <div className="font-medium">Gemini Suggestion</div>

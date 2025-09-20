@@ -28,7 +28,7 @@ Focus descriptions on the purpose, functionality, and style of the object.
 RESPOND ONLY WITH A JSON OBJECT (no surrounding text) with these exact keys:
 - description: a string containing a short paragraph (2–3 sentences) that clearly describes the object's purpose, functionality, and style.
 - category: a single word string suitable for organizing the model.
-- tags: an array of 4 to 6 short tag strings (no spaces in tags if possible; use hyphens to join words).
+- tags: an array of 4 to 6 short tag strings (use hyphens to join words).
 
 The JSON must be parseable by a strict JSON parser. Do NOT include any additional keys, commentary, or explanation. Do NOT mention the phrases "image of", "3D printed", or "3D model of". Keep the tone clear, simple, and descriptive.`;
 

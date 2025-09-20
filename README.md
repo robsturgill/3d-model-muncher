@@ -14,6 +14,7 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 - **Bulk Editing**: Edit multiple models simultaneously
 - **Backup & Restore**: Protect your metadata with compressed backups and flexible restore options
 - **Configuration Management**: Export/import app settings
+- **AI Features**: Generative suggestions for tags, categories, and descriptions using Google Gemini
 - **Docker Support**: Easy deployment with Docker Compose
 
 ## Usage
@@ -143,3 +144,23 @@ If you rely on any other custom or non-standard fields, consider exporting a bac
 - AI suggestions for categories, tags, and a description can be applied and saved to the munchie JSON.
 
 These features are experimental — back up your metadata before using them in production.
+
+## Google Gemini (Generative AI) setup — short
+The Experimental tab can use Google Gemini (Generative Models API) for suggestions (categories, tags, descriptions). For quick setup and how to get an API key, follow the official guide:
+
+- How to get a Gemini API key and set it as an environment variable:
+
+- https://ai.google.dev/gemini-api/docs/api-key
+
+Examples — set the API key in your environment (replace YOUR_KEY):
+
+Windows (cmd.exe):
+`SET GOOGLE_API_KEY=YOUR_KEY`
+
+PowerShell:
+`$env:GOOGLE_API_KEY = "YOUR_KEY"`
+
+POSIX (macOS / Linux):
+`export GOOGLE_API_KEY=YOUR_KEY`
+
+Can also set it in an `.env` file in the project root. Always make sure to and restart the server after changing environment variables.
