@@ -25,6 +25,7 @@ import { LICENSES, type License } from '../constants/licenses';
 import { Switch } from "./ui/switch";
 import { Separator } from "./ui/separator";
 import { Checkbox } from "./ui/checkbox";
+import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import {
   Save,
   X,
@@ -44,6 +45,7 @@ import {
   Layers,
   CircleCheckBig
 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 interface BulkEditDrawerProps {
   models: Model[];
@@ -1257,10 +1259,13 @@ export function BulkEditDrawer({
 
             {fieldSelection.regenerateMunchie && (
               <div className="ml-6 space-y-2">
-                <p className="text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <strong>Warning:</strong> This will re-parse the 3MF/STL files and regenerate metadata.
-                  Your custom notes, tags, category, and other user data will be preserved.
-                </p>
+                <Alert className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Warning</AlertTitle>
+                  <AlertDescription>
+                    This will re-parse the 3MF/STL files and regenerate metadata. Your custom notes, tags, category, and other user data will be preserved.
+                  </AlertDescription>
+                </Alert>
               </div>
             )}
           </div>

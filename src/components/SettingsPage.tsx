@@ -2096,7 +2096,7 @@ export function SettingsPage({
                     </div>
 
                     {/* Backup Statistics */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Card>
                         <CardContent className="p-4">
                           <div className="flex items-center gap-2">
@@ -2109,7 +2109,7 @@ export function SettingsPage({
                         </CardContent>
                       </Card>
                       
-                      <Card>
+                      {/* <Card>
                         <CardContent className="p-4">
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-primary" />
@@ -2119,7 +2119,7 @@ export function SettingsPage({
                             </div>
                           </div>
                         </CardContent>
-                      </Card>
+                      </Card> */}
                       
                       <Card>
                         <CardContent className="p-4">
@@ -2671,7 +2671,7 @@ export function SettingsPage({
                     <ImageWithFallback
                       src="/images/munchie-side.png"
                       alt="Community mascot"
-                      className="w-32 sm:w-[200px] h-auto flex-shrink-0 mx-auto sm:mx-0"
+                      className="w-72 sm:w-[200px] h-auto flex-shrink-0 mx-auto sm:mx-0"
                     />                    
                     <div className="flex-1 w-full flex flex-col justify-center space-y-3 text-left">
                       <h3 className="font-medium">Join the Community</h3>
