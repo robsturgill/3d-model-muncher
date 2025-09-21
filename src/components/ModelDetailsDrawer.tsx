@@ -48,6 +48,7 @@ export function ModelDetailsDrawer({
   const [focusRelatedIndex, setFocusRelatedIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'3d' | 'images'>(defaultModelView);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+      
   const [restoreOriginalDescription, setRestoreOriginalDescription] = useState(false);
   const originalTopLevelDescriptionRef = useRef<string | null>(null);
   const originalUserDefinedDescriptionRef = useRef<string | null>(null);
@@ -236,8 +237,18 @@ export function ModelDetailsDrawer({
               newDescriptors.push(String(item));
             }
 
-            // Attach the newDescriptors under userDefined[0].imageOrder
+            // Attach the newDescriptors under userDefined[0].imageOrder. Also
+            // persist the thumbnail choice as a descriptor under userDefined[0]
+            // when it refers to a user image to avoid promoting base64 blobs
+            // into the top-level thumbnail field.
             ud[0] = { ...(ud[0] as any), imageOrder: newDescriptors };
+            if (newThumbnail && !parsed.includes(newThumbnail)) {
+              // find index in updatedUserImages
+              const uidx = updatedUserImages.findIndex((u: any) => getUserImageData(u) === newThumbnail);
+              const thumbDescriptor = uidx !== -1 ? `user:${uidx}` : newThumbnail;
+              ud[0] = { ...(ud[0] as any), thumbnail: thumbDescriptor };
+              return { ...prev, thumbnail: '', userDefined: ud } as Model;
+            }
             return { ...prev, thumbnail: newThumbnail, userDefined: ud } as Model;
           });
 
@@ -286,19 +297,73 @@ export function ModelDetailsDrawer({
         return '';
       };
 
+      // Resolve a descriptor like 'user:1' or 'parsed:0' to an actual data string
+      const resolveDescriptorToData = (desc: string | undefined, m: Model): string | undefined => {
+        if (!desc) return undefined;
+        const parsed = Array.isArray(m.images) ? m.images : [];
+        const userArr = Array.isArray((m as any).userDefined?.[0]?.images) ? (m as any).userDefined[0].images : [];
+        if (desc.startsWith('thumb:')) {
+          // Special-case 'thumb:' which refers to the effective thumbnail (userDefined or top-level)
+          const udThumb = (m as any).userDefined?.[0]?.thumbnail;
+          if (typeof udThumb === 'string') {
+            // If userDefined thumbnail is itself a descriptor, try to resolve it
+            if (/^(user:|parsed:)/.test(udThumb)) {
+              return resolveDescriptorToData(udThumb as string, m);
+            }
+            // If it's a non-descriptor string, attempt to return its data
+            if (udThumb && !udThumb.startsWith('data:')) {
+              // Could be a parsed value present in images or top-level
+              const pidx = Array.isArray(m.images) ? m.images.indexOf(udThumb) : -1;
+              if (pidx !== -1) return m.images[pidx];
+              // fallback to top-level thumbnail
+            }
+          }
+          // Fall back to top-level thumbnail
+          return m.thumbnail || undefined;
+        }
+        if (desc.startsWith('user:')) {
+          const idx = parseInt(desc.split(':')[1] || '', 10);
+          if (!isNaN(idx) && userArr[idx] !== undefined) return getUserImageData(userArr[idx]);
+          return undefined;
+        }
+        if (desc.startsWith('parsed:')) {
+          const idx = parseInt(desc.split(':')[1] || '', 10);
+          if (!isNaN(idx) && parsed[idx]) return parsed[idx];
+          return undefined;
+        }
+        return desc;
+      };
+
+      // Resolve the effective thumbnail for display. Prefer a descriptor stored
+      // under userDefined[0].thumbnail (string like 'user:0' or 'parsed:1'). If
+      // absent, fall back to legacy object/string or top-level thumbnail.
+      const resolveThumbnail = (m: Model): string => {
+        const udThumb = (m as any).userDefined?.[0]?.thumbnail;
+        if (typeof udThumb === 'string') {
+          const resolved = resolveDescriptorToData(udThumb, m);
+          if (resolved) return resolved;
+        }
+        if (udThumb && typeof udThumb !== 'string') {
+          const legacy = getUserImageData(udThumb);
+          if (legacy) return legacy;
+        }
+        return m.thumbnail || '';
+      };
+
 
       // Helper: resolve a model.imageOrder (if present) into an array of src strings
       const resolveImageOrderToUrls = (m: Model) => {
   const order = Array.isArray((m as any).userDefined?.[0]?.imageOrder) ? (m as any).userDefined[0].imageOrder : undefined;
   if (!m || !order || order.length === 0) return null;
         const parsed = Array.isArray(m.images) ? m.images : [];
-        const userArr = Array.isArray((m as any).userDefined?.[0]?.images) ? (m as any).userDefined[0].images : [];
+    const userArr = Array.isArray((m as any).userDefined?.[0]?.images) ? (m as any).userDefined[0].images : [];
         const urls: string[] = [];
         for (const desc of order || []) {
           if (typeof desc !== 'string') continue;
           if (desc.startsWith('thumb:')) {
-            // thumb descriptor resolves to the model's thumbnail value
-            urls.push(m.thumbnail);
+            // thumb descriptor resolves to the user's thumbnail descriptor if present;
+            // use resolveThumbnail which prefers the descriptor and falls back to top-level.
+            urls.push(resolveThumbnail(m));
             continue;
           }
           if (desc.startsWith('parsed:')) {
@@ -326,28 +391,39 @@ export function ModelDetailsDrawer({
         const result: string[] = [];
         if (!m) return result;
         const parsed = Array.isArray(m.images) ? m.images : [];
-        const userArr = Array.isArray((m as any).userDefined?.[0]?.images) ? (m as any).userDefined[0].images : [];
-        const combined = [m.thumbnail, ...parsed, ...userArr.map((u: any) => getUserImageData(u))];
-  for (const item of combined) {
-          // Prefer thumbnail as a dedicated descriptor so we don't write raw base64 into imageOrder
-          if (item === m.thumbnail && m.thumbnail) {
-            result.push(`thumb:0`);
-            continue;
-          }
-          // Prefer parsed match
-          const pidx = parsed.indexOf(item);
-          if (pidx !== -1) {
-            result.push(`parsed:${pidx}`);
-            continue;
-          }
-          const uidx = userArr.findIndex((u: any) => getUserImageData(u) === item);
-          if (uidx !== -1) {
-            result.push(`user:${uidx}`);
-            continue;
-          }
-          // fallback: unknown item, just store literal
-          result.push(String(item));
-        }
+  const userArr = Array.isArray((m as any).userDefined?.[0]?.images) ? (m as any).userDefined[0].images : [];
+  const udThumbEntry = (m as any).userDefined?.[0]?.thumbnail;
+  // Determine if the user-defined thumbnail references a parsed or user image
+  let skipParsedIndex = -1;
+  let skipUserIndex = -1;
+  if (typeof udThumbEntry === 'string') {
+    if (udThumbEntry.startsWith('parsed:')) {
+      skipParsedIndex = parseInt(udThumbEntry.split(':')[1] || '', 10) || -1;
+    } else if (udThumbEntry.startsWith('user:')) {
+      skipUserIndex = parseInt(udThumbEntry.split(':')[1] || '', 10) || -1;
+    }
+  } else if (udThumbEntry) {
+    // legacy userDefined thumbnail data -> find matching user index
+    const legacyData = getUserImageData(udThumbEntry);
+    const match = userArr.findIndex((u: any) => getUserImageData(u) === legacyData);
+    if (match !== -1) skipUserIndex = match;
+  } else if (m.thumbnail) {
+    // If thumbnail equals one of the parsed images, ensure we don't duplicate it
+    const p = parsed.indexOf(m.thumbnail);
+    if (p !== -1) skipParsedIndex = p;
+  }
+  // Start with a thumb descriptor if a thumbnail exists (either user-defined descriptor or top-level)
+  if (udThumbEntry || m.thumbnail) result.push('thumb:0');
+  // Add parsed descriptors, skipping the parsed index referenced by thumbnail
+  for (let i = 0; i < parsed.length; i++) {
+    if (i === skipParsedIndex) continue;
+    result.push(`parsed:${i}`);
+  }
+  // Add user descriptors, skipping the user index referenced by thumbnail
+  for (let i = 0; i < userArr.length; i++) {
+    if (i === skipUserIndex) continue;
+    result.push(`user:${i}`);
+  }
         return result;
       };
 
@@ -472,12 +548,93 @@ export function ModelDetailsDrawer({
     // perform descriptor reordering (move source -> target)
     const descItem = currentDescriptors.splice(sourceIndex, 1)[0];
     currentDescriptors.splice(targetIndex, 0, descItem);
+    // Determine if the new first descriptor references a user or parsed image
+    // so we can persist it as userDefined[0].thumbnail (descriptor form).
+    let firstDescriptor: string | undefined = undefined;
+    if (currentDescriptors.length > 0 && typeof currentDescriptors[0] === 'string') {
+      firstDescriptor = currentDescriptors[0] as string;
+    }
+    // Try to normalize a literal (non-descriptor) into a descriptor using
+    // the current editedModel snapshot (prefer user images). We resolve the
+    // effective first image using the reordered `currentDescriptors` so that
+    // any index changes are accounted for.
+    let normalizedThumbDescriptor: string | undefined = undefined;
+    try {
+      const tempUd = Array.isArray((editedModel as any).userDefined) && (editedModel as any).userDefined.length > 0 ? (editedModel as any).userDefined.slice() : [{}];
+      tempUd[0] = { ...(tempUd[0] as any), imageOrder: currentDescriptors };
+      const tempModelForResolve = { ...(editedModel as any), userDefined: tempUd } as Model;
+      const resolvedUrls = resolveImageOrderToUrls(tempModelForResolve) || [];
+      const firstUrl = resolvedUrls[0];
+      if (firstUrl) {
+        const parsedSnapshot = parsedImagesSnapshotRef.current || [];
+        const userArr = Array.isArray((editedModel as any)?.userDefined?.[0]?.images) ? (editedModel as any).userDefined[0].images : [];
+        const uidx = userArr.findIndex((u: any) => getUserImageData(u) === firstUrl);
+        if (uidx !== -1) normalizedThumbDescriptor = `user:${uidx}`;
+        else {
+          const pidx = parsedSnapshot.indexOf(firstUrl);
+          if (pidx !== -1) normalizedThumbDescriptor = `parsed:${pidx}`;
+        }
+      } else if (firstDescriptor) {
+        // If we couldn't resolve via order, fall back to heuristics using
+        // the literal firstDescriptor value.
+        if (/^(user:|parsed:)/.test(firstDescriptor)) {
+          normalizedThumbDescriptor = firstDescriptor;
+        } else {
+          const parsed = Array.isArray(editedModel?.images) ? editedModel.images : [];
+          const userArr = Array.isArray((editedModel as any)?.userDefined?.[0]?.images) ? (editedModel as any).userDefined[0].images : [];
+          const pidx = parsed.indexOf(firstDescriptor);
+          if (pidx !== -1) normalizedThumbDescriptor = `parsed:${pidx}`;
+          else {
+            const uidx = userArr.findIndex((u: any) => getUserImageData(u) === firstDescriptor);
+            if (uidx !== -1) normalizedThumbDescriptor = `user:${uidx}`;
+          }
+        }
+      }
+    } catch (e) {
+      // leave normalizedThumbDescriptor undefined on failure
+      normalizedThumbDescriptor = undefined;
+    }
 
-    // Update editedModel to only set imageOrder (do not move base64 data around)
-    setEditedModel(prev => {
+    // Fallback: if we couldn't derive a normalized thumbnail but the user
+    // moved a descriptor into the first slot, prefer that moved descriptor
+    // when it's already a concrete token like 'parsed:N' or 'user:N'. This
+    // ensures a drag of parsed:2 -> index 0 updates the nested thumbnail.
+    if (!normalizedThumbDescriptor && targetIndex === 0 && typeof descItem === 'string') {
+      if (/^(user:\d+|parsed:\d+)$/.test(descItem)) {
+        normalizedThumbDescriptor = descItem;
+      } else {
+        // try to map literal value to parsed/user
+        const parsedSnapshot = parsedImagesSnapshotRef.current || [];
+        const userArr = Array.isArray((editedModel as any)?.userDefined?.[0]?.images) ? (editedModel as any).userDefined[0].images : [];
+        const pidx = parsedSnapshot.indexOf(descItem);
+        if (pidx !== -1) normalizedThumbDescriptor = `parsed:${pidx}`;
+        else {
+          const uidx = userArr.findIndex((u: any) => getUserImageData(u) === descItem);
+          if (uidx !== -1) normalizedThumbDescriptor = `user:${uidx}`;
+        }
+      }
+    }
+
+    // Update editedModel to set imageOrder and optionally update nested thumbnail
+      // Debug: log normalization result so we can see what the UI computed on drop
+      try {
+        console.debug('DEBUG handleDrop: currentDescriptors =', currentDescriptors);
+        console.debug('DEBUG handleDrop: firstDescriptor =', firstDescriptor, 'normalizedThumbDescriptor =', normalizedThumbDescriptor, 'descItem =', descItem);
+      } catch (e) {
+        // ignore debug errors
+      }
+
+      setEditedModel(prev => {
       if (!prev) return prev;
       const ud = Array.isArray((prev as any).userDefined) && (prev as any).userDefined.length > 0 ? (prev as any).userDefined.slice() : [{}];
       ud[0] = { ...(ud[0] as any), imageOrder: currentDescriptors };
+      // Only set nested thumbnail if we determined a safe descriptor
+      if (typeof normalizedThumbDescriptor === 'string') {
+        // Avoid overwriting an explicit nested thumbnail unless it changed
+        if ((ud[0] as any).thumbnail !== normalizedThumbDescriptor) {
+          ud[0] = { ...(ud[0] as any), thumbnail: normalizedThumbDescriptor };
+        }
+      }
       const updated = { ...prev, userDefined: ud } as any;
       return updated as Model;
     });
@@ -732,6 +889,55 @@ export function ModelDetailsDrawer({
     }
     editedForSave.related_files = cleaned;
 
+    // Ensure we persist a nested thumbnail descriptor when the user has
+    // reordered images such that the first image in imageOrder should be
+    // the thumbnail. This guarantees the nested thumbnail change is
+    // detected by the diff below and included in the save payload.
+    try {
+      const udExists = Array.isArray(editedForSave.userDefined) && editedForSave.userDefined.length > 0;
+      const ud0 = udExists ? editedForSave.userDefined[0] : undefined;
+      const imageOrder = ud0 && Array.isArray(ud0.imageOrder) ? ud0.imageOrder : undefined;
+      if (imageOrder && imageOrder.length > 0) {
+        const first = imageOrder[0];
+        let derived: string | undefined = undefined;
+        if (typeof first === 'string') {
+          if (/^(user:|parsed:)/.test(first)) {
+            derived = first;
+          } else if (first.startsWith('thumb:')) {
+            // If thumb:0 is used, prefer any existing nested descriptor
+            if (ud0 && typeof ud0.thumbnail === 'string' && /^(user:|parsed:)/.test(ud0.thumbnail)) {
+              derived = ud0.thumbnail;
+            }
+          } else {
+            // Try to match literal value against userDefined images
+            const candidateUserImgs = ud0 && Array.isArray(ud0.images) ? ud0.images : (Array.isArray(edited.userDefined?.[0]?.images) ? edited.userDefined[0].images : []);
+            const userIdx = candidateUserImgs.findIndex((u: any) => getUserImageData(u) === first);
+            if (userIdx !== -1) derived = `user:${userIdx}`;
+            else {
+              // Try to match against parsed top-level images
+              const parsedArr = Array.isArray(edited.images) ? edited.images : [];
+              const pidx = parsedArr.indexOf(first);
+              if (pidx !== -1) derived = `parsed:${pidx}`;
+            }
+          }
+        }
+
+        if (typeof derived !== 'undefined') {
+          // Ensure userDefined exists and preserve images
+          const newUd = udExists ? editedForSave.userDefined.slice() : [{}];
+          const copy0 = { ...(newUd[0] || {}) };
+          // Preserve images array if present
+          if (ud0 && Array.isArray(ud0.images)) copy0.images = ud0.images;
+          copy0.thumbnail = derived;
+          newUd[0] = copy0;
+          editedForSave.userDefined = newUd;
+        }
+      }
+    } catch (e) {
+      // Defensive: if thumbnail derivation fails, continue without blocking save
+      console.warn('Failed to derive nested thumbnail from imageOrder before save:', e);
+    }
+
     // Compute changed fields (excluding computed properties like filePath and modelUrl)
     const changes: any = { filePath: editedForSave.filePath, id: editedForSave.id };
     Object.keys(editedForSave).forEach(key => {
@@ -742,6 +948,52 @@ export function ModelDetailsDrawer({
         changes[key] = (editedForSave as any)[key];
       }
     });
+
+    // If the edited top-level thumbnail is a descriptor (thumb:, user:, parsed:),
+    // do not persist it to top-level; instead move it into userDefined[0].thumbnail
+    // to ensure the actual parsed base64 thumbnail at top-level is preserved.
+    if (typeof changes.thumbnail === 'string' && /^(thumb:|user:|parsed:)/.test(changes.thumbnail)) {
+      const descriptor = changes.thumbnail;
+      delete changes.thumbnail;
+      if (!Array.isArray(changes.userDefined) || changes.userDefined.length === 0) changes.userDefined = [{}];
+      // Only set if not already present to avoid overwriting nested thumbnail handling
+      if (!changes.userDefined[0].thumbnail) changes.userDefined[0].thumbnail = descriptor;
+    }
+
+    // If the edited top-level thumbnail is a raw data URL or unknown string,
+    // attempt to normalize it into a descriptor referencing userDefined images
+    // or parsed images. In all cases we remove the top-level thumbnail from
+    // the outgoing `changes` so we never send raw base64 blobs as the
+    // canonical top-level thumbnail.
+    if (typeof changes.thumbnail === 'string' && !/^(thumb:|user:|parsed:)/.test(changes.thumbnail)) {
+      const s = changes.thumbnail as string;
+      let safeThumb: string | undefined = undefined;
+      // Prefer images that are about to be sent in the same payload (changes.userDefined)
+      const changeUDImgs = Array.isArray(changes.userDefined?.[0]?.images)
+        ? changes.userDefined[0].images
+        : (Array.isArray(editedForSave.userDefined?.[0]?.images) ? editedForSave.userDefined[0].images : []);
+      const originalParsed = Array.isArray((original as any).images) ? (original as any).images : [];
+      const originalTop = (original as any).thumbnail || '';
+
+      if (s.startsWith('data:')) {
+        const uidx = changeUDImgs.findIndex((u: any) => getUserImageData(u) === s);
+        if (uidx !== -1) safeThumb = `user:${uidx}`;
+        else if (originalTop && s === originalTop) safeThumb = 'thumb:0';
+        else if (originalParsed.includes(s)) safeThumb = `parsed:${originalParsed.indexOf(s)}`;
+      } else {
+        // Non-data string: try to match against parsed or original thumbnail
+        const pidx = originalParsed.indexOf(s);
+        if (pidx !== -1) safeThumb = `parsed:${pidx}`;
+        else if (s === originalTop) safeThumb = 'thumb:0';
+      }
+
+      if (typeof safeThumb !== 'undefined') {
+        if (!Array.isArray(changes.userDefined) || changes.userDefined.length === 0) changes.userDefined = [{}];
+        changes.userDefined[0] = { ...(changes.userDefined[0] as any), thumbnail: safeThumb };
+      }
+      // Remove top-level thumbnail change in all cases to avoid sending raw data
+      delete changes.thumbnail;
+    }
 
     // Special-case: if the user explicitly checked "Restore original description"
     // we want to remove any user-defined description. This is expressed by
@@ -791,26 +1043,94 @@ export function ModelDetailsDrawer({
       }
     }
 
+    // Also ensure that a user-defined thumbnail (stored under userDefined[0].thumbnail)
+    // is included in the changes payload if it exists or changed. The generic diff
+    // above may not pick it up if only nested userDefined fields changed.
+    if (Array.isArray(editedUD) && editedUD.length > 0) {
+      const editedThumb = (editedUD[0] as any).thumbnail;
+      const origUD = Array.isArray((original as any).userDefined) && (original as any).userDefined.length > 0 ? (original as any).userDefined[0] : undefined;
+      const origThumb = origUD ? (origUD as any).thumbnail : undefined;
+      // Compare serialized forms to detect changes (handles string or object forms)
+      const editedThumbStr = typeof editedThumb === 'undefined' ? undefined : JSON.stringify(editedThumb);
+      const origThumbStr = typeof origThumb === 'undefined' ? undefined : JSON.stringify(origThumb);
+      if (editedThumbStr !== origThumbStr) {
+        if (!Array.isArray(changes.userDefined) || changes.userDefined.length === 0) changes.userDefined = [{}];
+        // Normalize outgoing thumbnail so we never send raw base64/data URLs
+        // as userDefined[0].thumbnail. Prefer descriptor forms. If we cannot
+        // safely convert the value to a descriptor, omit it so the server
+        // preserves the original parsed thumbnail.
+        const editedThumbAny = (editedUD[0] as any).thumbnail;
+        let safeThumb: string | undefined = undefined;
+        const changeUDImgs = Array.isArray(changes.userDefined[0]?.images) ? changes.userDefined[0].images : (Array.isArray(editedUD[0]?.images) ? editedUD[0].images : []);
+        const originalParsed = Array.isArray((original as any).images) ? (original as any).images : [];
+        const originalTop = (original as any).thumbnail || '';
+
+        if (typeof editedThumbAny === 'string') {
+          const s = editedThumbAny;
+          if (/^(user:|parsed:|thumb:)/.test(s)) {
+            safeThumb = s; // already a descriptor
+          } else if (s.startsWith('data:')) {
+            // try to find in outgoing user images
+            const uidx = changeUDImgs.findIndex((u: any) => getUserImageData(u) === s);
+            if (uidx !== -1) safeThumb = `user:${uidx}`;
+            else if (originalTop && s === originalTop) safeThumb = 'thumb:0';
+            else if (originalParsed.includes(s)) safeThumb = `parsed:${originalParsed.indexOf(s)}`;
+            // otherwise leave undefined to avoid sending raw data
+          } else {
+            // non-data string - maybe matches a parsed image
+            const pidx = originalParsed.indexOf(s);
+            if (pidx !== -1) safeThumb = `parsed:${pidx}`;
+            else if (s === originalTop) safeThumb = 'thumb:0';
+            else {
+              // Unknown string; do not send raw unknown values
+            }
+          }
+        } else if (editedThumbAny && typeof editedThumbAny === 'object' && typeof (editedThumbAny as any).data === 'string') {
+          const data = (editedThumbAny as any).data;
+          const uidx = changeUDImgs.findIndex((u: any) => getUserImageData(u) === data);
+          if (uidx !== -1) safeThumb = `user:${uidx}`;
+          else if (originalTop && data === originalTop) safeThumb = 'thumb:0';
+          else if (originalParsed.includes(data)) safeThumb = `parsed:${originalParsed.indexOf(data)}`;
+        }
+
+        if (typeof safeThumb !== 'undefined') {
+          changes.userDefined[0] = { ...(changes.userDefined[0] as any), thumbnail: safeThumb };
+        } else {
+          // omit thumbnail change to avoid sending base64; let server preserve parsed thumbnail
+        }
+      }
+    }
+
   // Note: clearing is represented by writing userDefined = [] above when the
   // user checks the "Restore original description" checkbox. We no longer
   // rely on a local flag here — the post-save refresh below always fetches
   // the authoritative model.
 
-    try {
-      // Log a compact preview of the outgoing payload for debugging (avoid dumping full base64 blobs)
       try {
-        const preview = { filePath: editedForSave.filePath, changes: { ...changes } } as any;
-        if (preview.changes && Array.isArray(preview.changes.userDefined) && preview.changes.userDefined.length > 0) {
-          const ud0 = preview.changes.userDefined[0];
-          if (ud0 && Array.isArray(ud0.images)) {
-            preview.changes.userDefined = [{ ...ud0, images: `[${ud0.images.length} images]` }];
+        // Log a compact preview of the outgoing payload for debugging (avoid dumping full base64 blobs)
+        try {
+          const preview = { filePath: editedForSave.filePath, changes: { ...changes } } as any;
+          if (preview.changes && Array.isArray(preview.changes.userDefined) && preview.changes.userDefined.length > 0) {
+            const ud0 = preview.changes.userDefined[0];
+            if (ud0 && Array.isArray(ud0.images)) {
+              preview.changes.userDefined = [{ ...ud0, images: `[${ud0.images.length} images]` }];
+            }
           }
+          console.debug('POST /api/save-model payload preview:', preview);
+        } catch (e) {
+          // Don't let logging break the save flow
+          console.warn('Failed to produce save-model preview log', e);
         }
-        console.debug('POST /api/save-model payload preview:', preview);
-      } catch (e) {
-        // Don't let logging break the save flow
-        console.warn('Failed to produce save-model preview log', e);
-      }
+        // Extra debug: explicitly log the nested thumbnail descriptor if present so we can
+        // verify whether the client is sending userDefined[0].thumbnail as expected.
+        try {
+          if (changes && Array.isArray(changes.userDefined) && changes.userDefined.length > 0) {
+            const sentThumb = changes.userDefined[0].thumbnail;
+            console.debug('DEBUG: outgoing changes.userDefined[0].thumbnail =', sentThumb);
+          }
+        } catch (e) {
+          // ignore debug failures
+        }
 
       const response = await fetch('/api/save-model', {
         method: 'POST',
@@ -861,17 +1181,62 @@ export function ModelDetailsDrawer({
       if (inlineCombined) {
         const combined = inlineCombined.slice();
         const newThumbnail = combined[0] || '';
-        const rest = combined.slice(1);
-        const parsedSnapshot = parsedImagesSnapshotRef.current || [];
+        const parsedSnapshotInline = parsedImagesSnapshotRef.current || [];
         const newParsedImages: string[] = [];
         const newUserImages: string[] = [];
-        for (const img of rest) {
-          if (parsedSnapshot.includes(img)) newParsedImages.push(img);
+
+        // Include the thumbnail when reconstructing parsed vs user images so
+        // we don't accidentally drop the user image that was chosen as the
+        // thumbnail. We will specially handle parsed thumbnails below to
+        // avoid duplicating the parsed value into the images array.
+        for (const img of combined) {
+          if (parsedSnapshotInline.includes(img)) newParsedImages.push(img);
           else newUserImages.push(img);
         }
+
         const ud = Array.isArray((editedModel as any).userDefined) && (editedModel as any).userDefined.length > 0 ? (editedModel as any).userDefined.slice() : [{}];
+        // Persist user images array (strings or objects). Always include any
+        // user image that was selected as the thumbnail; do not remove or
+        // reorder userDefined.images here — imageOrder is the canonical order.
         ud[0] = { ...(ud[0] as any), images: newUserImages };
-        modelToPersist = { ...editedModel, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
+
+        // Determine whether the chosen thumbnail is a parsed image or a user image.
+        const thumbIsParsed = newThumbnail && parsedSnapshotInline.includes(newThumbnail);
+        const thumbIsUser = newThumbnail && !thumbIsParsed && newUserImages.some(u => getUserImageData(u) === newThumbnail);
+
+        if (thumbIsUser) {
+          // If user thumbnail, persist a descriptor pointing into userDefined[0].images
+          // and DO NOT write the user base64 into the top-level thumbnail.
+          const userIdx = newUserImages.findIndex(u => getUserImageData(u) === newThumbnail);
+          const thumbDescriptor = userIdx !== -1 ? `user:${userIdx}` : undefined;
+          if (typeof thumbDescriptor !== 'undefined') {
+            ud[0] = { ...(ud[0] as any), thumbnail: thumbDescriptor };
+          }
+          // Preserve original top-level thumbnail (do not promote user base64)
+          modelToPersist = { ...editedModel, thumbnail: (model && model.thumbnail) || editedModel.thumbnail || '', images: newParsedImages.filter(p => p !== (newThumbnail && thumbIsParsed ? newThumbnail : '')), userDefined: ud } as Model;
+        } else if (thumbIsParsed) {
+          // If the thumbnail is a parsed image, persist a parsed: descriptor
+          // under userDefined[0].thumbnail for compatibility and ensure the
+          // top-level thumbnail contains the parsed value. Also avoid duplicating
+          // the parsed thumbnail inside the top-level images array by removing
+          // its single occurrence from newParsedImages.
+          const pidx = parsedSnapshotInline.indexOf(newThumbnail);
+          const copyUd0 = { ...(ud[0] as any) };
+          copyUd0.thumbnail = `parsed:${pidx}`;
+          ud[0] = copyUd0;
+          // Remove one occurrence of the parsed thumbnail from images to avoid duplicate
+          const dedupedParsed = newParsedImages.slice();
+          const removeIndex = dedupedParsed.indexOf(newThumbnail);
+          if (removeIndex !== -1) dedupedParsed.splice(removeIndex, 1);
+          modelToPersist = { ...editedModel, thumbnail: newThumbnail, images: dedupedParsed, userDefined: ud } as Model;
+        } else {
+          // No thumbnail or unknown: clear any stale userDefined thumbnail but
+          // keep all user images intact; do not write unknown base64 to top-level.
+          const copyUd0 = { ...(ud[0] as any) };
+          if (copyUd0 && copyUd0.thumbnail) delete copyUd0.thumbnail;
+          ud[0] = copyUd0;
+          modelToPersist = { ...editedModel, thumbnail: (model && model.thumbnail) || editedModel.thumbnail || '', images: newParsedImages, userDefined: ud } as Model;
+        }
       }
       let finalModel = modelToPersist;
       // If any images are selected, remove them from the edited model before saving.
@@ -882,23 +1247,24 @@ export function ModelDetailsDrawer({
         const userImgs = Array.isArray((finalModel as any).userDefined?.[0]?.images) ? (finalModel as any).userDefined[0].images.slice() : [];
         const combined = [finalModel.thumbnail, ...parsedImgs, ...userImgs];
         const remaining = combined.filter((_, idx) => !sel.has(idx));
-        const newThumbnail = remaining[0] || '';
-        const rest = remaining.slice(1);
-        // Partition rest into parsed vs user images using the snapshot
+  const rest = remaining.slice(1);
+  // Partition remaining.slice(1) into parsed vs user images using the snapshot
         // captured at edit start. This is robust against changes to
         // thumbnail/current counts while editing.
-        const parsedSnapshot = parsedImagesSnapshotRef.current || [];
+  const parsedSnapshotSel = parsedImagesSnapshotRef.current || [];
         const newParsedImages: string[] = [];
         const newUserImages: string[] = [];
         for (const img of rest) {
-          if (parsedSnapshot.includes(img)) newParsedImages.push(img);
+          if (parsedSnapshotSel.includes(img)) newParsedImages.push(img);
           else newUserImages.push(img);
         }
         const ud = Array.isArray((editedModel as any).userDefined) && (editedModel as any).userDefined.length > 0 ? (editedModel as any).userDefined.slice() : [{}];
 
         // Also update imageOrder descriptors to remove the deleted positions.
-      const currentDescriptors = Array.isArray((finalModel as any).userDefined?.[0]?.imageOrder) ? (finalModel as any).userDefined[0].imageOrder.slice() : buildImageOrderFromModel(finalModel);
-  const remainingDescriptors = currentDescriptors.filter((_: string, idx: number) => !sel.has(idx));
+        const currentDescriptors = Array.isArray((finalModel as any).userDefined?.[0]?.imageOrder)
+          ? (finalModel as any).userDefined[0].imageOrder.slice()
+          : buildImageOrderFromModel(finalModel);
+        const remainingDescriptors = currentDescriptors.filter((_: string, idx: number) => !sel.has(idx));
 
         // Reconstruct the userDefined[0].images array from the remaining descriptors.
         // This ensures we remove any base64/object entries that were deleted from the gallery.
@@ -918,11 +1284,45 @@ export function ModelDetailsDrawer({
         // (preserving other userDefined fields if present).
         ud[0] = { ...(ud[0] as any), images: rebuiltUserImages };
 
-  ud[0] = { ...(ud[0] as any), images: rebuiltUserImages };
-  finalModel = { ...finalModel, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
-  // Persist the updated imageOrder under userDefined[0]
-  finalModel.userDefined = Array.isArray(finalModel.userDefined) && finalModel.userDefined.length > 0 ? finalModel.userDefined : [{}];
-  (finalModel.userDefined[0] as any).imageOrder = remainingDescriptors;
+        // Recompute thumbnail placement: if the remaining thumbnail belongs to
+        // parsed images, keep it top-level; if it is a user image, persist it
+        // under userDefined[0].thumbnail and avoid writing base64 into
+        // top-level thumbnail.
+  const remainingThumbnail = (remaining[0] as string) || '';
+  const parsedSnapshotFinal = parsedImagesSnapshotRef.current || [];
+        if (remainingThumbnail && parsedSnapshotFinal.includes(remainingThumbnail)) {
+          // parsed thumbnail - persist a parsed: descriptor and keep top-level
+          // thumbnail populated with the parsed value for compatibility.
+          const pidx = parsedSnapshotFinal.indexOf(remainingThumbnail);
+          const copyUd0 = { ...(ud[0] as any) };
+          copyUd0.thumbnail = `parsed:${pidx}`;
+          ud[0] = copyUd0;
+          finalModel = { ...finalModel, thumbnail: remainingThumbnail, images: newParsedImages, userDefined: ud } as Model;
+        } else if (remainingThumbnail) {
+          // user thumbnail - set thumbnail to a descriptor referencing the
+          // rebuilt user images array so we don't persist raw blobs at top-level.
+          const uidx = rebuiltUserImages.findIndex((u: any) => getUserImageData(u) === remainingThumbnail);
+          if (uidx !== -1) {
+            ud[0] = { ...(ud[0] as any), thumbnail: `user:${uidx}` };
+          } else {
+            // fallback: if we can't find it in rebuilt user images, attempt to
+            // find in the original user array and persist as raw (legacy)
+            const userEntry = originalUserArr.find((u: any) => getUserImageData(u) === remainingThumbnail);
+            ud[0] = { ...(ud[0] as any), thumbnail: userEntry !== undefined ? userEntry : remainingThumbnail };
+          }
+          // keep top-level thumbnail unchanged to avoid promoting base64
+          finalModel = { ...finalModel, thumbnail: (model && model.thumbnail) || finalModel.thumbnail || '', images: newParsedImages, userDefined: ud } as Model;
+        } else {
+          // No remaining thumbnail - ensure user-defined thumbnail is cleared
+          const copyUd0 = { ...(ud[0] as any) };
+          if (copyUd0 && copyUd0.thumbnail) delete copyUd0.thumbnail;
+          ud[0] = copyUd0;
+          finalModel = { ...finalModel, thumbnail: (model && model.thumbnail) || finalModel.thumbnail || '', images: newParsedImages, userDefined: ud } as Model;
+        }
+
+        // Persist the updated imageOrder under userDefined[0]
+        finalModel.userDefined = Array.isArray(finalModel.userDefined) && finalModel.userDefined.length > 0 ? finalModel.userDefined : [{}];
+        (finalModel.userDefined[0] as any).imageOrder = remainingDescriptors;
       }
       // Validate related_files before applying to the app state and saving
       const { cleaned, invalid } = validateAndNormalizeRelatedFiles(finalModel.related_files as any);
@@ -940,16 +1340,27 @@ export function ModelDetailsDrawer({
       // Use the parsedImagesSnapshot captured when editing began as the
       // authoritative parsed-image list so user base64 data never gets promoted.
       try {
-        const imageOrder: string[] | undefined = (finalModel as any).imageOrder;
+        // Read imageOrder from userDefined[0].imageOrder (canonical place)
+        const imageOrder: string[] | undefined = Array.isArray((finalModel as any).userDefined?.[0]?.imageOrder)
+          ? (finalModel as any).userDefined[0].imageOrder
+          : undefined;
         if (Array.isArray(imageOrder) && imageOrder.length > 0) {
           const parsedSnapshot = parsedImagesSnapshotRef.current || [];
           const finalParsed: string[] = [];
           let resolvedThumbnail = finalModel.thumbnail || '';
+          const udThumb = (finalModel as any).userDefined?.[0]?.thumbnail;
+          const userThumbData = udThumb ? getUserImageData(udThumb) : undefined;
           for (const desc of imageOrder) {
             if (typeof desc !== 'string') continue;
             if (desc.startsWith('thumb:')) {
-              // thumb maps to the current thumbnail value
-              resolvedThumbnail = finalModel.thumbnail || resolvedThumbnail;
+              // If a user-defined thumbnail exists, prefer it for UI display
+              // but DO NOT promote the base64/user data into the top-level
+              // `thumbnail` field. The user thumbnail is persisted under
+              // userDefined[0].thumbnail and top-level thumbnail must remain
+              // reserved for parsed thumbnails coming from the file metadata.
+              if (!userThumbData) {
+                resolvedThumbnail = finalModel.thumbnail || resolvedThumbnail;
+              }
             } else if (desc.startsWith('parsed:')) {
               const idx = parseInt(desc.split(':')[1] || '', 10);
               if (!isNaN(idx) && parsedSnapshot[idx]) finalParsed.push(parsedSnapshot[idx]);
