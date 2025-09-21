@@ -117,6 +117,23 @@ export function ModelDetailsDrawer({
     // This is used to map gallery indexes to either top-level images (thumbnail + images)
     // or user-added images stored in userDefined.images.
     const parsedImageCountRef = useRef<number>(0);
+    // Remember whether the original model had a top-level thumbnail when entering edit mode.
+    // This is important for correctly splitting the combined gallery back into
+    // parsed top-level images vs userDefined images, even if the thumbnail value
+    // may be empty or later changed by the user during editing.
+    const originalThumbnailExistsRef = useRef<boolean>(false);
+    // Snapshot of the parsed (server-provided) top-level images captured when
+    // entering edit mode. We use this to reliably classify images as parsed vs
+    // user-provided when splitting the combined gallery after reordering or
+    // deletion. Relying on the snapshot is more robust than using current
+    // thumbnail or counts which may change during editing.
+    const parsedImagesSnapshotRef = useRef<string[]>([]);
+  // In-edit combined gallery allowing arbitrary visual ordering while
+  // keeping the canonical storage split (parsed vs userDefined) only on save.
+  // When non-null, this array is used by the UI as the gallery source during
+  // edit mode and is mutated by drag/drop. It is finally split back into
+  // top-level images and userDefined.images on save.
+  const [inlineCombined, setInlineCombined] = useState<string[] | null>(null);
     // Drag state for reordering thumbnails in edit mode
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
       // File input ref for adding new images in edit mode
@@ -167,8 +184,10 @@ export function ModelDetailsDrawer({
             setAddImageProgress({ processed: i + 1, total: files.length });
           }
 
-          // Apply to editedModel: store user-added images under userDefined.images so
-          // server-side parsed images (top-level thumbnail/images) remain separate.
+          // Apply to editedModel: store user-added images under userDefined.images and
+          // update imageOrder descriptors so the new images are represented as
+          // `user:<index>` tokens. Also update inlineCombined (UI-only ordering)
+          // so new images appear at the end of the gallery in edit mode.
           setEditedModel(prev => {
             if (!prev) return prev;
             // Ensure userDefined is an array with an object; use existing if present
@@ -176,17 +195,65 @@ export function ModelDetailsDrawer({
             // userDefined[0].images will hold user-added images (data URLs)
             const existingUserImages = (ud[0] as any).images && Array.isArray((ud[0] as any).images) ? (ud[0] as any).images.slice() : [];
 
-            // If there was no top-level thumbnail, the UI historically used the first
-            // added image as the thumbnail. We'll still honor that visually by
-            // setting thumbnail if missing, but keep user images inside userDefined.
+            // If there was no top-level thumbnail, historically the first added
+            // image became the thumbnail visually. We'll honor that here but keep
+            // the actual user images inside userDefined.
             let newThumbnail = prev.thumbnail || '';
             if (!prev.thumbnail && newDataUrls.length > 0) {
               newThumbnail = newDataUrls[0];
             }
 
-            existingUserImages.push(...newDataUrls);
-            ud[0] = { ...(ud[0] as any), images: existingUserImages };
+            // Append the new user images to the userDefined array
+            const updatedUserImages = existingUserImages.concat(newDataUrls);
+            ud[0] = { ...(ud[0] as any), images: updatedUserImages };
+
+            // Build the inline combined order that the UI should display after
+            // the addition. Prefer the existing inlineCombined if present so we
+            // preserve any user reordering; otherwise resolve from imageOrder
+            // or fall back to thumbnail+parsed.
+            const parsed = Array.isArray(prev.images) ? prev.images : [];
+            const baseInline = inlineCombined ? inlineCombined.slice() : (resolveImageOrderToUrls(prev as Model) || [prev.thumbnail, ...parsed].filter(Boolean));
+            const newInline = baseInline.concat(newDataUrls);
+
+            // Map the newInline array into descriptor tokens (thumb:, parsed:, user:)
+            const newDescriptors: string[] = [];
+            for (const item of newInline) {
+              if (item === newThumbnail && newThumbnail) {
+                newDescriptors.push('thumb:0');
+                continue;
+              }
+              const pidx = parsed.indexOf(item);
+              if (pidx !== -1) {
+                newDescriptors.push(`parsed:${pidx}`);
+                continue;
+              }
+              const uidx = updatedUserImages.findIndex((u: any) => getUserImageData(u) === item);
+              if (uidx !== -1) {
+                newDescriptors.push(`user:${uidx}`);
+                continue;
+              }
+              // Fallback: store literal value (rare)
+              newDescriptors.push(String(item));
+            }
+
+            // Attach the newDescriptors under userDefined[0].imageOrder
+            ud[0] = { ...(ud[0] as any), imageOrder: newDescriptors };
             return { ...prev, thumbnail: newThumbnail, userDefined: ud } as Model;
+          });
+
+          // Update inlineCombined (UI) to reflect the appended items we calculated
+          // above. This keeps the gallery in sync with the descriptor order.
+          setInlineCombined(prev => {
+            if (!prev) {
+              // If no inlineCombined existed, build it from the editedModel snapshot
+              // (this is unlikely in edit mode but keep defensive)
+              const parsed = Array.isArray((editedModel as any)?.images) ? (editedModel as any).images : [];
+              const base = resolveImageOrderToUrls(editedModel as Model) || [editedModel?.thumbnail, ...parsed].filter(Boolean);
+              return base.concat(newDataUrls);
+            }
+            const copy = prev.slice();
+            copy.push(...newDataUrls);
+            return copy;
           });
 
           // Compute the index of the last item added in the gallery deterministically.
@@ -207,18 +274,97 @@ export function ModelDetailsDrawer({
         }
       };
 
-    // Compute the full images array (thumbnail + additional images) from the currently-displayed model
-    // Use editedModel when editing so the gallery reflects pending changes immediately.
-    const allImages = (() => {
-      const src = editedModel || model;
-      if (!src) return [];
-      const imgs = Array.isArray(src.images) ? src.images : [];
-      // Append user-added images stored in userDefined[0].images (if present)
-      const userImgs = Array.isArray((src as any).userDefined && (src as any).userDefined[0] && (src as any).userDefined[0].images)
-        ? (src as any).userDefined[0].images
-        : [];
-      return [src.thumbnail, ...imgs, ...userImgs];
-    })();
+    // Compute the full images array (thumbnail + additional images) from the
+    // currently-displayed model. During edit mode prefer the in-edit
+    // `inlineCombined` ordering when present so the UI can show arbitrary
+    // placements; otherwise build from the model state.
+      // Helper: extract data URL from userDefined image entry (supports legacy string and new object form)
+      const getUserImageData = (entry: any) => {
+        if (!entry) return '';
+        if (typeof entry === 'string') return entry;
+        if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
+        return '';
+      };
+
+
+      // Helper: resolve a model.imageOrder (if present) into an array of src strings
+      const resolveImageOrderToUrls = (m: Model) => {
+  const order = Array.isArray((m as any).userDefined?.[0]?.imageOrder) ? (m as any).userDefined[0].imageOrder : undefined;
+  if (!m || !order || order.length === 0) return null;
+        const parsed = Array.isArray(m.images) ? m.images : [];
+        const userArr = Array.isArray((m as any).userDefined?.[0]?.images) ? (m as any).userDefined[0].images : [];
+        const urls: string[] = [];
+        for (const desc of order || []) {
+          if (typeof desc !== 'string') continue;
+          if (desc.startsWith('thumb:')) {
+            // thumb descriptor resolves to the model's thumbnail value
+            urls.push(m.thumbnail);
+            continue;
+          }
+          if (desc.startsWith('parsed:')) {
+            const idx = parseInt(desc.split(':')[1] || '', 10);
+            if (!isNaN(idx) && parsed[idx]) urls.push(parsed[idx]);
+          } else if (desc.startsWith('user:')) {
+            const idx = parseInt(desc.split(':')[1] || '', 10);
+            if (!isNaN(idx) && userArr[idx] !== undefined) urls.push(getUserImageData(userArr[idx]));
+          } else {
+            // Unknown descriptor fallback: try to match by string
+            // attempt to find in parsed, then user
+            const pidx = parsed.indexOf(desc);
+            if (pidx !== -1) urls.push(parsed[pidx]);
+            else {
+              const uidx = userArr.findIndex((u: any) => getUserImageData(u) === desc);
+              if (uidx !== -1) urls.push(getUserImageData(userArr[uidx]));
+            }
+          }
+        }
+        return urls;
+      };
+
+      // Build an imageOrder array of descriptors from a finalized model object
+      const buildImageOrderFromModel = (m: Model) => {
+        const result: string[] = [];
+        if (!m) return result;
+        const parsed = Array.isArray(m.images) ? m.images : [];
+        const userArr = Array.isArray((m as any).userDefined?.[0]?.images) ? (m as any).userDefined[0].images : [];
+        const combined = [m.thumbnail, ...parsed, ...userArr.map((u: any) => getUserImageData(u))];
+  for (const item of combined) {
+          // Prefer thumbnail as a dedicated descriptor so we don't write raw base64 into imageOrder
+          if (item === m.thumbnail && m.thumbnail) {
+            result.push(`thumb:0`);
+            continue;
+          }
+          // Prefer parsed match
+          const pidx = parsed.indexOf(item);
+          if (pidx !== -1) {
+            result.push(`parsed:${pidx}`);
+            continue;
+          }
+          const uidx = userArr.findIndex((u: any) => getUserImageData(u) === item);
+          if (uidx !== -1) {
+            result.push(`user:${uidx}`);
+            continue;
+          }
+          // fallback: unknown item, just store literal
+          result.push(String(item));
+        }
+        return result;
+      };
+
+      const allImages = (() => {
+        if (isEditing && inlineCombined) return inlineCombined.slice();
+        const src = editedModel || model;
+        if (!src) return [];
+        // If imageOrder present, prefer that deterministic order
+  const resolved = resolveImageOrderToUrls(src as Model);
+        if (resolved && resolved.length > 0) return resolved;
+        const imgs = Array.isArray(src.images) ? src.images : [];
+        // Append user-added images stored in userDefined[0].images (if present)
+        const userImgs = Array.isArray((src as any).userDefined && (src as any).userDefined[0] && (src as any).userDefined[0].images)
+          ? (src as any).userDefined[0].images.map((u: any) => getUserImageData(u))
+          : [];
+        return [src.thumbnail, ...imgs, ...userImgs];
+      })();
 
   // Key handling for in-window fullscreen navigation (Escape, ArrowLeft, ArrowRight)
   useEffect(() => {
@@ -311,35 +457,37 @@ export function ModelDetailsDrawer({
     const sourceIndex = parseInt(src, 10);
     if (isNaN(sourceIndex)) return setDragOverIndex(null);
     if (!editedModel) return setDragOverIndex(null);
+    // Reorder descriptors only. Determine the current descriptor array (imageOrder)
+    // or build an initial one for legacy models.
+    const currentDescriptors = Array.isArray((editedModel as any).userDefined?.[0]?.imageOrder)
+      ? (editedModel as any).userDefined[0].imageOrder.slice()
+      : buildImageOrderFromModel(editedModel);
 
-  // Build combined array (parsed top-level images first, then user images)
-  const parsedImgs = Array.isArray(editedModel.images) ? editedModel.images.slice() : [];
-  const userImgs = Array.isArray((editedModel as any).userDefined?.[0]?.images) ? (editedModel as any).userDefined[0].images.slice() : [];
-  const combined = [editedModel.thumbnail, ...parsedImgs, ...userImgs];
-    // bounds
-    if (sourceIndex < 0 || sourceIndex >= combined.length || targetIndex < 0 || targetIndex >= combined.length) {
+    // bounds check against descriptor length
+    if (sourceIndex < 0 || sourceIndex >= currentDescriptors.length || targetIndex < 0 || targetIndex >= currentDescriptors.length) {
       setDragOverIndex(null);
       return;
     }
-    const item = combined.splice(sourceIndex, 1)[0];
-    combined.splice(targetIndex, 0, item);
 
-    // Apply new thumbnail and images to editedModel (do not persist yet).
-    // Need to split combined back into parsed top-level images and userDefined.images.
-    const newThumbnail = combined[0] || '';
-    const rest = combined.slice(1);
-    // Parsed images occupy the first parsedImageCountRef.current entries of rest
-    const parsedCount = parsedImageCountRef.current - (editedModel.thumbnail ? 1 : 0);
-    // parsedCount may be negative/NaN so clamp
-    const parsedCountSafe = Math.max(0, Number.isFinite(parsedCount) ? parsedCount : 0);
-    const newParsedImages = rest.slice(0, parsedCountSafe);
-    const newUserImages = rest.slice(parsedCountSafe);
+    // perform descriptor reordering (move source -> target)
+    const descItem = currentDescriptors.splice(sourceIndex, 1)[0];
+    currentDescriptors.splice(targetIndex, 0, descItem);
+
+    // Update editedModel to only set imageOrder (do not move base64 data around)
     setEditedModel(prev => {
       if (!prev) return prev;
       const ud = Array.isArray((prev as any).userDefined) && (prev as any).userDefined.length > 0 ? (prev as any).userDefined.slice() : [{}];
-      ud[0] = { ...(ud[0] as any), images: newUserImages };
-      return { ...prev, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
+      ud[0] = { ...(ud[0] as any), imageOrder: currentDescriptors };
+      const updated = { ...prev, userDefined: ud } as any;
+      return updated as Model;
     });
+
+    // Update inlineCombined (UI) to reflect new order by resolving descriptors
+            const tempUd = Array.isArray((editedModel as any).userDefined) && (editedModel as any).userDefined.length > 0 ? (editedModel as any).userDefined.slice() : [{}];
+            tempUd[0] = { ...(tempUd[0] as any), imageOrder: currentDescriptors };
+            const tempModelForResolve = { ...editedModel, userDefined: tempUd } as Model;
+    const resolved = resolveImageOrderToUrls(tempModelForResolve) || [];
+    setInlineCombined(resolved);
     // update preview index to the dropped location
     setSelectedImageIndex(targetIndex);
     // clear selection indexes because indexes changed
@@ -459,9 +607,48 @@ export function ModelDetailsDrawer({
       tags: srcModel.tags || [], // Ensure tags is always an array
       description: initialDescription
     } as Model);
-    // Capture how many images came from parsing (top-level thumbnail + images)
+    // Capture how many images came from parsing (top-level images). We need
+    // to detect whether the existing `thumbnail` value is one of the parsed
+    // top-level images or whether it already points into the userDefined
+    // images. This disambiguation is important so we don't accidentally treat
+    // userDefined images as parsed when splitting the combined gallery later.
     const parsedImgs = Array.isArray(srcModel.images) ? srcModel.images : [];
-    parsedImageCountRef.current = (srcModel.thumbnail ? 1 : 0) + parsedImgs.length;
+    // If thumbnail matches one of the parsed images by reference/value, then
+    // the server produced a true top-level thumbnail. Otherwise, if the
+    // thumbnail appears in userDefined[0].images, treat it as a user image.
+    const udImgs = Array.isArray((srcModel as any).userDefined?.[0]?.images) ? (srcModel as any).userDefined[0].images : [];
+    const thumbnailVal = srcModel.thumbnail;
+    const thumbnailIsParsed = typeof thumbnailVal === 'string' && thumbnailVal !== '' && parsedImgs.includes(thumbnailVal);
+    const thumbnailIsUser = typeof thumbnailVal === 'string' && thumbnailVal !== '' && udImgs.includes(thumbnailVal);
+
+    if (thumbnailIsParsed) {
+      // thumbnail is counted as part of parsedImageCount (as "1"), so include it
+      parsedImageCountRef.current = 1 + parsedImgs.length;
+      originalThumbnailExistsRef.current = true;
+    } else if (thumbnailIsUser) {
+      // thumbnail actually comes from userDefined.images; treat parsed images
+      // as only the parsedImgs array (no top-level thumbnail)
+      parsedImageCountRef.current = parsedImgs.length;
+      originalThumbnailExistsRef.current = false;
+    } else {
+      // No thumbnail or unknown string: fall back to conservative count
+      parsedImageCountRef.current = (srcModel.thumbnail ? 1 : 0) + parsedImgs.length;
+      originalThumbnailExistsRef.current = !!srcModel.thumbnail;
+    }
+    // Capture a snapshot of the parsed image values so we can reliably
+    // classify images later even if the thumbnail or counts change in edit mode.
+    parsedImagesSnapshotRef.current = parsedImgs.slice();
+    // Initialize inlineCombined. Prefer an explicit imageOrder when present
+    // so edit mode reflects the canonical ordering. For legacy files without
+    // imageOrder we intentionally show only the top-level thumbnail + parsed
+    // images (userDefined images were not present for legacy files).
+    const resolvedFromOrder = resolveImageOrderToUrls(srcModel as Model);
+    if (resolvedFromOrder && resolvedFromOrder.length > 0) {
+      setInlineCombined(resolvedFromOrder);
+    } else {
+      const initialCombined = [srcModel.thumbnail, ...parsedImgs];
+      setInlineCombined(initialCombined);
+    }
     // Clear any previous image selections when entering edit mode
     setSelectedImageIndexes([]);
     setIsEditing(true);
@@ -472,6 +659,7 @@ export function ModelDetailsDrawer({
     setIsEditing(false);
     setNewTag("");
     setSelectedImageIndexes([]);
+    setInlineCombined(null);
   };
 
   // Validate and normalize related_files. Returns { cleaned, invalid }.
@@ -664,25 +852,77 @@ export function ModelDetailsDrawer({
 
   const saveChanges = async () => {
     if (editedModel) {
+      // If an inlineCombined edit ordering exists, finalize it into the
+      // editedModel by splitting it into parsed top-level images and
+      // userDefined images using the parsedImagesSnapshot captured at
+      // edit-start. This keeps storage canonical while allowing arbitrary
+      // UI ordering during editing.
+      let modelToPersist = editedModel;
+      if (inlineCombined) {
+        const combined = inlineCombined.slice();
+        const newThumbnail = combined[0] || '';
+        const rest = combined.slice(1);
+        const parsedSnapshot = parsedImagesSnapshotRef.current || [];
+        const newParsedImages: string[] = [];
+        const newUserImages: string[] = [];
+        for (const img of rest) {
+          if (parsedSnapshot.includes(img)) newParsedImages.push(img);
+          else newUserImages.push(img);
+        }
+        const ud = Array.isArray((editedModel as any).userDefined) && (editedModel as any).userDefined.length > 0 ? (editedModel as any).userDefined.slice() : [{}];
+        ud[0] = { ...(ud[0] as any), images: newUserImages };
+        modelToPersist = { ...editedModel, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
+      }
+      let finalModel = modelToPersist;
       // If any images are selected, remove them from the edited model before saving.
-      let finalModel = editedModel;
       if (selectedImageIndexes.length > 0) {
         const sel = new Set(selectedImageIndexes);
         // Build combined gallery [thumbnail, ...parsed images, ...user images]
-        const parsedImgs = Array.isArray(editedModel.images) ? editedModel.images : [];
-        const userImgs = Array.isArray((editedModel as any).userDefined?.[0]?.images) ? (editedModel as any).userDefined[0].images.slice() : [];
-        const combined = [editedModel.thumbnail, ...parsedImgs, ...userImgs];
+        const parsedImgs = Array.isArray(finalModel.images) ? finalModel.images : [];
+        const userImgs = Array.isArray((finalModel as any).userDefined?.[0]?.images) ? (finalModel as any).userDefined[0].images.slice() : [];
+        const combined = [finalModel.thumbnail, ...parsedImgs, ...userImgs];
         const remaining = combined.filter((_, idx) => !sel.has(idx));
         const newThumbnail = remaining[0] || '';
         const rest = remaining.slice(1);
-        // Split rest back into parsed and user based on original parsedImageCountRef
-        const originalParsedCount = parsedImageCountRef.current;
-        const parsedCountSafe = Math.max(0, originalParsedCount - (editedModel.thumbnail ? 1 : 0));
-        const newParsedImages = rest.slice(0, parsedCountSafe);
-        const newUserImages = rest.slice(parsedCountSafe);
+        // Partition rest into parsed vs user images using the snapshot
+        // captured at edit start. This is robust against changes to
+        // thumbnail/current counts while editing.
+        const parsedSnapshot = parsedImagesSnapshotRef.current || [];
+        const newParsedImages: string[] = [];
+        const newUserImages: string[] = [];
+        for (const img of rest) {
+          if (parsedSnapshot.includes(img)) newParsedImages.push(img);
+          else newUserImages.push(img);
+        }
         const ud = Array.isArray((editedModel as any).userDefined) && (editedModel as any).userDefined.length > 0 ? (editedModel as any).userDefined.slice() : [{}];
-        ud[0] = { ...(ud[0] as any), images: newUserImages };
-        finalModel = { ...editedModel, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
+
+        // Also update imageOrder descriptors to remove the deleted positions.
+      const currentDescriptors = Array.isArray((finalModel as any).userDefined?.[0]?.imageOrder) ? (finalModel as any).userDefined[0].imageOrder.slice() : buildImageOrderFromModel(finalModel);
+  const remainingDescriptors = currentDescriptors.filter((_: string, idx: number) => !sel.has(idx));
+
+        // Reconstruct the userDefined[0].images array from the remaining descriptors.
+        // This ensures we remove any base64/object entries that were deleted from the gallery.
+        const originalUserArr = Array.isArray((finalModel as any).userDefined?.[0]?.images) ? (finalModel as any).userDefined[0].images.slice() : [];
+        const rebuiltUserImages: any[] = [];
+        for (const desc of remainingDescriptors) {
+          if (typeof desc === 'string' && desc.startsWith('user:')) {
+            const idx = parseInt(desc.split(':')[1] || '', 10);
+            if (!isNaN(idx) && originalUserArr[idx] !== undefined) {
+              rebuiltUserImages.push(originalUserArr[idx]);
+            }
+          }
+        }
+
+        // If there are any user images referenced by remaining descriptors, set
+        // them on userDefined[0].images; otherwise clear images to an empty array
+        // (preserving other userDefined fields if present).
+        ud[0] = { ...(ud[0] as any), images: rebuiltUserImages };
+
+  ud[0] = { ...(ud[0] as any), images: rebuiltUserImages };
+  finalModel = { ...finalModel, thumbnail: newThumbnail, images: newParsedImages, userDefined: ud } as Model;
+  // Persist the updated imageOrder under userDefined[0]
+  finalModel.userDefined = Array.isArray(finalModel.userDefined) && finalModel.userDefined.length > 0 ? finalModel.userDefined : [{}];
+  (finalModel.userDefined[0] as any).imageOrder = remainingDescriptors;
       }
       // Validate related_files before applying to the app state and saving
       const { cleaned, invalid } = validateAndNormalizeRelatedFiles(finalModel.related_files as any);
@@ -694,6 +934,40 @@ export function ModelDetailsDrawer({
 
       // Replace with cleaned values before persisting
       finalModel = { ...finalModel, related_files: cleaned } as Model;
+
+      // If an imageOrder exists on the model (or was constructed while editing),
+      // ensure we persist canonical parsed images only into top-level `images`.
+      // Use the parsedImagesSnapshot captured when editing began as the
+      // authoritative parsed-image list so user base64 data never gets promoted.
+      try {
+        const imageOrder: string[] | undefined = (finalModel as any).imageOrder;
+        if (Array.isArray(imageOrder) && imageOrder.length > 0) {
+          const parsedSnapshot = parsedImagesSnapshotRef.current || [];
+          const finalParsed: string[] = [];
+          let resolvedThumbnail = finalModel.thumbnail || '';
+          for (const desc of imageOrder) {
+            if (typeof desc !== 'string') continue;
+            if (desc.startsWith('thumb:')) {
+              // thumb maps to the current thumbnail value
+              resolvedThumbnail = finalModel.thumbnail || resolvedThumbnail;
+            } else if (desc.startsWith('parsed:')) {
+              const idx = parseInt(desc.split(':')[1] || '', 10);
+              if (!isNaN(idx) && parsedSnapshot[idx]) finalParsed.push(parsedSnapshot[idx]);
+            } else if (desc.startsWith('user:')) {
+              // skip - user images belong in userDefined only
+            } else {
+              // fallback: try to match in parsedSnapshot
+              const pidx = parsedSnapshot.indexOf(desc);
+              if (pidx !== -1) finalParsed.push(parsedSnapshot[pidx]);
+            }
+          }
+          finalModel = { ...finalModel, images: finalParsed, thumbnail: resolvedThumbnail } as Model;
+        } else {
+          // No imageOrder: legacy behavior keeps existing images as-is
+        }
+      } catch (e) {
+        console.warn('Failed to normalize images from imageOrder before save:', e);
+      }
 
       // Persist to server first. After successful save, update the app state.
   const result = await saveModelToFile(finalModel, model!); // Only send changed fields
@@ -710,6 +984,7 @@ export function ModelDetailsDrawer({
         setEditedModel(null);
         setNewTag("");
         setSelectedImageIndexes([]);
+        setInlineCombined(null);
       } else {
         // Save failed (network/server error). Keep editedModel so user can retry.
         // Optionally display error (saveModelToFile already logs).
@@ -1068,7 +1343,7 @@ export function ModelDetailsDrawer({
                             >
                               <ImageWithFallback src={image} alt={`${currentModel.name} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
                               {isImageSelected(index) && (
-                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-semibold">
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-semibold z-10">
                                   Remove
                                 </div>
                               )}

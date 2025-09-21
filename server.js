@@ -311,8 +311,31 @@ app.post('/api/save-model', (req, res) => {
       safeLog('Save model request:', { filePath, changes: sanitizeForLog(cleanChanges) });
     }
 
-    // Merge changes (excluding computed properties)
-    const updated = { ...existing, ...cleanChanges };
+    // Merge changes carefully. We specially merge `userDefined` arrays so that
+    // we don't blindly overwrite existing user data (which could strip images
+    // or imageOrder). The client is expected to write descriptors into
+    // `userDefined[0].imageOrder` (no legacy top-level imageOrder support).
+    const updated = { ...existing };
+    for (const key of Object.keys(cleanChanges)) {
+      if (key === 'userDefined') continue; // handle after loop
+      updated[key] = cleanChanges[key];
+    }
+
+    if (Array.isArray(cleanChanges.userDefined)) {
+      const existingUD = Array.isArray(existing.userDefined) ? existing.userDefined.slice() : [];
+      const incomingUD = cleanChanges.userDefined.slice();
+      const mergedUD = [];
+      // Merge first entry shallowly (preserve existing fields unless overridden)
+      const mergedFirst = { ...(existingUD[0] || {}), ...(incomingUD[0] || {}) };
+      mergedUD.push(mergedFirst);
+      // If incoming provided more entries, append them; otherwise preserve existing tail entries
+      if (incomingUD.length > 1) {
+        mergedUD.push(...incomingUD.slice(1));
+      } else if (existingUD.length > 1) {
+        mergedUD.push(...existingUD.slice(1));
+      }
+      updated.userDefined = mergedUD;
+    }
 
     // Ensure the directory exists
     const dir = path.dirname(absoluteFilePath);
@@ -608,6 +631,48 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           id: model.id, // Preserve the original ID
           hash: hash
         };
+
+        // Helper: extract user image data whether stored as legacy string or {id,data} object
+        const getUserImageData = (entry) => {
+          if (!entry) return '';
+          if (typeof entry === 'string') return entry;
+          if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
+          return '';
+        };
+
+        // If userDefined[0].imageOrder exists (or even if not), rebuild the
+        // descriptor list so it aligns with the regenerated top-level images
+        // and the current userDefined images. This prevents parsed: indexes
+        // from pointing to stale positions after regeneration.
+        try {
+          const parsed = Array.isArray(mergedMetadata.images) ? mergedMetadata.images : [];
+          const userArr = Array.isArray((mergedMetadata).userDefined?.[0]?.images) ? mergedMetadata.userDefined[0].images : [];
+          const combined = [mergedMetadata.thumbnail].concat(parsed).concat(userArr.map(u => getUserImageData(u)));
+          const rebuiltOrder = [];
+          for (const item of combined) {
+            if (item === mergedMetadata.thumbnail && mergedMetadata.thumbnail) {
+              rebuiltOrder.push('thumb:0');
+              continue;
+            }
+            const pidx = parsed.indexOf(item);
+            if (pidx !== -1) {
+              rebuiltOrder.push(`parsed:${pidx}`);
+              continue;
+            }
+            const uidx = userArr.findIndex(u => getUserImageData(u) === item);
+            if (uidx !== -1) {
+              rebuiltOrder.push(`user:${uidx}`);
+              continue;
+            }
+            // fallback to literal
+            rebuiltOrder.push(String(item));
+          }
+          // Ensure userDefined array exists and set the rebuilt order
+          if (!Array.isArray(mergedMetadata.userDefined) || mergedMetadata.userDefined.length === 0) mergedMetadata.userDefined = [{}];
+          mergedMetadata.userDefined[0] = { ...(mergedMetadata.userDefined[0] || {}), imageOrder: rebuiltOrder };
+        } catch (e) {
+          console.warn('Failed to rebuild userDefined[0].imageOrder during regeneration:', e);
+        }
 
         // Write the regenerated file
         fs.writeFileSync(model.jsonPath, JSON.stringify(mergedMetadata, null, 2), 'utf8');

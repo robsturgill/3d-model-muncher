@@ -26,7 +26,15 @@ export interface Model {
   // description and images (data URLs). Keep flexible to support additional fields.
   userDefined?: Array<{
     description?: string;
-    images?: string[];
+    // During transition we accept both legacy string[] (data URLs) and the
+    // newer object form with explicit ids. On save newer clients will write
+    // objects with ids so images can be referenced by descriptor in imageOrder.
+    images?: Array<string | { id: string; data: string }>;
+    // Optional canonical image ordering for this user's structured data.
+    // Stored under userDefined[0].imageOrder to avoid promoting base64 blobs
+    // into the top-level model shape. Descriptors are strings like
+    // "thumb:0", "parsed:0", or "user:<index>" (or future "user:<id>").
+    imageOrder?: string[];
     [key: string]: any;
   }>;
   printSettings: {
