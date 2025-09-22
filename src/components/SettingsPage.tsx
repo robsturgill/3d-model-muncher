@@ -55,12 +55,19 @@ const {
 import { toast } from 'sonner';
 import { ImageWithFallback } from './ImageWithFallback';
 
+import { resolveModelThumbnail } from '../utils/thumbnailUtils';
+
 // Icon component for model thumbnails
-const ModelThumbnail = ({ thumbnail, name }: { thumbnail: string | null | undefined; name: string }) => {
-  if (thumbnail) {
+const ModelThumbnail = ({ thumbnail, name, model }: { thumbnail?: string | null; name: string; model?: any }) => {
+  // If a model object is provided prefer resolving via resolver which supports
+  // userDefined[0].thumbnail descriptors and parsedImages. Otherwise fall back
+  // to the explicit thumbnail prop.
+  const src = model ? resolveModelThumbnail(model) : (thumbnail || '');
+
+  if (src) {
     return (
       <ImageWithFallback
-        src={thumbnail}
+        src={src}
         alt={name}
         className="w-8 h-8 object-cover rounded border"
       />
@@ -2537,17 +2544,23 @@ export function SettingsPage({
                                       {group.models.map((model) => (
                                         <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 bg-muted rounded-md gap-2">
                                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            {model.thumbnail ? (
-                                              <ImageWithFallback
-                                                src={model.thumbnail}
-                                                alt={model.name}
-                                                className="w-8 h-8 object-cover rounded border"
-                                              />
-                                            ) : (
-                                              <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
-                                                <Box className="h-4 w-4 text-muted-foreground" />
-                                              </div>
-                                            )}
+                                            {(() => {
+                                              const src = resolveModelThumbnail(model);
+                                              if (src) {
+                                                return (
+                                                  <ImageWithFallback
+                                                    src={src}
+                                                    alt={model.name}
+                                                    className="w-8 h-8 object-cover rounded border"
+                                                  />
+                                                );
+                                              }
+                                              return (
+                                                <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
+                                                  <Box className="h-4 w-4 text-muted-foreground" />
+                                                </div>
+                                              );
+                                            })()}
                                             <span className="text-sm truncate">{getDisplayPath(model)}</span>
                                           </div>
                                           <Button
@@ -2573,7 +2586,7 @@ export function SettingsPage({
                                 {group.models.map((model) => (
                                   <div key={`dup-list-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <ModelThumbnail thumbnail={model.thumbnail} name={model.name} />
+                                      <ModelThumbnail model={model} name={model.name} />
                                       <span className="text-sm truncate">{getDisplayPath(model)}</span>
                                     </div>
                                     <Button
@@ -2714,10 +2727,10 @@ export function SettingsPage({
                     <div className="flex-1 w-full flex flex-col justify-center space-y-3 text-left">
                       <h3 className="font-medium">Join the Community</h3>
                       <ul className="text-sm text-muted-foreground space-y-2 text-left list-disc list-inside">
-                        <li>• Share your 3D printing projects and experiences</li>
-                        <li>• Get help from fellow makers and developers</li>
-                        <li>• Suggest new features and improvements</li>
-                        <li>• Stay updated on the latest releases</li>
+                        <li>Share your 3D printing projects and experiences</li>
+                        <li>Get help from fellow makers and developers</li>
+                        <li>Suggest new features and improvements</li>
+                        <li>Stay updated on the latest releases</li>
                       </ul>
                     </div>
                   </div>
@@ -3023,7 +3036,7 @@ export function SettingsPage({
                       }}
                     >
                       <ImageWithFallback
-                        src={model.thumbnail}
+                        src={resolveModelThumbnail(model)}
                         alt={model.name}
                         className="w-12 h-12 object-cover rounded border"
                       />

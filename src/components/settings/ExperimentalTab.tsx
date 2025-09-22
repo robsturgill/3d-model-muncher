@@ -22,9 +22,13 @@ type ModelEntry = {
   filePath?: string;
   modelUrl?: string;
   tags?: string[];
+  parsedImages?: string[];
+  userDefined?: any[];
+  images?: string[];
 };
 
 import type { Category } from '../../types/category';
+import { resolveModelThumbnail } from '../../utils/thumbnailUtils';
 
 interface ExperimentalTabProps {
   categories?: Category[];
@@ -52,7 +56,11 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
             id: m.id ?? m.name ?? undefined,
             name: m.name ?? m.title ?? "",
             description: m.description ?? m.desc ?? "",
+            // keep thumbnail compatibility but also preserve parsedImages/userDefined so resolver can work
             thumbnail: m.thumbnail ?? m.image ?? m.preview ?? undefined,
+            parsedImages: Array.isArray(m.parsedImages) ? m.parsedImages : (Array.isArray(m.parsed_images) ? m.parsed_images : []),
+            userDefined: Array.isArray(m.userDefined) ? m.userDefined : (Array.isArray(m.user_defined) ? m.user_defined : undefined),
+            images: Array.isArray(m.images) ? m.images : undefined,
             category: m.category ?? "",
             // preserve underlying file path / modelUrl when provided so we can derive munchie.json
             filePath: m.filePath ?? m.file ?? undefined,
@@ -204,18 +212,18 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
       try {
         // Try to fetch and resize the thumbnail so the mock flow also shows the "image sent" preview
         try {
-          // Only fetch/resize preview when the user asked to send the image
-          if (sendImage) {
-            const imgUrl = selected?.thumbnail ?? "";
-            if (imgUrl) {
-              const imgRes = await fetch(imgUrl);
-              const imgBlob = await imgRes.blob();
-              const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
-              setResizedPreview(resizedDataUrl);
+            // Only fetch/resize preview when the user asked to send the image
+            if (sendImage) {
+              const imgUrl = selected ? resolveModelThumbnail(selected as any) : "";
+              if (imgUrl) {
+                const imgRes = await fetch(imgUrl);
+                const imgBlob = await imgRes.blob();
+                const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
+                setResizedPreview(resizedDataUrl);
+              }
+            } else {
+              setResizedPreview(null);
             }
-          } else {
-            setResizedPreview(null);
-          }
         } catch (e) {
           // non-fatal: ignore preview errors for mock
         }
@@ -240,7 +248,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
       let base64 = '';
       let mimeType = '';
       if (sendImage) {
-        const imgUrl = selected?.thumbnail ?? "";
+        const imgUrl = selected ? resolveModelThumbnail(selected as any) : "";
         // Don't send the generic placeholder to Gemini — treat it as missing
         const PLACEHOLDER = '/images/placeholder.svg';
         if (!imgUrl || imgUrl === PLACEHOLDER) throw new Error("Model requires a thumbnail for AI assistance");
@@ -540,7 +548,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                 className="flex items-center gap-3 rounded border p-2 text-left hover:bg-muted"
               >
                 <img
-                  src={m.thumbnail ?? "/public/demo-data/images/placeholder.svg"}
+                  src={resolveModelThumbnail(m as any) || "/public/demo-data/images/placeholder.svg"}
                   alt={m.name}
                   className="h-12 w-12 object-cover rounded"
                   onError={(e) => {
@@ -587,7 +595,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
               <div className="h-full p-4 space-y-4">
                 {/* Use the project's public placeholder path; ensure the img onError doesn't point back to itself repeatedly. */}
                 <img
-                  src={selected.thumbnail ?? "/images/placeholder.svg"}
+                  src={resolveModelThumbnail(selected as any) || "/images/placeholder.svg"}
                   alt={selected.name}
                   className="w-64 rounded object-cover"
                   onError={(e) => {

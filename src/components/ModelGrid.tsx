@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Model } from "../types/model";
 import { ModelCard } from "./ModelCard";
 import { ImageWithFallback } from "./ImageWithFallback";
+import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 import { ConfigManager } from "../utils/configManager";
 import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
@@ -331,7 +332,7 @@ export function ModelGrid({
                   <div className="flex-shrink-0">
                     <div className="relative">
                       <ImageWithFallback
-                        src={model.thumbnail}
+                        src={resolveModelThumbnail(model)}
                         alt={model.name}
                         className={`w-20 h-20 object-cover rounded-lg border group-hover:border-primary/30 transition-colors ${
                           isSelectionMode && selectedModelIds.includes(model.id) 
