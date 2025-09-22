@@ -581,6 +581,122 @@ app.post('/api/scan-models', async (req, res) => {
   }
 });
 
+// API endpoint to migrate legacy top-level thumbnail/images into parsedImages + userDefined
+app.post('/api/migrate-legacy-images', async (req, res) => {
+  try {
+    const modelsDir = getAbsoluteModelsPath();
+    const migrated = [];
+    const skipped = [];
+    const errors = [];
+
+    function scanAndMigrate(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scanAndMigrate(full);
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+          try {
+            const raw = fs.readFileSync(full, 'utf8');
+            if (!raw || raw.trim().length === 0) { skipped.push({ file: full, reason: 'empty' }); continue; }
+            let data = JSON.parse(raw);
+            let changed = false;
+
+            // Legacy top-level images -> parsedImages
+            if (Array.isArray(data.images) && (!Array.isArray(data.parsedImages) || data.parsedImages.length === 0)) {
+              data.parsedImages = data.images.slice();
+              delete data.images;
+              changed = true;
+            }
+
+            // Legacy top-level thumbnail handling
+            if (data.thumbnail && typeof data.thumbnail === 'string') {
+              // If it's a base64/data URL, move it into parsedImages as the first item
+              if (data.thumbnail.startsWith('data:')) {
+                if (!Array.isArray(data.parsedImages)) data.parsedImages = [];
+                // If the same data already exists in parsedImages, remove duplicates first
+                const existingIdx = data.parsedImages.findIndex(p => p === data.thumbnail || (p && p.data === data.thumbnail));
+                if (existingIdx !== -1) {
+                  // Remove existing occurrence
+                  data.parsedImages.splice(existingIdx, 1);
+                }
+                // Prepend the thumbnail so it becomes parsed:0
+                data.parsedImages.unshift(data.thumbnail);
+                // Ensure we don't accidentally leave a top-level thumbnail
+                delete data.thumbnail;
+                changed = true;
+              } else if (!data.userDefined) {
+                // Non-data thumbnail and no existing userDefined - try to synthesize a nested thumbnail
+                if (/^parsed:\d+|^user:\d+/.test(data.thumbnail)) {
+                  data.userDefined = [{ thumbnail: data.thumbnail }];
+                } else if (Array.isArray(data.parsedImages) && data.parsedImages.indexOf(data.thumbnail) !== -1) {
+                  const idx = data.parsedImages.indexOf(data.thumbnail);
+                  data.userDefined = [{ thumbnail: `parsed:${idx}` }];
+                } else {
+                  data.userDefined = [{ thumbnail: data.thumbnail }];
+                }
+                delete data.thumbnail;
+                changed = true;
+              } else {
+                // If userDefined already exists, just remove the top-level thumbnail to avoid duplication
+                try { delete data.thumbnail; } catch (e) { }
+                changed = true;
+              }
+            }
+
+            // Ensure userDefined[0].images exists if there are any user images encoded on the old top-level
+            if (Array.isArray(data.userDefined) && data.userDefined.length > 0) {
+              if (!Array.isArray(data.userDefined[0].images)) data.userDefined[0].images = [];
+            }
+
+            // Ensure imageOrder and thumbnail defaults for parsedImages (reuse helper's logic)
+            if (Array.isArray(data.parsedImages) && data.parsedImages.length > 0) {
+              if (!Array.isArray(data.userDefined) || data.userDefined.length === 0) data.userDefined = [{}];
+              if (!data.userDefined[0].thumbnail) {
+                data.userDefined[0].thumbnail = 'parsed:0';
+                changed = true;
+              }
+              if (!Array.isArray(data.userDefined[0].imageOrder) || data.userDefined[0].imageOrder.length === 0) {
+                const order = [];
+                for (let i = 0; i < data.parsedImages.length; i++) order.push(`parsed:${i}`);
+                const userImgs = Array.isArray(data.userDefined[0].images) ? data.userDefined[0].images : [];
+                for (let i = 0; i < userImgs.length; i++) order.push(`user:${i}`);
+                data.userDefined[0].imageOrder = order;
+                changed = true;
+              }
+            }
+
+            // Finally, remove any legacy top-level fields to keep the file normalized
+            if (Object.prototype.hasOwnProperty.call(data, 'images')) {
+              try { delete data.images; changed = true; } catch (e) { /* ignore */ }
+            }
+            if (Object.prototype.hasOwnProperty.call(data, 'thumbnail')) {
+              try { delete data.thumbnail; changed = true; } catch (e) { /* ignore */ }
+            }
+
+            if (changed) {
+              const tmp = full + '.tmp';
+              fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+              fs.renameSync(tmp, full);
+              migrated.push(full);
+            } else {
+              skipped.push(full);
+            }
+          } catch (e) {
+            errors.push({ file: full, error: e.message || String(e) });
+          }
+        }
+      }
+    }
+
+    scanAndMigrate(modelsDir);
+    res.json({ success: true, migrated: migrated.length, migratedFiles: migrated, skipped: skipped.length, skippedFiles: skipped, errors });
+  } catch (e) {
+    console.error('Migration endpoint failed:', e);
+    res.status(500).json({ success: false, error: e.message || String(e) });
+  }
+});
+
 // API endpoint to save app configuration to data/config.json
 app.post('/api/save-config', (req, res) => {
   try {

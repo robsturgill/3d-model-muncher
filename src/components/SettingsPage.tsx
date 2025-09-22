@@ -342,6 +342,8 @@ export function SettingsPage({
   // State and handler for generating model JSONs via backend API
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
   const [generateResult, setGenerateResult] = useState<{ skipped?: number; generated?: number; verified?: number; processed?: number } | null>(null);
+  const [isMigratingLegacyImages, setIsMigratingLegacyImages] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<any>(null);
   
   const handleGenerateModelJson = async (fileType?: "3mf" | "stl") => {
     const effectiveFileType = fileType || selectedFileType;
@@ -2330,11 +2332,47 @@ export function SettingsPage({
                           )}
                           {isGeneratingJson ? 'Generating...' : 'Generate'}
                         </Button>
+                        <Button
+                          onClick={async () => {
+                            if (isMigratingLegacyImages) return;
+                            setIsMigratingLegacyImages(true);
+                            setMigrateResult(null);
+                            try {
+                              const resp = await fetch('/api/migrate-legacy-images', { method: 'POST' });
+                              const data = await resp.json();
+                              if (!resp.ok) throw new Error(data.error || 'Migration failed');
+                              setMigrateResult(data);
+                              setStatusMessage(`Migration complete: ${data.migrated || 0} migrated`);
+                            } catch (e: any) {
+                              setMigrateResult({ success: false, error: e.message || String(e) });
+                              setStatusMessage('Migration failed');
+                            } finally {
+                              setIsMigratingLegacyImages(false);
+                              setTimeout(() => setStatusMessage(''), 3000);
+                            }
+                          }}
+                          disabled={isMigratingLegacyImages}
+                          variant="ghost"
+                          className="gap-2"
+                        >
+                          {isMigratingLegacyImages ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          {isMigratingLegacyImages ? 'Migrating...' : 'Migrate Legacy Images'}
+                        </Button>
                       </div>
                     </div>
 
                     {(hashCheckResult || generateResult) && (
                       <div className="flex flex-wrap gap-4 mt-3 md:mt-0 md:self-end">
+                        {migrateResult && (
+                          <div key="migrate-result" className="flex items-center gap-2">
+                            <Files className="h-4 w-4 text-primary" />
+                            <span className="text-sm">{migrateResult.migrated || 0} migrated, {migrateResult.skipped || 0} skipped</span>
+                          </div>
+                        )}
                         {hashCheckResult && (
                           <>
                             <div key="verified-count" className="flex items-center gap-2">

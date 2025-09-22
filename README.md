@@ -88,6 +88,7 @@ docker-compose up -d
 - `GET /api/validate-3mf` - Validate 3MF & STL file integrity
 - `POST /api/delete-models` - Delete models and files
 - `GET /models/*` - Static model files (3MF, STL, images, etc.)
+- `POST /api/regenerate-munchie-files` - Regenerate munchie.json for specific models (preserves user-managed fields and post-processes files to ensure nested thumbnail/imageOrder defaults)
 
 ## File Structure
 

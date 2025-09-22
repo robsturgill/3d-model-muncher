@@ -12,6 +12,8 @@ import { Model } from "./types/model";
 import { Category } from "./types/category";
 import { AppConfig } from "./types/config";
 import { ConfigManager } from "./utils/configManager";
+// Import package.json to read the last published version (used as previous release)
+import * as pkg from '../package.json';
 import { applyFiltersToModels, FilterState } from "./utils/filterUtils";
 import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -53,6 +55,9 @@ function AppContent() {
 
   // Dialog states
   const [isDonationDialogOpen, setIsDonationDialogOpen] = useState(false);
+  // Release notes dialog (shown after config is loaded, before/while models load)
+  const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
+  const [dontShowReleaseNotes, setDontShowReleaseNotes] = useState(false);
 
   // Bulk selection state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -150,6 +155,46 @@ function AppContent() {
 
     loadInitialData();
   }, []);
+
+  // Show release notes dialog once after appConfig is available unless the user opted out for this version
+  useEffect(() => {
+    if (!appConfig) return;
+
+    try {
+  // Use the previous release number from package.json (the last published version)
+  // package.json is imported at build time and represents the distributor's last release.
+  const previousVersion = (pkg && pkg.version) ? String(pkg.version) : ConfigManager.getDefaultConfig().version || '0.0.0';
+      const key = `release-notes:${previousVersion}`;
+      const stored = localStorage.getItem(key);
+
+      if (!stored) {
+        // No stored preference - open dialog
+        setIsReleaseNotesOpen(true);
+      } else {
+        // If stored == 'show' -> open; if 'hidden' -> keep closed
+        if (stored === 'show') setIsReleaseNotesOpen(true);
+      }
+    } catch (e) {
+      console.warn('Failed to check release notes preference', e);
+      setIsReleaseNotesOpen(true);
+    }
+  }, [appConfig]);
+
+  const closeReleaseNotes = (dontShow: boolean) => {
+  const previousVersion = (pkg && pkg.version) ? String(pkg.version) : ConfigManager.getDefaultConfig().version || '0.0.0';
+    const key = `release-notes:${previousVersion}`;
+    try {
+      if (dontShow) {
+        localStorage.setItem(key, 'hidden');
+      } else {
+        localStorage.setItem(key, 'show');
+      }
+    } catch (e) {
+      console.warn('Failed to persist release notes preference', e);
+    }
+    setDontShowReleaseNotes(dontShow);
+    setIsReleaseNotesOpen(false);
+  };
 
   // use centralized applyFiltersToModels from utils/filterUtils
 
@@ -872,6 +917,55 @@ function AppContent() {
         isOpen={isDonationDialogOpen}
         onClose={() => setIsDonationDialogOpen(false)}
       />
+
+      {/* Release Notes Dialog - shown after initialization while models load */}
+      <AlertDialog open={isReleaseNotesOpen} onOpenChange={(open) => { if (!open) closeReleaseNotes(dontShowReleaseNotes); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>What's new in this version</AlertDialogTitle>
+            <AlertDialogDescription>
+              Thanks for updating! Here are a few notable changes in the latest release:
+            </AlertDialogDescription>
+
+            <div className="mt-2 text-sm">
+              <ul className="list-disc pl-5 list-inside">
+                <li><strong>Migrations</strong> - Improved image handling to persist user images from parsed images requires migration from versions 0.8.0 and earlier. Use 'Migrate' button in Settings &gt; File Integrity to update files.</li>
+                <li>Regenerating now preserves user metadata.</li>
+                <li><strong>AI Assisted Generation</strong> - Experimental utility for generating model descriptions, category, tags. See Settings &gt; Experimental tab.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-3 my-4 mb-4 mt-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="dont-show-release-notes"
+                  checked={dontShowReleaseNotes}
+                  onCheckedChange={(v) => setDontShowReleaseNotes(Boolean(v))}
+                />
+                <label 
+                  htmlFor="dont-show-release-notes" 
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Don't show these release notes again for this version
+                </label>
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <div className="flex-1">
+              <a
+                href="https://github.com/robsturgill/3d-model-muncher/blob/main/CHANGELOG.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline"
+              >
+                View full changelog on GitHub
+              </a>
+            </div>
+            <AlertDialogAction onClick={() => { closeReleaseNotes(dontShowReleaseNotes); }}>Close</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
