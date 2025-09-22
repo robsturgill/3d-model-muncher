@@ -4,8 +4,11 @@ export interface Model {
   filePath: string;
   id: string;
   name: string;
-  thumbnail: string;
-  images: string[];
+  // Deprecated fields - kept for backward compatibility
+  thumbnail?: string;
+  images?: string[];
+  // New simplified structure
+  parsedImages?: string[]; // All images extracted from 3MF file (thumbnail + additional images)
   tags: string[];
   isPrinted: boolean;
   printTime: string;
@@ -33,7 +36,7 @@ export interface Model {
     // Optional canonical image ordering for this user's structured data.
     // Stored under userDefined[0].imageOrder to avoid promoting base64 blobs
     // into the top-level model shape. Descriptors are strings like
-    // "thumb:0", "parsed:0", or "user:<index>" (or future "user:<id>").
+    // "parsed:0", "parsed:1", or "user:<index>" (or future "user:<id>").
     imageOrder?: string[];
     [key: string]: any;
   }>;

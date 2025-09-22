@@ -106,10 +106,13 @@ function getAbsoluteModelsPath() {
 
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
+  console.log('Save model endpoint hit!'); // Debug log
+  console.log('Request body:', req.body); // Debug log
   let { filePath, id, ...changes } = req.body || {};
 
   // Require at least an id or a filePath so we know where to save
   if (!filePath && !id) {
+    console.log('No filePath or id provided');
     return res.status(400).json({ success: false, error: 'No filePath or id provided' });
   }
   try {
@@ -220,6 +223,18 @@ app.post('/api/save-model', (req, res) => {
 
     // Remove filePath and other computed properties from incomingChanges to prevent them from being saved
     const { filePath: _, modelUrl: __, ...cleanChanges } = incomingChanges;
+    // Sanitize and log the cleaned changes to help debug whether nested thumbnails
+    // were included by the client. Avoid printing base64 images directly.
+    try {
+      const preview = JSON.parse(JSON.stringify(cleanChanges, (k, v) => {
+        if (typeof v === 'string' && v.length > 200) return `[long string ${v.length} chars]`;
+        if (Array.isArray(v) && v.length > 0 && v.every(it => typeof it === 'string' && it.startsWith('data:'))) return `[${v.length} base64 images]`;
+        return v;
+      }));
+      console.log('[server] cleanChanges preview:', preview);
+    } catch (e) {
+      console.warn('[server] Failed to build cleanChanges preview', e);
+    }
     
     // Normalize tags if provided: trim and dedupe case-insensitively while preserving
     // the original casing of the first occurrence.
@@ -334,369 +349,34 @@ app.post('/api/save-model', (req, res) => {
       } else if (existingUD.length > 1) {
         mergedUD.push(...existingUD.slice(1));
       }
+      // Defensive: if the client explicitly sent a nested thumbnail value (including null to clear),
+      // ensure we preserve that exact intent rather than accidentally dropping it during later
+      // normalization. incomingUD is preferred when present.
+      try {
+        if (Array.isArray(incomingUD) && incomingUD.length > 0 && Object.prototype.hasOwnProperty.call(incomingUD[0], 'thumbnail')) {
+          mergedUD[0] = { ...(mergedUD[0] || {}), thumbnail: incomingUD[0].thumbnail };
+        }
+      } catch (e) {
+        // non-fatal: if anything goes wrong here, fall back to the already-merged value
+        console.warn('Warning: failed to apply incoming nested thumbnail during merge:', e);
+      }
       updated.userDefined = mergedUD;
-    }
-
-    // Capture the original incoming nested thumbnail descriptor (if any).
-    // We'll use this to avoid overwriting an explicit parsed:N descriptor
-    // that the client intentionally sent.
-    let incomingUdThumb = undefined;
-    try {
-      if (Array.isArray(cleanChanges.userDefined) && cleanChanges.userDefined.length > 0) {
-        incomingUdThumb = cleanChanges.userDefined[0].thumbnail;
-        console.log('DEBUG /api/save-model: incoming changes.userDefined[0].thumbnail =', incomingUdThumb);
-      }
-    } catch (e) {
-      // don't let debug logging break save flow
-    }
-
-    // Detect whether the client explicitly included a thumbnail change.
-    const hadThumbnailChange = incomingChanges && Object.prototype.hasOwnProperty.call(incomingChanges, 'thumbnail');
-
-    // Determine whether the incoming payload actually included user images
-    // in userDefined[0].images. If not, be conservative and do NOT create
-    // userDefined[0].images from parser-produced top-level thumbnails.
-    const incomingUserImagesProvided = Array.isArray(incomingChanges?.userDefined)
-      && Array.isArray(incomingChanges.userDefined[0]?.images)
-      && incomingChanges.userDefined[0].images.length > 0;
-
-    // Safeguard: if the client cleared the top-level thumbnail (thumbnail: '')
-    // but didn't actually provide any user images, ignore that clear request
-    // to avoid promoting parsed thumbnails into userDefined images during
-    // delete-only operations. The client usually intends to set a descriptor
-    // (thumb:0) rather than move parsed data.
-    if (hadThumbnailChange && incomingChanges && incomingChanges.thumbnail === '' && !incomingUserImagesProvided) {
-      // remove the thumbnail clear so existing top-level thumbnail is preserved
-      delete incomingChanges.thumbnail;
-      delete cleanChanges.thumbnail;
-      console.log('Ignored thumbnail clear from incoming changes because no user images were provided');
-    }
-
-    // Defensive normalization: canonicalize userDefined[0].thumbnail so it
-    // stores descriptors (e.g., 'user:0' or 'parsed:1') instead of raw
-    // base64 blobs or object forms. Also ensure we do not promote any
-    // user-provided base64 into the top-level `thumbnail` field.
-    try {
-      if (Array.isArray(updated.userDefined) && updated.userDefined.length > 0) {
-        const ud0 = updated.userDefined[0] || {};
-        const imagesArr = Array.isArray(ud0.images) ? ud0.images.slice() : [];
-
-        const getUserImageData = (entry) => {
-          if (entry == null) return null;
-          if (typeof entry === 'string') return entry;
-          if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
-          return null;
-        };
-
-        const isDataUrl = (s) => typeof s === 'string' && s.startsWith('data:');
-
-        // Prepare information about the original parsed/top-level images so
-        // normalization logic can decide whether a data URL corresponds to a
-        // parsed image (and therefore should not be promoted into userDefined).
-        const existingTopThumb = existing && typeof existing.thumbnail === 'string' ? existing.thumbnail : undefined;
-        const existingImagesArr = Array.isArray(existing.images) ? existing.images : [];
-        const existingParsedSet = new Set();
-        if (existingTopThumb) existingParsedSet.add(existingTopThumb);
-        for (const it of existingImagesArr) if (typeof it === 'string') existingParsedSet.add(it);
-
-        // Normalize ud0.thumbnail
-        if (typeof ud0.thumbnail !== 'undefined' && ud0.thumbnail !== null) {
-          if (typeof ud0.thumbnail === 'object' && typeof ud0.thumbnail.data === 'string') {
-            const data = ud0.thumbnail.data;
-            if (incomingUserImagesProvided) {
-              let idx = imagesArr.findIndex(u => getUserImageData(u) === data);
-              if (idx === -1) {
-                imagesArr.push(data);
-                idx = imagesArr.length - 1;
-              }
-              ud0.thumbnail = `user:${idx}`;
-            } else {
-              // No user images provided: the object likely represents a parsed
-              // thumbnail. If it equals the existing parsed thumbnail, treat as parsed.
-              if (existingTopThumb && data === existingTopThumb) {
-                ud0.thumbnail = 'thumb:0';
-                updated.thumbnail = existingTopThumb;
-              } else {
-                // Otherwise, leave ud0.thumbnail alone but do not push into imagesArr.
-                // This prevents accidental promotion of parsed data.
-              }
-            }
-          } else if (typeof ud0.thumbnail === 'string') {
-            const t = ud0.thumbnail;
-            if (isDataUrl(t)) {
-              if (incomingUserImagesProvided) {
-                let idx = imagesArr.findIndex(u => getUserImageData(u) === t);
-                if (idx === -1) {
-                  imagesArr.push(t);
-                  idx = imagesArr.length - 1;
-                }
-                ud0.thumbnail = `user:${idx}`;
-              } else {
-                if (existingParsedSet.has(t)) {
-                  // If client explicitly sent a parsed data URL as the nested thumbnail
-                  // in descriptor form (e.g., 'parsed:N'), preserve it rather than
-                  // converting to 'thumb:0' which can mask the client's intent.
-                  // Only set 'thumb:0' when we have no explicit parsed descriptor
-                  // and we are restoring an existing parsed top-level thumbnail.
-                  if (/^parsed:\d+$/.test(t)) {
-                    // already a parsed descriptor; leave as-is
-                  } else {
-                    ud0.thumbnail = 'thumb:0';
-                    // Prefer restoring top-level thumbnail if present; otherwise use
-                    // the first parsed image found.
-                    updated.thumbnail = existingTopThumb || (existingImagesArr.length > 0 ? existingImagesArr[0] : t);
-                  }
-                }
-              }
-            } else if (/^user:\d+$/.test(t) || /^parsed:\d+$/.test(t)) {
-              // already a descriptor - leave as-is
-            } else {
-              // Non-data string: attempt to match it to an existing user image value
-              const idx = imagesArr.findIndex(u => getUserImageData(u) === t);
-              if (idx !== -1) ud0.thumbnail = `user:${idx}`;
-              // otherwise assume it's a parsed/top-level value and leave it alone
-            }
-          }
-        }
-
-        // Only move a data URL into userDefined[0].images if it is a new user image,
-        // i.e., not present in the original model's top-level thumbnail or images.
-        if (typeof updated.thumbnail === 'string' && isDataUrl(updated.thumbnail)) {
-          const udThumbStr = typeof ud0.thumbnail === 'string' ? ud0.thumbnail : undefined;
-          const udThumbIsParsed = typeof udThumbStr === 'string' && /^parsed:\d+$/.test(udThumbStr);
-          const existingTopThumb = existing && typeof existing.thumbnail === 'string' ? existing.thumbnail : undefined;
-          const topThumb = updated.thumbnail;
-          const topThumbChanged = existingTopThumb !== topThumb;
-          const isParsedImage = existingParsedSet.has(topThumb);
-
-          if (!udThumbIsParsed && topThumbChanged && !isParsedImage && incomingUserImagesProvided) {
-            // Only treat as user image if not present in original parsed images/thumbnail
-            let matchIdx = imagesArr.findIndex(u => getUserImageData(u) === topThumb);
-            if (matchIdx === -1) {
-              imagesArr.push(topThumb);
-              matchIdx = imagesArr.length - 1;
-            }
-            ud0.thumbnail = `user:${matchIdx}`;
-            // clear top-level to avoid promotion
-            updated.thumbnail = '';
-          }
-        }
-
-        // Handle the case where the client explicitly cleared the top-level
-        // thumbnail (sent thumbnail: '') but did not add any user images and
-        // only updated the descriptor to indicate the thumbnail should now be
-        // the first item (e.g., 'thumb:0'). In that case, restore the
-        // existing parsed thumbnail so we don't move parser-produced base64
-        // into userDefined.
-          if (hadThumbnailChange && typeof updated.thumbnail === 'string' && updated.thumbnail === '') {
-          const udThumbStr2 = typeof ud0.thumbnail === 'string' ? ud0.thumbnail : undefined;
-          const udThumbIsThumbDescriptor = udThumbStr2 === 'thumb:0';
-          const udHasUserImages = imagesArr.length > 0;
-          if (udThumbIsThumbDescriptor && !udHasUserImages && existingTopThumb) {
-            // restore the parsed thumbnail to top-level and keep the descriptor
-            updated.thumbnail = existingTopThumb;
-            // leave ud0.thumbnail as 'thumb:0' (client-intended descriptor)
-          }
-        }
-
-        // Persist any changes back into updated.userDefined[0]
-        ud0.images = imagesArr;
-        updated.userDefined[0] = ud0;
-      }
-    } catch (e) {
-      console.warn('Failed to normalize userDefined thumbnail during save:', e);
-    }
-
-    // Extra safety: ensure top-level thumbnail is not a descriptor token.
-    // If somehow a descriptor string (thumb:, user:, parsed:) ended up at the
-    // top-level thumbnail, convert it into an explicit nested descriptor on
-    // userDefined[0].thumbnail and restore the original parsed thumbnail
-    // when possible. This prevents descriptor tokens leaking into the 
-    // canonical parsed thumbnail field on disk.
-    try {
-      const topThumb = updated && typeof updated.thumbnail === 'string' ? updated.thumbnail : undefined;
-      if (topThumb && /^(thumb:|user:|parsed:)\d*$/.test(topThumb)) {
-        // Move descriptor to userDefined[0].thumbnail
-        if (!Array.isArray(updated.userDefined)) updated.userDefined = [{}];
-        if (!updated.userDefined[0]) updated.userDefined[0] = {};
-        // If the nested thumbnail already exists and differs, prefer preserving
-        // the explicit nested value (don't overwrite unless it's empty).
-        if (!updated.userDefined[0].thumbnail) {
-          updated.userDefined[0].thumbnail = topThumb;
-        }
-
-        // Try to restore existing parsed thumbnail from the original file
-        // if it was a parsed data URL. Otherwise clear top-level to avoid
-        // storing descriptor tokens in that field.
-        const existingTopThumb = existing && typeof existing.thumbnail === 'string' ? existing.thumbnail : undefined;
-        if (existingTopThumb && existingTopThumb.startsWith('data:')) {
-          updated.thumbnail = existingTopThumb;
-        } else {
-          updated.thumbnail = '';
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to guard top-level thumbnail descriptor token:', e);
-    }
-
-    // Prevent promoting a userDefined image into the top-level thumbnail.
-    // If updated.thumbnail is a data URL that matches an entry in the
-    // updated.userDefined[0].images array, convert it to a 'user:N' descriptor
-    // and avoid writing the raw data into the top-level thumbnail field.
-    try {
-      const topThumbData = updated && typeof updated.thumbnail === 'string' && /^data:/i.test(updated.thumbnail) ? updated.thumbnail : undefined;
-        if (topThumbData && Array.isArray(updated.userDefined) && updated.userDefined.length > 0) {
-        const ud0 = updated.userDefined[0] || {};
-        const udImages = Array.isArray(ud0.images) ? ud0.images : [];
-        const matchIdx = udImages.findIndex(u => {
-          const val = (typeof u === 'string') ? u : (u && u.data ? u.data : undefined);
-          return val === topThumbData;
-        });
-        if (matchIdx !== -1) {
-          // ensure nested descriptor points to the matching user image
-          ud0.thumbnail = `user:${matchIdx}`;
-          // restore existing parsed top-level thumbnail only if it is NOT
-          // identical to a userDefined image (we must never leave a user
-          // data URL in the canonical top-level thumbnail field).
-          const existingTopThumb = existing && typeof existing.thumbnail === 'string' ? existing.thumbnail : undefined;
-          const existingUDImages = Array.isArray(udImages) ? udImages : [];
-          const existingTopThumbIsSafeToRestore = existingTopThumb
-            && existingTopThumb.startsWith('data:')
-            && !existingUDImages.find(u => ((typeof u === 'string') ? u : (u && u.data ? u.data : undefined)) === existingTopThumb);
-          if (existingTopThumbIsSafeToRestore) {
-            updated.thumbnail = existingTopThumb;
-          } else {
-            updated.thumbnail = '';
-          }
-          updated.userDefined[0] = ud0;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to convert user-defined image to nested descriptor:', e);
-    }
-
-    // Post-normalization correction: if the client submitted a user descriptor
-    // (e.g. 'user:0') that references data identical to the original parsed
-    // top-level thumbnail, that likely indicates the client intended a
-    // 'thumb:0' descriptor (parsed) rather than moving the parsed image into
-    // userDefined. Convert such cases back to 'thumb:0' and restore top-level
-    // thumbnail so parsed thumbnails are never promoted into userDefined.
-    try {
-      if (Array.isArray(updated.userDefined) && updated.userDefined.length > 0) {
-        const ud0 = updated.userDefined[0] || {};
-        if (typeof ud0.thumbnail === 'string' && /^user:\d+$/.test(ud0.thumbnail)) {
-          const match = ud0.thumbnail.match(/^user:(\d+)$/);
-          if (match) {
-            const idx = parseInt(match[1], 10);
-            const udImages = Array.isArray(ud0.images) ? ud0.images : [];
-            const referenced = udImages[idx] !== undefined ? (typeof udImages[idx] === 'string' ? udImages[idx] : (udImages[idx] && udImages[idx].data ? udImages[idx].data : undefined)) : undefined;
-            const existingTopThumb = existing && typeof existing.thumbnail === 'string' ? existing.thumbnail : undefined;
-            const existingImagesArr = Array.isArray(existing && existing.images) ? existing.images : [];
-            // If the referenced user image equals the original parsed top-level
-            // thumbnail OR is present in the original parsed images, convert.
-            if (referenced && existingTopThumb && referenced === existingTopThumb) {
-              // If the client explicitly requested a parsed descriptor (parsed:N),
-              // preserve that intent rather than converting to 'thumb:0'. Only
-              // convert when the client didn't explicitly ask for parsed:N.
-              const incomingWasParsed = typeof incomingUdThumb === 'string' && /^parsed:\d+$/.test(incomingUdThumb);
-              if (!incomingWasParsed) {
-                // Convert to parsed thumb descriptor and restore top-level thumbnail
-                ud0.thumbnail = 'thumb:0';
-                updated.thumbnail = existingTopThumb;
-              } else {
-                // Preserve the explicit parsed descriptor the client sent.
-                ud0.thumbnail = incomingUdThumb;
-                // Also ensure the top-level thumbnail is set to the parsed data
-                updated.thumbnail = existingTopThumb;
-              }
-              // Remove the duplicated parsed data from ud0.images if it was
-              // appended by this save (i.e., not present in the original
-              // userDefined images).
-              const existingUD0 = Array.isArray(existing.userDefined) && existing.userDefined.length > 0 ? existing.userDefined[0] : undefined;
-              const existingUDImages = existingUD0 && Array.isArray(existingUD0.images) ? existingUD0.images : [];
-              const refIndexInExistingUD = existingUDImages.findIndex(u => (typeof u === 'string' ? u : (u && u.data ? u.data : undefined)) === referenced);
-              if (refIndexInExistingUD === -1) {
-                // Remove the newly appended duplicate
-                ud0.images = udImages.filter((_, i) => i !== idx);
-                updated.userDefined[0] = ud0;
-              }
-                console.log('DEBUG /api/save-model: forced ud0.thumbnail -> thumb:0 due to referenced === existingTopThumb; idx=', idx);
-            } else if (referenced && existingImagesArr.includes(referenced)) {
-              // referenced matches one of the parsed images (not topThumb exactly)
-              // In that case we also treat it as parsed and set thumb:0
-              ud0.thumbnail = 'thumb:0';
-                console.log('DEBUG /api/save-model: forced ud0.thumbnail -> thumb:0 because referenced exists in original parsed images; referenced=', referenced);
-              updated.thumbnail = existingTopThumb || referenced;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Failed post-normalization correction for userDefined thumbnail:', e);
     }
 
     // Ensure the directory exists
     const dir = path.dirname(absoluteFilePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    // Final safety guard: ensure top-level thumbnail is not a descriptor token
-    try {
-      const finalTop = updated && typeof updated.thumbnail === 'string' ? updated.thumbnail : undefined;
-      if (finalTop && /^(thumb:|user:|parsed:)\d*$/.test(finalTop)) {
-        if (!Array.isArray(updated.userDefined)) updated.userDefined = [{}];
-        if (!updated.userDefined[0]) updated.userDefined[0] = {};
-        if (!updated.userDefined[0].thumbnail) updated.userDefined[0].thumbnail = finalTop;
-        const existingTopThumb = existing && typeof existing.thumbnail === 'string' ? existing.thumbnail : undefined;
-        if (existingTopThumb && existingTopThumb.startsWith('data:')) {
-          updated.thumbnail = existingTopThumb;
-        } else {
-          updated.thumbnail = '';
-        }
-      }
-    } catch (e) {
-      console.warn('Final guard for top-level thumbnail failed:', e);
+    // REMOVE LEGACY FIELDS: Remove top-level thumbnail and images from the final saved data
+    // These fields are deprecated in favor of parsedImages (for parsed content) 
+    // and userDefined[0].images (for user-added content)
+    if (updated.hasOwnProperty('thumbnail')) {
+      console.log('Removing deprecated top-level thumbnail field from saved data');
+      delete updated.thumbnail;
     }
-
-    // Enforce invariant: top-level `thumbnail` must only ever contain parsed
-    // data (created by parsing 3MF files). Client saves MUST NOT write user
-    // images or descriptor tokens into the top-level thumbnail field. To be
-    // conservative we restore the original parsed thumbnail from `existing`
-    // (if any) or clear the field. This prevents any promotion of
-    // userDefined images into the canonical top-level thumbnail.
-    try {
-      const existingTopThumbFinal = existing && typeof existing.thumbnail === 'string' ? existing.thumbnail : undefined;
-      if (existingTopThumbFinal && existingTopThumbFinal.startsWith('data:')) {
-        // preserve only the original parsed thumbnail
-        updated.thumbnail = existingTopThumbFinal;
-      } else {
-        // ensure we never write new data URLs or descriptor strings
-        updated.thumbnail = '';
-      }
-    } catch (e) {
-      console.warn('Failed enforcing top-level thumbnail invariant:', e);
-      // If enforcement fails, clear the field to be safe
-      updated.thumbnail = '';
-    }
-
-    // Final preservation: if userDefined[0].thumbnail is an explicit parsed:N
-    // descriptor, ensure we persist that intent by setting the top-level
-    // thumbnail to the corresponding parsed image data (from updated.images
-    // or existing.images). This prevents earlier normalization from reverting
-    // an explicit parsed descriptor back to 'thumb:0'.
-    try {
-      if (Array.isArray(updated.userDefined) && updated.userDefined.length > 0) {
-        const ud0Thumb = updated.userDefined[0].thumbnail;
-        if (typeof ud0Thumb === 'string' && /^parsed:\d+$/.test(ud0Thumb)) {
-          const pidx = parseInt(ud0Thumb.split(':')[1] || '', 10);
-          const parsedArr = Array.isArray(updated.images) ? updated.images : (Array.isArray(existing.images) ? existing.images : []);
-          if (!isNaN(pidx) && parsedArr[pidx]) {
-            updated.thumbnail = parsedArr[pidx];
-            console.log('DEBUG /api/save-model: preserving parsed descriptor', ud0Thumb, '-> setting top-level thumbnail to parsed data');
-          }
-        }
-      }
-    } catch (e) {
-      // ignore preservation failures
+    if (updated.hasOwnProperty('images')) {
+      console.log('Removing deprecated top-level images field from saved data');
+      delete updated.images;
     }
 
     // Write atomically: write to a temp file then rename it into place to avoid
@@ -1009,7 +689,7 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           const rebuiltOrder = [];
           for (const item of combined) {
             if (item === mergedMetadata.thumbnail && mergedMetadata.thumbnail) {
-              rebuiltOrder.push('thumb:0');
+              rebuiltOrder.push('parsed:0');
               continue;
             }
             const pidx = parsed.indexOf(item);

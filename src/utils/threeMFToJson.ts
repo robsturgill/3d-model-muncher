@@ -12,8 +12,8 @@ interface PrintSettings {
 interface ModelMetadata {
   id: string;
   name: string;
-  thumbnail: string; // base64 string
-  images: string[];
+  // New simplified structure - only parsedImages, no legacy fields
+  parsedImages: string[]; // All images extracted from 3MF file (thumbnail + additional images)
   tags: string[];
   isPrinted: boolean;
   printTime: string;
@@ -28,6 +28,12 @@ interface ModelMetadata {
   hash: string;
   printSettings: PrintSettings;
   price: number;
+  userDefined: Array<{
+    description?: string;
+    thumbnail?: string;
+    images?: string[];
+    imageOrder?: string[];
+  }>;
 }
 
 function bytesToMB(bytes: number): string {
@@ -55,8 +61,7 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
   const metadata: ModelMetadata = {
     id: id,
     name: "", // Will be set from metadata or fallback to filename
-    thumbnail: "",
-    images: [],
+    parsedImages: [], // All images extracted from 3MF file
     tags: [],
     isPrinted: false,
     printTime: "",
@@ -73,7 +78,8 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
       infill: "",
       nozzle: ""
     },
-    price: 0
+    price: 0,
+    userDefined: []
   };
 
   try {
@@ -241,21 +247,34 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
     // ---- MD5 HASH ----
     metadata.hash = precomputedHash || computeMD5(buffer);
 
-    // ---- THUMBNAIL SELECTION ----
+    // ---- IMAGE PROCESSING ----
+    // Collect all images from the 3MF file into parsedImages array
+    // First, add the primary thumbnail if it exists
     if (unzipped["Metadata/plate_1.png"]) {
       const b64 = Buffer.from(unzipped["Metadata/plate_1.png"]).toString("base64");
-      metadata.thumbnail = `data:image/png;base64,${b64}`;
+      const dataUrl = `data:image/png;base64,${b64}`;
+      metadata.parsedImages.push(dataUrl);
     } else if (unzipped["Metadata/thumbnail.png"]) {
       const b64 = Buffer.from(unzipped["Metadata/thumbnail.png"]).toString("base64");
-      metadata.thumbnail = `data:image/png;base64,${b64}`;
+      const dataUrl = `data:image/png;base64,${b64}`;
+      metadata.parsedImages.push(dataUrl);
     }
 
-    // ---- ADDITIONAL IMAGES ----
+    // Add any additional images from Auxiliaries/Model Pictures/
     for (const file in unzipped) {
       if (file.startsWith("Auxiliaries/Model Pictures/") && file.endsWith(".webp")) {
         const b64 = Buffer.from(unzipped[file]).toString("base64");
-        metadata.images.push(`data:image/png;base64,${b64}`);
+        const dataUrl = `data:image/webp;base64,${b64}`;
+        metadata.parsedImages.push(dataUrl);
       }
+    }
+
+    // Create userDefined[0].imageOrder based on parsedImages
+    if (metadata.parsedImages.length > 0) {
+      const imageOrder = metadata.parsedImages.map((_, index) => `parsed:${index}`);
+      metadata.userDefined = [{
+        imageOrder: imageOrder
+      }];
     }
   } catch (err) {
     console.error(`Error parsing 3MF file ${filePath}:`, err);
@@ -272,8 +291,7 @@ export async function parseSTL(filePath: string, id: string, precomputedHash?: s
   const metadata: ModelMetadata = {
     id: id,
     name: "", // Will be set from filename
-    thumbnail: "",
-    images: [],
+    parsedImages: [], // STL files don't contain embedded images
     tags: [],
     isPrinted: false,
     printTime: "",
@@ -290,7 +308,8 @@ export async function parseSTL(filePath: string, id: string, precomputedHash?: s
       infill: "",
       nozzle: ""
     },
-    price: 0
+    price: 0,
+    userDefined: []
   };
 
   // Use filename as name for STL files
