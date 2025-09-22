@@ -1747,7 +1747,7 @@ export function ModelDetailsDrawer({
                         <div className="relative w-full flex items-center justify-center">
                           {/* dark background for transparent images */}
                           <div className="absolute inset-0 bg-gradient-dark rounded-lg" aria-hidden />
-                          <ImageWithFallback src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className="relative max-w-full max-h-full object-contain rounded-lg" />
+                          <ImageWithFallback src={allImages[selectedImageIndex]} alt={`${currentModel.name} - Image ${selectedImageIndex + 1}`} className="relative max-w-full h-screen object-contain rounded-lg" />
 
                           {allImages.length > 1 && (
                             <>
