@@ -104,6 +104,52 @@ function getAbsoluteModelsPath() {
   return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
 }
 
+// Helper: ensure munchie JSON has userDefined[0].thumbnail and imageOrder when appropriate
+async function postProcessMunchieFile(absoluteFilePath) {
+  try {
+    if (!fs.existsSync(absoluteFilePath)) return;
+    const raw = fs.readFileSync(absoluteFilePath, 'utf8');
+    if (!raw || raw.trim().length === 0) return;
+    let data;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+
+    const parsedImages = Array.isArray(data.parsedImages) ? data.parsedImages : (Array.isArray(data.images) ? data.images : []);
+    const udExists = Array.isArray(data.userDefined) && data.userDefined.length > 0;
+    let changed = false;
+
+    if (parsedImages && parsedImages.length > 0) {
+      // Ensure userDefined[0] exists
+      if (!udExists) {
+        data.userDefined = [{}];
+        changed = true;
+      }
+      // Ensure thumbnail descriptor exists
+      if (!data.userDefined[0].thumbnail) {
+        data.userDefined[0].thumbnail = 'parsed:0';
+        changed = true;
+      }
+      // Ensure imageOrder exists and lists parsed images first
+      if (!Array.isArray(data.userDefined[0].imageOrder) || data.userDefined[0].imageOrder.length === 0) {
+        const imageOrder = [];
+        for (let i = 0; i < parsedImages.length; i++) imageOrder.push(`parsed:${i}`);
+        const userImgs = Array.isArray(data.userDefined[0].images) ? data.userDefined[0].images : [];
+        for (let i = 0; i < userImgs.length; i++) imageOrder.push(`user:${i}`);
+        data.userDefined[0].imageOrder = imageOrder;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      const tmpPath = absoluteFilePath + '.tmp';
+      fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+      fs.renameSync(tmpPath, absoluteFilePath);
+      console.log('Post-processed munchie file to include userDefined.thumbnail/imageOrder:', absoluteFilePath);
+    }
+  } catch (e) {
+    console.warn('postProcessMunchieFile error for', absoluteFilePath, e);
+  }
+}
+
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', (req, res) => {
   console.log('Save model endpoint hit!'); // Debug log
@@ -507,12 +553,28 @@ app.post('/api/scan-models', async (req, res) => {
     const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const dir = getModelsDirectory();
     const result = await scanDirectory(dir, fileType);
-    res.json({ 
-      success: true, 
-      message: 'Model JSON files generated successfully.',
-      processed: result.processed,
-      skipped: result.skipped
-    });
+
+    // Post-process any newly created munchie files to ensure userDefined thumbnail/imageOrder
+    try {
+      const modelsDir = getAbsoluteModelsPath();
+      function findAndPostProcess(directory) {
+        const entries = fs.readdirSync(directory, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(directory, entry.name);
+          if (entry.isDirectory()) {
+            findAndPostProcess(full);
+          } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+            // Always attempt to post-process (the helper is defensive)
+            try { postProcessMunchieFile(full); } catch (e) { /* ignore */ }
+          }
+        }
+      }
+      findAndPostProcess(modelsDir);
+    } catch (e) {
+      console.warn('Post-processing after scan failed:', e);
+    }
+
+    res.json({ success: true, message: 'Model JSON files generated successfully.', processed: result.processed, skipped: result.skipped });
   } catch (error) {
     console.error('Model JSON generation error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate model JSON files.', error: error.message });
@@ -567,7 +629,6 @@ app.get('/api/load-config', (req, res) => {
 app.post('/api/regenerate-munchie-files', async (req, res) => {
   try {
     const { modelIds } = req.body;
-    
     if (!Array.isArray(modelIds) || modelIds.length === 0) {
       return res.status(400).json({ success: false, error: 'No model IDs provided' });
     }
@@ -577,15 +638,12 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
     let processed = 0;
     let errors = [];
 
-    // Get all models to find the ones we need to regenerate
+    // Build a list of existing munchie files (with filePath and jsonPath)
     let allModels = [];
-    
     function scanForModels(directory) {
       const entries = fs.readdirSync(directory, { withFileTypes: true });
-      
       for (const entry of entries) {
         const fullPath = path.join(directory, entry.name);
-        
         if (entry.isDirectory()) {
           scanForModels(fullPath);
         } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
@@ -593,45 +651,39 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
             const fileContent = fs.readFileSync(fullPath, 'utf8');
             const model = JSON.parse(fileContent);
             const relativePath = path.relative(modelsDir, fullPath);
-            
-            // Set the correct filePath based on model type
             if (entry.name.endsWith('-stl-munchie.json')) {
               model.filePath = relativePath.replace('-stl-munchie.json', '.stl');
-              model.jsonPath = fullPath;
             } else {
               model.filePath = relativePath.replace('-munchie.json', '.3mf');
-              model.jsonPath = fullPath;
             }
-            
+            model.jsonPath = fullPath;
             allModels.push(model);
-          } catch (error) {
-            console.error(`Error reading model file ${fullPath}:`, error);
+          } catch (e) {
+            console.warn('Skipping invalid munchie file during regenerate scan:', fullPath, e);
           }
         }
       }
     }
-    
+
     scanForModels(modelsDir);
 
     for (const modelId of modelIds) {
       const model = allModels.find(m => m.id === modelId);
-      
       if (!model) {
         errors.push({ modelId, error: 'Model not found' });
         continue;
       }
 
       try {
-        // Get the actual model file path
         const modelFilePath = path.join(modelsDir, model.filePath);
-        
         if (!fs.existsSync(modelFilePath)) {
           errors.push({ modelId, error: 'Model file not found' });
           continue;
         }
 
-        // Backup user data before regenerating
-        const currentData = JSON.parse(fs.readFileSync(model.jsonPath, 'utf8'));
+        // Backup user-managed fields from existing JSON
+        let currentData = {};
+        try { currentData = JSON.parse(fs.readFileSync(model.jsonPath, 'utf8')); } catch (e) { /* ignore */ }
         const userDataBackup = {
           tags: currentData.tags || [],
           isPrinted: currentData.isPrinted || false,
@@ -643,16 +695,13 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           hidden: currentData.hidden || false,
           source: currentData.source || "",
           price: currentData.price || 0,
-          // Preserve user-managed related files and any structured user data (images, descriptions)
           related_files: Array.isArray(currentData.related_files) ? currentData.related_files : [],
           userDefined: Array.isArray(currentData.userDefined) ? currentData.userDefined : []
         };
 
-        // Generate new metadata
-        let newMetadata;
         const buffer = fs.readFileSync(modelFilePath);
         const hash = computeMD5(buffer);
-        
+        let newMetadata;
         if (model.filePath.toLowerCase().endsWith('.3mf')) {
           newMetadata = await parse3MF(modelFilePath, model.id, hash);
         } else if (model.filePath.toLowerCase().endsWith('.stl')) {
@@ -662,82 +711,46 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           continue;
         }
 
-        // Merge with user data
-        const mergedMetadata = {
-          ...newMetadata,
-          ...userDataBackup,
-          id: model.id, // Preserve the original ID
-          hash: hash
-        };
+        const mergedMetadata = { ...newMetadata, ...userDataBackup, id: model.id, hash };
 
-        // Helper: extract user image data whether stored as legacy string or {id,data} object
-        const getUserImageData = (entry) => {
-          if (!entry) return '';
-          if (typeof entry === 'string') return entry;
-          if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
-          return '';
-        };
-
-        // If userDefined[0].imageOrder exists (or even if not), rebuild the
-        // descriptor list so it aligns with the regenerated top-level images
-        // and the current userDefined images. This prevents parsed: indexes
-        // from pointing to stale positions after regeneration.
+        // Rebuild imageOrder so descriptors point to correct indexes
         try {
-          const parsed = Array.isArray(mergedMetadata.images) ? mergedMetadata.images : [];
-          const userArr = Array.isArray((mergedMetadata).userDefined?.[0]?.images) ? mergedMetadata.userDefined[0].images : [];
-          const combined = [mergedMetadata.thumbnail].concat(parsed).concat(userArr.map(u => getUserImageData(u)));
+          const parsed = Array.isArray(mergedMetadata.parsedImages) ? mergedMetadata.parsedImages : (Array.isArray(mergedMetadata.images) ? mergedMetadata.images : []);
+          const userArr = Array.isArray(mergedMetadata.userDefined?.[0]?.images) ? mergedMetadata.userDefined[0].images : [];
+          const getUserImageData = (entry) => {
+            if (!entry) return '';
+            if (typeof entry === 'string') return entry;
+            if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
+            return '';
+          };
+
+          const combined = [].concat(parsed).concat(userArr.map(u => getUserImageData(u)));
           const rebuiltOrder = [];
-          for (const item of combined) {
-            if (item === mergedMetadata.thumbnail && mergedMetadata.thumbnail) {
-              rebuiltOrder.push('parsed:0');
-              continue;
-            }
-            const pidx = parsed.indexOf(item);
-            if (pidx !== -1) {
-              rebuiltOrder.push(`parsed:${pidx}`);
-              continue;
-            }
-            const uidx = userArr.findIndex(u => getUserImageData(u) === item);
-            if (uidx !== -1) {
-              rebuiltOrder.push(`user:${uidx}`);
-              continue;
-            }
-            // fallback to literal
-            rebuiltOrder.push(String(item));
-          }
-          // Ensure userDefined array exists and set the rebuilt order
+          for (let i = 0; i < parsed.length; i++) rebuiltOrder.push(`parsed:${i}`);
+          for (let i = 0; i < userArr.length; i++) rebuiltOrder.push(`user:${i}`);
+
           if (!Array.isArray(mergedMetadata.userDefined) || mergedMetadata.userDefined.length === 0) mergedMetadata.userDefined = [{}];
           mergedMetadata.userDefined[0] = { ...(mergedMetadata.userDefined[0] || {}), imageOrder: rebuiltOrder };
         } catch (e) {
           console.warn('Failed to rebuild userDefined[0].imageOrder during regeneration:', e);
         }
 
-        // Write the regenerated file
+        // Write the regenerated file and post-process
         fs.writeFileSync(model.jsonPath, JSON.stringify(mergedMetadata, null, 2), 'utf8');
+        await postProcessMunchieFile(model.jsonPath);
         processed++;
-        
         console.log(`Regenerated munchie file for model: ${model.name}`);
-        
+
       } catch (error) {
         console.error(`Error regenerating munchie file for model ${modelId}:`, error);
         errors.push({ modelId, error: error.message });
       }
     }
 
-    res.json({
-      success: errors.length === 0,
-      processed,
-      errors,
-      message: `Regenerated ${processed} munchie files${errors.length > 0 ? ` with ${errors.length} errors` : ''}`
-    });
-
+    res.json({ success: errors.length === 0, processed, errors, message: `Regenerated ${processed} munchie files${errors.length > 0 ? ` with ${errors.length} errors` : ''}` });
   } catch (error) {
     console.error('Munchie file regeneration error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to regenerate munchie files.', 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: 'Failed to regenerate munchie files.', error: error.message });
   }
 });
 
