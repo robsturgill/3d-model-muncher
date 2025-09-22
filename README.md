@@ -111,12 +111,14 @@ The following fields are preserved and will NOT be overwritten by a regeneration
 - `source` — optional source/origin information entered by the user
 - `price` — user-defined price or cost value
 - `related_files` — array of file paths associated with the model for download
+- `userDefined` - user added images, image order, and thumbnail reference
 
 The following fields are computed or extracted from the model file and will be replaced when the munchie JSON is recreated. 
 
 - `hash` — MD5 checksum of the model file (used for duplicate detection)
-- `thumbnail` — embedded thumbnail image extracted from the 3MF (stored as a base64 data URL)
-- `images` — additional embedded images or auxiliary pictures packaged in the 3MF
+- `parsedImages` — embedded thumbnail(s) and auxiliary pictures extracted from the 3MF (stored as base64 data URLs)
+- ~~`images`~~ - [deprecated] - replaced with `parsedImages`. Use migration tool in settings.
+- ~~`thumbnail`~~ - [deprecated] - replaced with `parsedImages`. Use migration tool in settings.
 - `modelUrl` — the path/URL to the model file under the `models/` directory
 - `fileSize` — human-readable file size derived from the model file
 - `name` — title parsed from the 3MF metadata (or derived from the filename for STLs)
