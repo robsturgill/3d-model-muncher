@@ -1,3 +1,36 @@
+# [0.9.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.8.0...v0.9.0) (2025-09-23)
+
+
+### Bug Fixes
+
+* changed alert styling in bulkEditDrawer, image size issue in settings support ([2f392ce](https://github.com/robsturgill/3d-model-muncher/commit/2f392ce87013d9045746d379e6633d2bb1a385a6))
+* cleanup how ai generated content replaces field content when saving ([63fc591](https://github.com/robsturgill/3d-model-muncher/commit/63fc591d3bd1e8366175aaf98615efd2940b7ad2))
+* enforce model directory containment for saved files ([997ba0f](https://github.com/robsturgill/3d-model-muncher/commit/997ba0fa108e497a341bb36724776811c8f3fa0f))
+* enhance ai-gen experiment saving by updating top-level category and tags ([f35d536](https://github.com/robsturgill/3d-model-muncher/commit/f35d536bd0c07f6625cf5d07c6202d7b52b0c0d1))
+* enhance model loading and saving by implementing id-based lookups ([ffac84c](https://github.com/robsturgill/3d-model-muncher/commit/ffac84cc4ac0b37e6f25ec8e4c8e9fe9dc47c082))
+* enhance munchie JSON processing so  userDefined thumbnail and imageOrder are set correctly ([cf36689](https://github.com/robsturgill/3d-model-muncher/commit/cf36689f6718c35231c0d9e784fbeadd90507ab6))
+* error reporting if no google api key is present, updated readme for adding api key ([6613e85](https://github.com/robsturgill/3d-model-muncher/commit/6613e8545c649a63c9ec568c71ec504810a64699))
+* **experimental:** drawer layout and styling, category options, ai error messaging ([7322962](https://github.com/robsturgill/3d-model-muncher/commit/7322962e4e4543d813f486498df70ae2040cd107))
+* **experimental:** user prompt issue, select other from templates to display field for input ([1f0861e](https://github.com/robsturgill/3d-model-muncher/commit/1f0861ec38278598de5a2135ad8a70e36bd82fe3))
+* image gallery exceeding browser window when fullscreen ([01ebfb0](https://github.com/robsturgill/3d-model-muncher/commit/01ebfb0f8c250d61adac4a6631213630c4fb00af))
+* improve image persistance for user added images and image ordering ([52f708b](https://github.com/robsturgill/3d-model-muncher/commit/52f708b96a4b57214e5301ec079af9c7a0cf5505))
+* persist user added images, order and refactored how parsed images are separate from user images ([e843316](https://github.com/robsturgill/3d-model-muncher/commit/e8433161c6d4c74cdeaeba9d6c915d30ce2e8de1))
+* persist user images with regeneration, improve image ordering method ([066b240](https://github.com/robsturgill/3d-model-muncher/commit/066b240bf488b1cbdbe7319110391fb6a2e6ade5))
+* preserve user description and related files when regenerating json ([a6c8124](https://github.com/robsturgill/3d-model-muncher/commit/a6c8124a79def9432de459316318a674c25fd375))
+* refactor userDefined structure in model-related components ([edb63dc](https://github.com/robsturgill/3d-model-muncher/commit/edb63dc63ca3347d51ca45339325fbbe2beafb64))
+* switched to use userDefined description for generative ai ([442d74c](https://github.com/robsturgill/3d-model-muncher/commit/442d74c4b9836565a75638429d37261e8f407d1e))
+* thumbnail image not displaying in settings, other styling updates ([efbcef0](https://github.com/robsturgill/3d-model-muncher/commit/efbcef07e2fa3e3133bf2ae6ab102334415233c9))
+
+
+### Features
+
+* add migration endpoint for legacy images and implement release notes dialog ([eca6972](https://github.com/robsturgill/3d-model-muncher/commit/eca6972093b8cdf9b71a042dfa7060debfcc44cf))
+* add options to include image and model name in AI prompts ([d647121](https://github.com/robsturgill/3d-model-muncher/commit/d64712165d88ba3a6d83357ac36b915971505393))
+* added experimental AI workflow to suggest metadata for description, category, and tags ([0fa647f](https://github.com/robsturgill/3d-model-muncher/commit/0fa647f8c89ee4c82516ba8293f5938ca0fa92cb))
+* allow restoring of descriptions to original, user changes are stored separately ([0907694](https://github.com/robsturgill/3d-model-muncher/commit/090769476b52e1e81b38677490d64d5d0c3fad3b))
+* **experimentaltab:** add experimental tab with lazy loading for settings page ([fefcf0c](https://github.com/robsturgill/3d-model-muncher/commit/fefcf0ca57e0898745a0597a59cd9e28d9cf1397))
+* **settings:** add unmapped categories feature to display and add categories from model metadata ([6ce5c89](https://github.com/robsturgill/3d-model-muncher/commit/6ce5c89c226f75742a0e00a8b9035e3ac30065ea))
+
 # [0.8.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.7.1...v0.8.0) (2025-09-17)
 
 
