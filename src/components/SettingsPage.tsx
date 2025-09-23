@@ -1,6 +1,4 @@
-import { useState, useRef, useEffect } from "react";
-
-// ...existing code...
+import { useState, useRef, useEffect, lazy, Suspense, useMemo } from "react";
 import { Category } from "../types/category";
 import { AppConfig } from "../types/config";
 import { Model, DuplicateGroup, HashCheckResult, CorruptedFile } from "../types/model";
@@ -57,12 +55,19 @@ const {
 import { toast } from 'sonner';
 import { ImageWithFallback } from './ImageWithFallback';
 
+import { resolveModelThumbnail } from '../utils/thumbnailUtils';
+
 // Icon component for model thumbnails
-const ModelThumbnail = ({ thumbnail, name }: { thumbnail: string | null | undefined; name: string }) => {
-  if (thumbnail) {
+const ModelThumbnail = ({ thumbnail, name, model }: { thumbnail?: string | null; name: string; model?: any }) => {
+  // If a model object is provided prefer resolving via resolver which supports
+  // userDefined.thumbnail descriptors and parsedImages. Otherwise fall back
+  // to the explicit thumbnail prop.
+  const src = model ? resolveModelThumbnail(model) : (thumbnail || '');
+
+  if (src) {
     return (
       <ImageWithFallback
-        src={thumbnail}
+        src={src}
         alt={name}
         className="w-8 h-8 object-cover rounded border"
       />
@@ -187,6 +192,21 @@ export function SettingsPage({
   const [renameTagValue, setRenameTagValue] = useState('');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
   const tagInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // Compute categories that appear in model munchie.json files but are not in the configured categories list.
+  const unmappedCategories = useMemo(() => {
+    const configuredLabels = new Set(localCategories.map(c => c.label.toLowerCase()));
+    const counts: Record<string, number> = {};
+    models.forEach(m => {
+      const raw = (m.category ?? '').toString().trim();
+      if (!raw) return;
+      // If the model's category (by label) isn't in configured categories, count it as unmapped
+      if (!configuredLabels.has(raw.toLowerCase())) {
+        counts[raw] = (counts[raw] || 0) + 1;
+      }
+    });
+    return Object.keys(counts).map(label => ({ label, count: counts[label] })).sort((a, b) => b.count - a.count);
+  }, [models, localCategories]);
   // Allow parent to control which tab is opened initially (e.g. "integrity")
   const [selectedTab, setSelectedTab] = useState<string>(initialTab ?? 'general');
 
@@ -307,6 +327,9 @@ export function SettingsPage({
   // File type selection state - "3mf" or "stl" only
   const [selectedFileType, setSelectedFileType] = useState<"3mf" | "stl">("3mf");
 
+  // Lazy load experimental tab component from separate file
+  const ExperimentalTab = lazy(() => import('./settings/ExperimentalTab'));
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
   // Track the active status toast id so we can update loading -> success/error
@@ -326,6 +349,8 @@ export function SettingsPage({
   // State and handler for generating model JSONs via backend API
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
   const [generateResult, setGenerateResult] = useState<{ skipped?: number; generated?: number; verified?: number; processed?: number } | null>(null);
+  const [isMigratingLegacyImages, setIsMigratingLegacyImages] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<any>(null);
   
   const handleGenerateModelJson = async (fileType?: "3mf" | "stl") => {
     const effectiveFileType = fileType || selectedFileType;
@@ -1585,6 +1610,7 @@ export function SettingsPage({
               <TabsTrigger value="integrity" className="flex-shrink-0">File Integrity</TabsTrigger>
               <TabsTrigger value="support" className="flex-shrink-0">Support</TabsTrigger>
               <TabsTrigger value="config" className="flex-shrink-0">Configuration</TabsTrigger>
+              <TabsTrigger value="experimental" className="flex-shrink-0">Experimental</TabsTrigger>
             </TabsList>
 
             {/* General Settings Tab */}
@@ -1785,9 +1811,6 @@ export function SettingsPage({
                       </Button>
                     </div>
                   </div>
-
-                
-
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1832,6 +1855,9 @@ export function SettingsPage({
                           </span>
                         </span>
                         <div className="flex items-center gap-2 ml-auto">
+                          <span className="text-sm text-muted-foreground hidden sm:inline">
+                            Used in {models.reduce((acc, m) => acc + (m.category === category.label ? 1 : 0), 0)} model{models.reduce((acc, m) => acc + (m.category === category.label ? 1 : 0), 0) !== 1 ? 's' : ''}
+                          </span>
                           {!(category.id === 'uncategorized' || category.label === 'Uncategorized') && (
                             <Button
                               variant="ghost"
@@ -1850,7 +1876,56 @@ export function SettingsPage({
                       </div>
                     ))}
                   </div>
-                  
+
+                  {/* Unmapped categories found in munchie.json files */}
+                  {unmappedCategories.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Unmapped Categories</h4>
+                      <p className="text-xs text-muted-foreground">Categories discovered in model metadata that are not defined in your configuration. You can add them as configured categories.</p>
+                      <div className="space-y-2 mt-2">
+                        {unmappedCategories.map((uc) => (
+                          <div key={uc.label} className="flex items-center gap-3 p-3 bg-muted/60 rounded-lg border border-border">
+                            <div className="flex items-center gap-2">
+                              <Box className="h-4 w-4 text-muted-foreground" />
+                              <Badge variant="outline" className="font-medium">{uc.label}</Badge>
+                            </div>
+                            <div className="ml-auto flex items-center gap-2">
+                              <span className="text-sm text-muted-foreground hidden sm:inline">Used in {uc.count} model{uc.count !== 1 ? 's' : ''}</span>
+                              <Button size="sm" variant="ghost" onClick={() => {
+                                // Add this unmapped label as a new configured category using a generated id
+                                const newId = uc.label.trim().toLowerCase().replace(/\s+/g, '_');
+                                const normalizedIcon = normalizeIconName('Folder');
+                                const newCat: Category = { id: newId, label: uc.label.trim(), icon: normalizedIcon } as Category;
+                                const exists = localCategories.find(c => c.label.toLowerCase() === newCat.label.toLowerCase() || c.id === newCat.id);
+                                if (exists) {
+                                  setStatusMessage(`Category "${uc.label}" already exists`);
+                                  setTimeout(() => setStatusMessage(''), 2500);
+                                  return;
+                                }
+                                const updated = [...localCategories, newCat];
+                                setLocalCategories(updated);
+                                const updatedConfig: AppConfig = { ...localConfig, categories: updated };
+                                // Persist config
+                                handleSaveConfig(updatedConfig).then(() => {
+                                  onCategoriesUpdate(updated);
+                                  onConfigUpdate?.(updatedConfig);
+                                  setStatusMessage(`Added category "${uc.label}"`);
+                                  setTimeout(() => setStatusMessage(''), 2500);
+                                }).catch(err => {
+                                  console.error('Failed to add category from unmapped list', err);
+                                  setStatusMessage('Failed to add category');
+                                  setTimeout(() => setStatusMessage(''), 2500);
+                                });
+                              }} className="gap-2">
+                                <Plus className="h-4 w-4" />
+                                Add
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-3">
                     <Button onClick={handleSaveCategories} className="gap-2">
@@ -1863,7 +1938,6 @@ export function SettingsPage({
                       Add Category
                     </Button>
                   </div>
-
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2031,7 +2105,7 @@ export function SettingsPage({
                     </div>
 
                     {/* Backup Statistics */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Card>
                         <CardContent className="p-4">
                           <div className="flex items-center gap-2">
@@ -2044,7 +2118,7 @@ export function SettingsPage({
                         </CardContent>
                       </Card>
                       
-                      <Card>
+                      {/* <Card>
                         <CardContent className="p-4">
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-primary" />
@@ -2054,7 +2128,7 @@ export function SettingsPage({
                             </div>
                           </div>
                         </CardContent>
-                      </Card>
+                      </Card> */}
                       
                       <Card>
                         <CardContent className="p-4">
@@ -2265,11 +2339,47 @@ export function SettingsPage({
                           )}
                           {isGeneratingJson ? 'Generating...' : 'Generate'}
                         </Button>
+                        <Button
+                          onClick={async () => {
+                            if (isMigratingLegacyImages) return;
+                            setIsMigratingLegacyImages(true);
+                            setMigrateResult(null);
+                            try {
+                              const resp = await fetch('/api/migrate-legacy-images', { method: 'POST' });
+                              const data = await resp.json();
+                              if (!resp.ok) throw new Error(data.error || 'Migration failed');
+                              setMigrateResult(data);
+                              setStatusMessage(`Migration complete: ${data.migrated || 0} migrated`);
+                            } catch (e: any) {
+                              setMigrateResult({ success: false, error: e.message || String(e) });
+                              setStatusMessage('Migration failed');
+                            } finally {
+                              setIsMigratingLegacyImages(false);
+                              setTimeout(() => setStatusMessage(''), 3000);
+                            }
+                          }}
+                          disabled={isMigratingLegacyImages}
+                          variant="ghost"
+                          className="gap-2"
+                        >
+                          {isMigratingLegacyImages ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          {isMigratingLegacyImages ? 'Migrating...' : 'Migrate Legacy Images'}
+                        </Button>
                       </div>
                     </div>
 
                     {(hashCheckResult || generateResult) && (
                       <div className="flex flex-wrap gap-4 mt-3 md:mt-0 md:self-end">
+                        {migrateResult && (
+                          <div key="migrate-result" className="flex items-center gap-2">
+                            <Files className="h-4 w-4 text-primary" />
+                            <span className="text-sm">{migrateResult.migrated || 0} migrated, {migrateResult.skipped || 0} skipped</span>
+                          </div>
+                        )}
                         {hashCheckResult && (
                           <>
                             <div key="verified-count" className="flex items-center gap-2">
@@ -2434,17 +2544,23 @@ export function SettingsPage({
                                       {group.models.map((model) => (
                                         <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 bg-muted rounded-md gap-2">
                                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            {model.thumbnail ? (
-                                              <ImageWithFallback
-                                                src={model.thumbnail}
-                                                alt={model.name}
-                                                className="w-8 h-8 object-cover rounded border"
-                                              />
-                                            ) : (
-                                              <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
-                                                <Box className="h-4 w-4 text-muted-foreground" />
-                                              </div>
-                                            )}
+                                            {(() => {
+                                              const src = resolveModelThumbnail(model);
+                                              if (src) {
+                                                return (
+                                                  <ImageWithFallback
+                                                    src={src}
+                                                    alt={model.name}
+                                                    className="w-8 h-8 object-cover rounded border"
+                                                  />
+                                                );
+                                              }
+                                              return (
+                                                <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
+                                                  <Box className="h-4 w-4 text-muted-foreground" />
+                                                </div>
+                                              );
+                                            })()}
                                             <span className="text-sm truncate">{getDisplayPath(model)}</span>
                                           </div>
                                           <Button
@@ -2470,7 +2586,7 @@ export function SettingsPage({
                                 {group.models.map((model) => (
                                   <div key={`dup-list-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <ModelThumbnail thumbnail={model.thumbnail} name={model.name} />
+                                      <ModelThumbnail model={model} name={model.name} />
                                       <span className="text-sm truncate">{getDisplayPath(model)}</span>
                                     </div>
                                     <Button
@@ -2606,15 +2722,15 @@ export function SettingsPage({
                     <ImageWithFallback
                       src="/images/munchie-side.png"
                       alt="Community mascot"
-                      className="w-32 sm:w-[200px] h-auto flex-shrink-0 mx-auto sm:mx-0"
+                      className="w-72 sm:w-[200px] h-auto flex-shrink-0 mx-auto sm:mx-0"
                     />                    
                     <div className="flex-1 w-full flex flex-col justify-center space-y-3 text-left">
                       <h3 className="font-medium">Join the Community</h3>
                       <ul className="text-sm text-muted-foreground space-y-2 text-left list-disc list-inside">
-                        <li>• Share your 3D printing projects and experiences</li>
-                        <li>• Get help from fellow makers and developers</li>
-                        <li>• Suggest new features and improvements</li>
-                        <li>• Stay updated on the latest releases</li>
+                        <li>Share your 3D printing projects and experiences</li>
+                        <li>Get help from fellow makers and developers</li>
+                        <li>Suggest new features and improvements</li>
+                        <li>Stay updated on the latest releases</li>
                       </ul>
                     </div>
                   </div>
@@ -2675,6 +2791,12 @@ export function SettingsPage({
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+            {/* Experimental Tab (lazy loaded from separate file) */}
+            <TabsContent value="experimental" className="space-y-6">
+              <Suspense fallback={<div>Loading experimental features...</div>}>
+                <ExperimentalTab categories={localCategories} />
+              </Suspense>
             </TabsContent>
           </Tabs>
 
@@ -2914,7 +3036,7 @@ export function SettingsPage({
                       }}
                     >
                       <ImageWithFallback
-                        src={model.thumbnail}
+                        src={resolveModelThumbnail(model)}
                         alt={model.name}
                         className="w-12 h-12 object-cover rounded border"
                       />

@@ -242,3 +242,6 @@ html {
 .bg-green-700 {
   background-color: var(--color-green-700);
 }
+.list-inside {
+  list-style: inside;
+}

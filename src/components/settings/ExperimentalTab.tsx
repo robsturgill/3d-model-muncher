@@ -1,0 +1,896 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, X, Bot, Plus } from "lucide-react";
+import { Badge } from "../ui/badge";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
+import { ScrollArea } from "../ui/scroll-area";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../ui/select";
+import { Sheet, SheetContent, SheetHeader } from "../ui/sheet";
+import { Switch } from "../ui/switch";
+import { Label } from "../ui/label";
+import { toast } from 'sonner';
+import { Separator } from "../ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+
+type ModelEntry = {
+  id?: string;
+  name: string;
+  description?: string;
+  thumbnail?: string;
+  category?: string;
+  filePath?: string;
+  modelUrl?: string;
+  tags?: string[];
+  parsedImages?: string[];
+  userDefined?: any;
+  images?: string[];
+};
+
+import type { Category } from '../../types/category';
+import { resolveModelThumbnail } from '../../utils/thumbnailUtils';
+
+interface ExperimentalTabProps {
+  categories?: Category[];
+}
+
+export default function ExperimentalTab({ categories: propCategories }: ExperimentalTabProps) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [models, setModels] = useState<ModelEntry[]>([]);
+  // When no search query is present, show a limited number of items to avoid rendering huge lists.
+  const INITIAL_LIMIT = 25;
+  const [showAll, setShowAll] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<ModelEntry | null>(null);
+
+  useEffect(() => {
+    // Fetch models from backend API. Expecting `/api/models` to return an array of model metadata objects.
+    setLoading(true);
+    fetch("/api/models")
+      .then((res) => res.json())
+      .then((data) => {
+        // Normalize to ModelEntry where possible
+        if (Array.isArray(data)) {
+          const normalized = data.map((m: any) => ({
+            id: m.id ?? m.name ?? undefined,
+            name: m.name ?? m.title ?? "",
+            description: m.description ?? m.desc ?? "",
+            // keep thumbnail compatibility but also preserve parsedImages/userDefined so resolver can work
+            thumbnail: m.thumbnail ?? m.image ?? m.preview ?? undefined,
+            parsedImages: Array.isArray(m.parsedImages) ? m.parsedImages : (Array.isArray(m.parsed_images) ? m.parsed_images : []),
+            userDefined: (m.userDefined && typeof m.userDefined === 'object') ? m.userDefined : (m.user_defined && typeof m.user_defined === 'object' ? m.user_defined : undefined),
+            images: Array.isArray(m.images) ? m.images : undefined,
+            category: m.category ?? "",
+            // preserve underlying file path / modelUrl when provided so we can derive munchie.json
+            filePath: m.filePath ?? m.file ?? undefined,
+            modelUrl: m.modelUrl ?? m.url ?? undefined,
+            tags: Array.isArray(m.tags) ? m.tags : typeof m.tags === "string" && m.tags ? m.tags.split(",").map((s: string) => s.trim()) : [],
+          }));
+          setModels(normalized);
+        } else {
+          setModels([]);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch models", err);
+        setModels([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return models;
+    return models.filter((m) => m.name.toLowerCase().includes(q));
+  }, [models, query]);
+
+  // Visible list obeys the initial limit when there's no search query and showAll is false
+  const visibleModels = useMemo(() => {
+    const q = query.trim();
+    if (!q && !showAll && filtered.length > INITIAL_LIMIT) {
+      return filtered.slice(0, INITIAL_LIMIT);
+    }
+    return filtered;
+  }, [filtered, query, showAll]);
+
+  // ...existing code...
+  // Gemini prompt state and handler
+  const [geminiPrompt, setGeminiPrompt] = useState("");
+  const [geminiResult, setGeminiResult] = useState("");
+  const [geminiLoading, setGeminiLoading] = useState(false);
+  const [geminiError, setGeminiError] = useState("");
+  // Provider selection: 'gemini' (Google), 'openai', or 'mock'
+  const [provider, setProvider] = useState<'gemini' | 'openai' | 'mock'>('gemini');
+  // Prompt options determine which supporting fields are sent to the provider
+  const [promptOption, setPromptOption] = useState<'image_description' | 'translate_description' | 'rewrite_description' | 'other'>('image_description');
+
+  // Whether to include the image when sending to Gemini/OpenAI. Default true to preserve existing behaviour.
+  const [sendImage, setSendImage] = useState(true);
+  // Whether to include the model name/filename in the payload. Default true.
+  const [includeModelName, setIncludeModelName] = useState(true);
+
+  // Editable fields shown in the dialog
+  const [editDescription, setEditDescription] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Suggestions returned by Gemini (structured if backend provides it)
+  const [suggestionDescription, setSuggestionDescription] = useState("");
+  const [suggestionCategory, setSuggestionCategory] = useState("");
+  const [suggestionTags, setSuggestionTags] = useState<string[]>([]);
+  // Data URL of the resized image for a small preview in the UI
+  const [resizedPreview, setResizedPreview] = useState<string | null>(null);
+
+  // Use categories passed from SettingsPage when available, otherwise derive from models
+  // Include the current editCategory and any suggestionCategory so Update Fields will be selectable/displayed
+  const categories = useMemo(() => {
+    const src = propCategories && propCategories.length > 0
+      ? propCategories.map(c => c.label)
+      : Array.from(new Set(models.map(m => m.category).filter(Boolean))) as string[];
+    // Always ensure there is an 'Uncategorized' option and keep it first
+    const set = new Set<string>();
+    set.add('Uncategorized');
+    for (const s of src) {
+      if (s && s.trim() && s !== 'Uncategorized') set.add(s);
+    }
+    if (editCategory && editCategory.trim() && editCategory !== 'Uncategorized') set.add(editCategory);
+    if (suggestionCategory && suggestionCategory.trim() && suggestionCategory !== 'Uncategorized') set.add(suggestionCategory);
+    return Array.from(set);
+  }, [models, propCategories, editCategory, suggestionCategory]);
+
+  // When the provider changes away from mock, clear any simulated suggestion state
+  useEffect(() => {
+    if (provider !== 'mock') {
+      setSuggestionDescription('');
+      setSuggestionCategory('');
+      setSuggestionTags([]);
+      setGeminiResult('');
+    }
+    // Also clear any previous geminiError when switching providers so user isn't stuck
+    setGeminiError('');
+  }, [provider]);
+
+  // Resize an image Blob to a square canvas (512x512 by default) and return a data URL
+  async function resizeImageBlobToDataUrl(blob: Blob, targetW = 512, targetH = 512, mimeType?: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas context unavailable');
+
+          // Fill background white to avoid transparent PNGs turning dark in some viewers
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, targetW, targetH);
+
+          const iw = img.width;
+          const ih = img.height;
+          const ratio = Math.min(targetW / iw, targetH / ih);
+          const nw = Math.round(iw * ratio);
+          const nh = Math.round(ih * ratio);
+          const dx = Math.round((targetW - nw) / 2);
+          const dy = Math.round((targetH - nh) / 2);
+
+          ctx.drawImage(img, 0, 0, iw, ih, dx, dy, nw, nh);
+
+          const outMime = mimeType && (mimeType === 'image/jpeg' || mimeType === 'image/png') ? mimeType : 'image/png';
+          const dataUrl = canvas.toDataURL(outMime);
+          resolve(dataUrl);
+        } catch (err) {
+          reject(err);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to load image for resizing'));
+      };
+      img.src = url;
+    });
+  }
+
+  async function handleGeminiSuggest() {
+    setGeminiLoading(true);
+    setGeminiError("");
+    setGeminiResult("");
+    // If user selected the local Mock provider, produce a realistic sample suggestion
+    if (provider === 'mock') {
+      // clear previous suggestions
+      setSuggestionDescription("");
+      setSuggestionCategory("");
+      setSuggestionTags([]);
+      try {
+        // Try to fetch and resize the thumbnail so the mock flow also shows the "image sent" preview
+        try {
+            // Only fetch/resize preview when the user asked to send the image
+            if (sendImage) {
+              const imgUrl = selected ? resolveModelThumbnail(selected as any) : "";
+              if (imgUrl) {
+                const imgRes = await fetch(imgUrl);
+                const imgBlob = await imgRes.blob();
+                const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
+                setResizedPreview(resizedDataUrl);
+              }
+            } else {
+              setResizedPreview(null);
+            }
+        } catch (e) {
+          // non-fatal: ignore preview errors for mock
+        }
+        // simulate network/processing latency
+        await new Promise((res) => setTimeout(res, 700));
+        const sampleDescription = `Munchie the mascot a whimsical creature features a spherical, textured body resembling a spiky puffball, accented by large, striking eyes and a tiny, unassuming mouth. Designed as a charming decorative piece, it brings a playful and friendly presence to any desk or shelf. Its distinctive look makes it a unique collectible or a delightful gift.`;
+        const sampleCategory = "Figurine";
+        const sampleTags = ["monster", "creature", "toy"];
+        setSuggestionDescription(sampleDescription);
+        setSuggestionCategory(sampleCategory);
+        setSuggestionTags(sampleTags);
+        setGeminiResult(sampleDescription);
+      } catch (e:any) {
+        setGeminiError(e?.message ?? 'Mock suggestion failed');
+      } finally {
+        setGeminiLoading(false);
+      }
+      return;
+    }
+    try {
+      // Conditionally fetch and resize the image only if the user opted to send it
+      let base64 = '';
+      let mimeType = '';
+      if (sendImage) {
+        const imgUrl = selected ? resolveModelThumbnail(selected as any) : "";
+        // Don't send the generic placeholder to Gemini — treat it as missing
+        const PLACEHOLDER = '/images/placeholder.svg';
+        if (!imgUrl || imgUrl === PLACEHOLDER) throw new Error("Model requires a thumbnail for AI assistance");
+        const imgRes = await fetch(imgUrl);
+        const imgBlob = await imgRes.blob();
+        // Resize to 512x512 before sending to the backend to save bandwidth and keep consistent input size
+        const resizedDataUrl = await resizeImageBlobToDataUrl(imgBlob, 512, 512, imgBlob.type);
+        // store preview for UI
+        setResizedPreview(resizedDataUrl);
+        base64 = resizedDataUrl.split(',')[1] ?? '';
+        mimeType = imgBlob.type;
+      } else {
+        // clear any previous preview when not sending image
+        setResizedPreview(null);
+      }
+      // Build payload based on selected prompt option
+      const filename = selected?.name ?? selected?.id ?? "";
+      const payloadBody: any = {
+        provider,
+        promptOption,
+      };
+      if (sendImage) {
+        (payloadBody as any).imageBase64 = base64;
+        (payloadBody as any).mimeType = mimeType;
+      }
+      if (promptOption === 'image_description') {
+        // Use the description shown in the UI (editDescription). Note: editDescription
+        // may intentionally be an empty string; treat that as the authoritative
+        // user-provided description. Only fall back to the model's top-level
+        // description when editDescription is null/undefined.
+        const existingDesc = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
+        if (existingDesc && existingDesc.trim().length > 0) {
+          payloadBody.prompt = geminiPrompt || `Create a printable model description for the file ${filename} using the image. Use and improve the existing description where helpful. Existing description:\n\n"${existingDesc}"`;
+        } else {
+          payloadBody.prompt = geminiPrompt || `Create a printable model description for the file ${filename} using the image.`;
+        }
+      } else if (promptOption === 'translate_description') {
+        payloadBody.description = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
+        payloadBody.prompt = geminiPrompt || `Translate the following model description into clear, user-facing language:\n\n${typeof editDescription === 'string' ? editDescription : (selected?.description ?? '')}`;
+      } else if (promptOption === 'rewrite_description') {
+        payloadBody.description = typeof editDescription === 'string' ? editDescription : (selected?.description ?? "");
+        payloadBody.prompt = geminiPrompt || `Rewrite the following model description to be clear, concise, and user-focused:\n\n${typeof editDescription === 'string' ? editDescription : (selected?.description ?? '')}`;
+      } else if (promptOption === 'other') {
+        // For 'Other' allow the user-provided prompt to be sent verbatim (may be empty)
+        payloadBody.prompt = geminiPrompt || '';
+      }
+
+      // Conditionally include the filename/model name only when the user opted in
+      if (includeModelName) {
+        payloadBody.filename = filename;
+      }
+
+      // Log final constructed payload/prompt for debugging (browser console)
+      try {
+        // Print a compact preview: option, filename, and prompt text (if present)
+        console.log('[GenAI] payload:', {
+          promptOption: payloadBody.promptOption,
+          filename: payloadBody.filename,
+          prompt: payloadBody.prompt,
+          description: payloadBody.description,
+          tags: payloadBody.tags,
+          mimeType: payloadBody.mimeType,
+        });
+      } catch (e) {
+        // ignore logging errors
+      }
+
+      // Send payload to backend
+      const res = await fetch("/api/gemini-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadBody),
+      });
+      // If the server responded with a non-2xx status try to parse the error body
+      if (!res.ok) {
+        let bodyText = '';
+        try {
+          // Try to parse JSON error body if present
+          const errJson = await res.json();
+          bodyText = (errJson && (errJson.error || errJson.message || errJson.detail)) ? (errJson.error || errJson.message || errJson.detail) : JSON.stringify(errJson);
+        } catch (e) {
+          // Fallback to plain text when JSON isn't returned
+          try { bodyText = await res.text(); } catch (_) { bodyText = ''; }
+        }
+
+        // Map known backend adapter message to friendly frontend message
+        if (typeof bodyText === 'string' && bodyText.includes('GenAI adapter error') && (bodyText.includes('GOOGLE_API_KEY') || bodyText.includes('GOOGLE_APPLICATION_CREDENTIALS'))) {
+          throw new Error('No API key configured');
+        }
+
+        throw new Error(bodyText || 'Gemini API error');
+      }
+
+      // Try to parse successful JSON response, but handle non-JSON safely
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        const text = await res.text();
+        data = { text };
+      }
+
+      // Some deployments may return the GenAI adapter error string with a 200
+      // status (plain text or JSON). Detect that and normalize to a friendly
+      // client-side error so the UI shows the warning.
+      const combinedText = (data && (data.text || data.result || data.error || data.message)) ? (data.text || data.result || data.error || data.message) : '';
+      const combinedTextLower = typeof combinedText === 'string' ? combinedText.toLowerCase() : '';
+      // Case-insensitive detection for adapter error variants
+      if (combinedTextLower.includes('genai adapter error') && (combinedTextLower.includes('google_api_key') || combinedTextLower.includes('google_application_credentials'))) {
+        console.debug('[GenAI] Detected adapter error in response:', combinedText);
+        throw new Error('No API key configured');
+      }
+      // Accept either a plain text response or a structured suggestion object
+      setGeminiResult(data.text ?? data.result ?? "No suggestion returned.");
+      // If backend returns structured suggestion use it
+      if (data.suggestion) {
+        // Detect server-side fallback mock response (server returns a helpful
+        // mock description when the adapter failed). When the user explicitly
+        // selected a real provider (e.g. 'gemini') treat this as an adapter
+        // error so the UI shows the 'No API key configured' message instead of
+        // the mock text. The server produces: "AI suggestion (mock) based on prompt: ..."
+        try {
+          const descRaw = String(data.suggestion.description ?? '').toLowerCase();
+          if (descRaw.includes('ai suggestion (mock) based on prompt')) {
+            console.debug('[GenAI] Server returned mock fallback while provider is not mock; treating as adapter error');
+            throw new Error('No API key configured');
+          }
+        } catch (e) {
+          // Re-throw to flow into catch handler which will set geminiError
+          throw e;
+        }
+
+        setSuggestionDescription(data.suggestion.description ?? "");
+        setSuggestionCategory(data.suggestion.category ?? "");
+        setSuggestionTags(Array.isArray(data.suggestion.tags) ? data.suggestion.tags : (typeof data.suggestion.tags === 'string' && data.suggestion.tags ? data.suggestion.tags.split(',').map((s: string)=>s.trim()) : []));
+      } else {
+        // try to populate suggestionDescription from text
+        setSuggestionDescription(data.text ?? "");
+        setSuggestionCategory("");
+        setSuggestionTags([]);
+      }
+    } catch (err: any) {
+      // Show the error and clear any suggestion or preview content so the
+      // error banner is not visually masked by leftover mock/result text.
+      setGeminiError(err?.message ?? "Unknown error");
+      setSuggestionDescription("");
+      setSuggestionCategory("");
+      setSuggestionTags([]);
+      setGeminiResult("");
+      setResizedPreview(null);
+    }
+    finally {
+      setGeminiLoading(false);
+    }
+  }
+
+  // Initialize editable fields when a model is selected
+  useEffect(() => {
+    // clear previous preview and any Gemini state when selection changes
+    setResizedPreview(null);
+    setGeminiError("");
+    setGeminiResult("");
+    setSuggestionDescription("");
+    setSuggestionCategory("");
+    setSuggestionTags([]);
+    setGeminiLoading(false);
+
+    if (!selected) {
+      setEditDescription("");
+      setEditCategory("");
+      setEditTags([]);
+      return;
+    }
+
+    setEditDescription(selected.description ?? "");
+    setEditTags(selected.tags ? selected.tags.slice() : []);
+
+    // Default empty or missing categories to 'Uncategorized'
+    const defaultCategory = selected.category && selected.category.trim() ? selected.category : 'Uncategorized';
+
+    // Try to read the model's munchie.json to get the authoritative category
+    // Show loading state while we query the server so the Select can be disabled
+    (async () => {
+      setCategoryLoading(true);
+      try {
+        let fetched: any = null;
+
+        // Prefer id-based lookup which is more robust (server will scan munchie files)
+        if ((selected as any)?.id) {
+          try {
+            const url = `/api/load-model?id=${encodeURIComponent((selected as any).id)}`;
+            const res = await fetch(url);
+            if (res.ok) fetched = await res.json();
+          } catch (e) {
+            // ignore and fall back to filePath candidates
+          }
+        }
+
+        if (!fetched) {
+          // Build candidate munchie.json relative paths using shared helper
+          // NOTE: dynamic import to avoid circular/top-level import ordering issues in some build environments
+          const helper = await import('../../utils/munchiePath');
+          const candidatesRaw: string[] = helper.deriveMunchieCandidates({ filePath: (selected as any)?.filePath, modelUrl: (selected as any)?.modelUrl, id: (selected as any)?.id, name: (selected as any)?.name });
+
+          for (const rel of candidatesRaw) {
+            try {
+              const url = `/api/load-model?filePath=${encodeURIComponent(rel)}`;
+              const res = await fetch(url);
+              if (!res.ok) continue;
+              fetched = await res.json();
+              if (fetched) break;
+            } catch (e) {
+              // ignore and try next
+            }
+          }
+        }
+
+        if (fetched) {
+          const cat = fetched.category ?? undefined;
+          setEditCategory(cat && cat.toString().trim() ? cat.toString() : defaultCategory);
+          // If the authoritative munchie.json contains a userDefined entry, prefer
+          // its description field (even if it's an empty string) as the editable
+          // description. This matches ModelDetailsDrawer behavior.
+          try {
+            const ud = (fetched as any).userDefined;
+            if (Array.isArray(ud) && ud.length > 0 && typeof ud[0].description === 'string') {
+              setEditDescription(ud[0].description);
+            }
+          } catch (e) {
+            // ignore and keep existing editDescription
+          }
+        } else {
+          setEditCategory(defaultCategory);
+        }
+      } catch (e) {
+        setEditCategory(defaultCategory);
+      } finally {
+        setCategoryLoading(false);
+      }
+    })();
+  }, [selected]);
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold">Experimental Features</h2>
+
+      <div className="prose max-w-none text-sm text-foreground/90">
+        <p>
+          This area contains experimental settings and features which may change, be removed, or behave unexpectedly. Use with caution. Experimental options are not guaranteed to be stable and may be modified or deleted in future releases.
+        </p>
+      </div>
+
+      <Separator />
+
+      {/* API key management area */}
+
+      <div className="space-y-2">
+        <h3>AI Metadata Generation</h3>
+        <label className="block text-sm font-medium text-foreground/90">Search models by name</label>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              // `Input` is a forwarded ref component in the UI library; cast to any to satisfy the HTML ref type
+              ref={inputRef as any}
+              placeholder="Type model name..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-10 pr-8 bg-background border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-primary input-sm"
+            />
+            {query && (
+              <button
+                aria-label="Clear search"
+                title="Clear"
+                className="absolute right-1 top-1/2 -translate-y-1/2 btn btn-ghost btn-sm"
+                onClick={() => {
+                  setQuery("");
+                  inputRef.current?.focus();
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <div className="text-sm text-muted-foreground">{loading ? "Loading..." : `${filtered.length} results`}</div>
+        </div>
+
+        <div className="mt-2 grid grid-cols-1 gap-2">
+          {filtered.length === 0 && !loading ? (
+            <div className="text-sm text-muted-foreground">No models found.</div>
+          ) : (
+            <>
+            {visibleModels.map((m) => (
+              <button
+                key={m.id ?? m.name}
+                onClick={() => setSelected(m)}
+                className="flex items-center gap-3 rounded border p-2 text-left hover:bg-muted"
+              >
+                <img
+                  src={resolveModelThumbnail(m as any) || "/images/placeholder.svg"}
+                  alt={m.name}
+                  className="h-12 w-12 object-cover rounded"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = "/images/placeholder.svg";
+                  }}
+                />
+                <div>
+                  <div className="font-medium">{m.name}</div>
+                  <div className="text-xs text-muted-foreground truncate w-72">{m.description}</div>
+                </div>
+              </button>
+            ))}
+            {/* Show more / show less control when we have a limited preview */}
+            {filtered.length > INITIAL_LIMIT && (
+              <div className="flex items-center gap-2 mt-2">
+                <div className="text-sm text-muted-foreground">Showing {visibleModels.length} of {filtered.length} results</div>
+                <div className="flex-1" />
+                <Button size="sm" variant="ghost" onClick={() => setShowAll((s) => !s)}>{showAll ? 'Show less' : 'Show more'}</Button>
+              </div>
+            )}
+            </>
+          )}
+        </div>
+      </div>
+
+      <Sheet open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        {selected && (
+          <SheetContent className="w-full sm:max-w-2xl">
+            <SheetHeader className="border-b p-4 sticky top-0 bg-background/95 backdrop-blur-sm z-20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-semibold px-2">{selected?.name}</h3>
+                  {geminiError && (
+                    <div className="text-xs text-red-600 dark:text-red-400 px-2 py-1 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">AI: {geminiError}</div>
+                  )}
+                </div>
+                <button aria-label="Close" title="Close" className="btn btn-ghost p-2" onClick={() => setSelected(null)}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </SheetHeader>
+
+            <ScrollArea className="min-h-0">
+              <div className="h-full p-4 space-y-4">
+                {/* Use the project's public placeholder path; ensure the img onError doesn't point back to itself repeatedly. */}
+                <img
+                  src={resolveModelThumbnail(selected as any) || "/images/placeholder.svg"}
+                  alt={selected.name}
+                  className="w-64 rounded object-cover"
+                  onError={(e) => {
+                    // If loading the thumbnail fails, show the local placeholder and mark the element as handled
+                    const el = e.currentTarget as HTMLImageElement;
+                    if (!el.dataset.fallback) {
+                      el.dataset.fallback = '1';
+                      el.src = '/images/placeholder.svg';
+                    }
+                  }}
+                />
+                <label className="text-sm font-medium">Description</label>
+                <div className="p-0">
+                  <ScrollArea className="">
+                    <div className="max-h-[300px]">
+                      <Textarea
+                        value={editDescription}
+                        onChange={e => setEditDescription((e.target as HTMLTextAreaElement).value)}
+                        className=""
+                        placeholder="Edit description here or use Gemini suggestion"
+                      />
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                <label className="text-sm font-medium">Category</label>
+                <div className="flex items-center gap-2 mt-2 mb-4">
+                  {/* Bind the select directly to editCategory and ensure a value is always present.
+                      We force a default of 'Uncategorized' elsewhere, so there is no '(none)' option. */}
+                  <div className="flex-1">
+                    <Select value={editCategory || 'Uncategorized'} onValueChange={(v: string) => setEditCategory(v)} disabled={categoryLoading}>
+                      <SelectTrigger size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map(c => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {categoryLoading && (
+                    <svg className="animate-spin h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" aria-hidden>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                  )}
+                </div>
+
+                {/* Add New Tag - matches ModelDetailsDrawer styling */}
+                <label className="text-sm font-medium">Tags</label>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    placeholder="Add a tag..."
+                    value={tagInput}
+                    onChange={e => setTagInput((e.target as HTMLInputElement).value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const trimmed = tagInput.trim();
+                        if (!trimmed) return;
+                        setEditTags((t) => {
+                          const lower = trimmed.toLowerCase();
+                          if (t.some(x => x.toLowerCase() === lower)) return t;
+                          return [...t, trimmed];
+                        });
+                        setTagInput('');
+                      }
+                    }}
+                    className="flex-1 input-sm"
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = tagInput.trim();
+                      if (!trimmed) return;
+                      setEditTags((t) => {
+                        const lower = trimmed.toLowerCase();
+                        if (t.some(x => x.toLowerCase() === lower)) return t;
+                        return [...t, trimmed];
+                      });
+                      setTagInput('');
+                    }}
+                    disabled={!tagInput.trim()}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add
+                  </Button>
+                </div>
+
+                {/* Tag chips - show edited tags if present, otherwise show the original tags */}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {(editTags.length ? editTags : (selected.tags ?? [])).map((tag, index) => (
+                    <Badge
+                      key={`${tag}-${index}`}
+                      variant="secondary"
+                      className="text-sm gap-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                      onClick={() => setEditTags((t) => t.filter(x => x !== tag))}
+                    >
+                      {tag}
+                      <X className="h-3 w-3" />
+                    </Badge>
+                  ))}
+                </div>
+
+
+                {/* Generative AI suggestion area */}
+                <div className="mt-2">
+                  <Separator className="mb-4"/>
+                  <h3>Generative AI</h3>
+                  <p className="text-sm text-muted-foreground">Use AI to generate or improve model metadata. Select a provider, choose a prompt template, or provide a custom prompt.</p>
+                  <div className="flex flex-col gap-2 mt-4">
+                    <div className="flex flex-col gap-2">
+                      <div>
+                        <label className="text-sm font-medium">Provider</label>
+                        <div className="mt-2">
+                          <Select value={provider} onValueChange={(v: string) => setProvider(v as any)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="mock">Simulated (fake)</SelectItem>
+                              <SelectItem value="gemini">Google Gemini</SelectItem>
+                              {/* <SelectItem value="openai">OpenAI</SelectItem> */}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {provider === 'mock' && (
+                          <div className="text-xs text-muted-foreground mt-2">Using simulated provider — results are mocked for testing.</div>
+                        )}
+                      </div>
+
+                      <div className="mt-4">
+                        <label className="text-sm font-medium">Prompt Template</label>
+                        <div className="mt-1">
+                          <Select value={promptOption} onValueChange={(v: string) => {
+                            setPromptOption(v as any);
+                            // Clear the Other Prompt when choosing any template other than 'other'
+                            if (v !== 'other') setGeminiPrompt('');
+                          }}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="image_description">Create description from image</SelectItem>
+                                <SelectItem value="translate_description">Translate this description</SelectItem>
+                                <SelectItem value="rewrite_description">Rewrite description</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                        {/* Show Other Prompt and related options only when user selects the 'Other' template */}
+                        {promptOption === 'other' && (
+                          <div className="mt-4">
+                            <label className="text-sm font-medium">Other Prompt</label>
+                            <div className="mt-1">
+                              <Input placeholder="Describe what you want Gemini to do" value={geminiPrompt} onChange={e=>setGeminiPrompt((e.target as HTMLInputElement).value)} className="flex-1 input-sm" />
+                            </div>
+
+                            <div className="mt-3">
+                              <div className="flex items-center gap-3">
+                                <Switch
+                                  checked={sendImage}
+                                  onCheckedChange={(checked: boolean) => setSendImage(checked)}
+                                  id="send-image-switch"
+                                />
+                                <Label htmlFor="send-image-switch" className="text-sm text-foreground/90">Include image</Label>
+                              </div>
+
+                              <div className="mt-2 flex items-center gap-3">
+                                <Switch
+                                  checked={includeModelName}
+                                  onCheckedChange={(checked: boolean) => setIncludeModelName(checked)}
+                                  id="include-name-switch"
+                                />
+                                <Label htmlFor="include-name-switch" className="text-sm text-foreground/90">Include model name</Label>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                  {geminiError && (
+                    <Alert variant="destructive" className="mt-2 border-red-500 text-red-700 dark:text-red-400">
+                      <AlertTitle>{geminiError === 'No API key configured' ? 'No API key configured' : 'Error'}</AlertTitle>
+                      <AlertDescription>
+                        {geminiError === 'No API key configured'
+                          ? 'The server requires GOOGLE_API_KEY or GOOGLE_APPLICATION_CREDENTIALS to be set for the Gemini provider.'
+                          : geminiError}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {(!geminiError && (suggestionDescription || suggestionCategory || suggestionTags.length>0 || geminiResult || geminiLoading)) && (
+                    <div className="mt-3 p-3 rounded bg-muted text-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium">Gemini Suggestion</div>
+                          <div className="flex items-center gap-3">
+                            {resizedPreview && (
+                              <div className="flex items-center gap-2">
+                                <img src={resizedPreview} alt="Resized preview" className="h-12 w-12 rounded object-cover border" />
+                                <div className="text-xs text-muted-foreground">Image sent</div>
+                              </div>
+                            )}
+                            {geminiLoading && (
+                          <svg className="animate-spin h-4 w-4 text-muted-foreground" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                          </svg>
+                            )}
+                          </div>
+                      </div>
+
+                      {geminiLoading ? (
+                        <div className="flex items-center gap-2 justify-center p-6">
+                          <svg className="animate-spin h-6 w-6 text-muted-foreground" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                          </svg>
+                          <div className="text-sm text-muted-foreground">Generating…</div>
+                        </div>
+                      ) : (
+                        <>
+                          {suggestionDescription ? <div className="mt-2 whitespace-pre-line">{suggestionDescription}</div> : geminiResult ? <div className="mt-2 whitespace-pre-line">{geminiResult}</div> : null}
+                          {suggestionCategory && <div className="mt-2"><span className="font-medium">Category:</span> {suggestionCategory} </div>}
+                          {suggestionTags.length>0 && <div className="mt-2"><span className="font-medium">Tags:</span> {suggestionTags.join(', ')}</div>}
+                          <div className="flex gap-2 mt-3">
+                            <Button size="sm" variant="default" onClick={()=>{
+                              if(suggestionDescription) setEditDescription(suggestionDescription);
+                              if(suggestionCategory) setEditCategory(suggestionCategory);
+                              if(suggestionTags.length>0) setEditTags(suggestionTags);
+                            }}>Update Fields</Button>
+                            <Button size="sm" variant="ghost" onClick={()=>{ setSuggestionDescription(''); setSuggestionCategory(''); setSuggestionTags([]); setGeminiResult(''); }}>Clear</Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3">
+                  <Button size="sm" variant="default" className="w-full justify-center" onClick={handleGeminiSuggest} disabled={geminiLoading}>
+                    <Bot />
+                    <span className="ml-2">{geminiLoading ? 'Sent...' : 'Send'}</span>
+                  </Button>
+                </div>
+
+                <div className="prose max-w-none text-sm text-foreground/90">
+                  <p>Saving overwrites any existing model data.</p>
+                </div>
+
+                <div className="flex gap-2 mt-3">
+                  <Button size="sm" variant="default" onClick={async ()=>{
+                    if(saving) return; // prevent duplicate saves while request is in-flight
+                    setSaving(true);
+                    setGeminiError('');
+                    const toastId = toast.loading('Saving updates...');
+                    try{
+                      // Prefer id-based saves; no need to derive munchie path here
+                      // no-op: prefer id-based saves; helper not needed in this handler
+                      const toSave: any = {
+                        description: editDescription || selected?.description || "",
+                      };
+
+                      // Build request body for /api/save-model: prefer sending model id and use filePath only as fallback
+                      // Prefer a stable id when available; fall back to name so server can find by name
+                      const body: any = {
+                        id: selected?.id ?? selected?.name ?? undefined,
+                        category: editCategory || selected?.category || undefined,
+                        tags: editTags.length > 0 ? editTags : (selected?.tags ?? undefined),
+                        // overwrite userDefined object with provided fields (experimental behavior)
+                        userDefined: toSave
+                      };
+
+                      const r = await fetch('/api/save-model', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+                      const result = await r.json();
+                      if (!result.success) throw new Error(result.error || 'Save failed');
+                      setGeminiResult('Saved to munchie.json');
+                      toast.success('Changes saved', { id: toastId });
+                    }catch(e:any){ setGeminiError(e?.message ?? 'Save error');
+                      try { toast.error(e?.message ?? 'Save error'); } catch {}
+                    }
+                    finally{ setSaving(false); }
+                  }} disabled={saving}>{saving ? 'Saving...' : 'Save User Data'}</Button>
+                  <Button size="sm" variant="ghost" onClick={()=>{ setEditDescription(''); setEditCategory(''); setEditTags([]); }}>Reset</Button>
+                </div>
+              </div>
+            </ScrollArea>
+          </SheetContent>
+        )}
+      </Sheet>
+    </div>
+  );
+}

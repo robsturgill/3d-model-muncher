@@ -89,7 +89,6 @@ app.get('/api/health', (req, res) => {
 const config = ConfigManager.loadConfig();
 // Always serve from the source models directory for single source of truth
 const modelDir = (config.settings && config.settings.modelDirectory) || './models';
-
 const absoluteModelPath = path.isAbsolute(modelDir) ? modelDir : path.join(process.cwd(), modelDir);
 console.log(`Serving models from: ${absoluteModelPath} (single source of truth)`);
 app.use('/models', express.static(absoluteModelPath));
@@ -105,23 +104,160 @@ function getAbsoluteModelsPath() {
   return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
 }
 
+  // Helper: ensure munchie JSON has userDefined.thumbnail and imageOrder when appropriate
+async function postProcessMunchieFile(absoluteFilePath) {
+  try {
+    if (!fs.existsSync(absoluteFilePath)) return;
+    const raw = fs.readFileSync(absoluteFilePath, 'utf8');
+    if (!raw || raw.trim().length === 0) return;
+    let data;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+
+    const parsedImages = Array.isArray(data.parsedImages) ? data.parsedImages : (Array.isArray(data.images) ? data.images : []);
+  // Normalize legacy userDefined shapes:
+  // - array (old generator produced [ { ... } ])
+  // - object that contains numeric keys like '0' (previous saves produced object with '0')
+  let changed = false;
+  let udExists = data.userDefined && typeof data.userDefined === 'object';
+  try {
+    if (Array.isArray(data.userDefined)) {
+      // Convert array -> single object using first entry
+      data.userDefined = data.userDefined.length > 0 && typeof data.userDefined[0] === 'object' ? { ...(data.userDefined[0]) } : {};
+      udExists = true;
+      changed = true;
+    } else if (udExists && Object.prototype.hasOwnProperty.call(data.userDefined, '0')) {
+      // Convert object with numeric '0' key into normal object shape
+      const zero = data.userDefined['0'] && typeof data.userDefined['0'] === 'object' ? { ...(data.userDefined['0']) } : {};
+      // preserve any top-level fields (images, thumbnail, imageOrder) that exist
+      const imgs = Array.isArray(data.userDefined.images) ? data.userDefined.images : undefined;
+      const thumb = typeof data.userDefined.thumbnail !== 'undefined' ? data.userDefined.thumbnail : undefined;
+      const order = Array.isArray(data.userDefined.imageOrder) ? data.userDefined.imageOrder : undefined;
+      const normalized = { ...zero };
+      if (typeof imgs !== 'undefined') normalized.images = imgs;
+      if (typeof thumb !== 'undefined') normalized.thumbnail = thumb;
+      if (typeof order !== 'undefined') normalized.imageOrder = order;
+      data.userDefined = normalized;
+      udExists = true;
+      changed = true;
+    }
+  } catch (e) {
+    // if normalization fails, don't block post-processing
+    console.warn('Failed to normalize legacy userDefined shape:', e);
+  }
+
+    if (parsedImages && parsedImages.length > 0) {
+      // Ensure userDefined object exists
+      if (!udExists) {
+        data.userDefined = {};
+        changed = true;
+      }
+      // Ensure thumbnail descriptor exists
+      if (!data.userDefined.thumbnail) {
+        data.userDefined.thumbnail = 'parsed:0';
+        changed = true;
+      }
+      // Ensure imageOrder exists and lists parsed images first
+      if (!Array.isArray(data.userDefined.imageOrder) || data.userDefined.imageOrder.length === 0) {
+        const imageOrder = [];
+        for (let i = 0; i < parsedImages.length; i++) imageOrder.push(`parsed:${i}`);
+        const userImgs = Array.isArray(data.userDefined.images) ? data.userDefined.images : [];
+        for (let i = 0; i < userImgs.length; i++) imageOrder.push(`user:${i}`);
+        data.userDefined.imageOrder = imageOrder;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      const tmpPath = absoluteFilePath + '.tmp';
+      fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+      fs.renameSync(tmpPath, absoluteFilePath);
+      console.log('Post-processed munchie file to include userDefined.thumbnail/imageOrder:', absoluteFilePath);
+    }
+  } catch (e) {
+    console.warn('postProcessMunchieFile error for', absoluteFilePath, e);
+  }
+}
+
 // API endpoint to save a model to its munchie.json file
-app.post('/api/save-model', (req, res) => {
-  const { filePath, id, ...changes } = req.body;
-  if (!filePath) {
-    return res.status(400).json({ success: false, error: 'No filePath provided' });
+app.post('/api/save-model', async (req, res) => {
+  console.log('Save model endpoint hit!'); // Debug log
+  console.log('Request body:', req.body); // Debug log
+  let { filePath, id, ...changes } = req.body || {};
+
+  // Require at least an id or a filePath so we know where to save
+  if (!filePath && !id) {
+    console.log('No filePath or id provided');
+    return res.status(400).json({ success: false, error: 'No filePath or id provided' });
   }
   try {
-    // Resolve relative paths to absolute paths
+    // If an id was provided without a filePath, try to locate the munchie JSON file by scanning the models directory
     let absoluteFilePath;
-    if (path.isAbsolute(filePath)) {
-      absoluteFilePath = filePath;
+    if (!filePath && id) {
+      try {
+        const modelsRoot = getAbsoluteModelsPath();
+        let found = null;
+        function walk(dir) {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (found) break;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              walk(full);
+            } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+              try {
+                const raw = fs.readFileSync(full, 'utf8');
+                const parsed = raw ? JSON.parse(raw) : null;
+                if (parsed && (parsed.id === id || parsed.name === id)) {
+                  found = full;
+                  break;
+                }
+              } catch (e) {
+                // ignore parse errors for individual files
+              }
+            }
+          }
+        }
+        walk(modelsRoot);
+        if (!found) {
+          return res.status(404).json({ success: false, error: 'Model id not found' });
+        }
+        absoluteFilePath = found;
+        // populate filePath (relative) for logging and downstream use
+        filePath = path.relative(modelsRoot, found).replace(/\\/g, '/');
+      } catch (e) {
+        console.error('Error searching for munchie by id:', e);
+        return res.status(500).json({ success: false, error: 'Internal error locating model by id' });
+      }
     } else {
-      // filePath should be relative to models directory (e.g., 'Munchie-munchie.json')
-      absoluteFilePath = path.join(absoluteModelPath, filePath);
+      // Resolve provided filePath to absolute path
+      if (path.isAbsolute(filePath)) {
+        absoluteFilePath = filePath;
+      } else {
+        absoluteFilePath = path.join(absoluteModelPath, filePath);
+      }
     }
-    
+
     console.log('Resolved file path for saving:', absoluteFilePath);
+
+    // Require relative filePath and ensure the target is inside the configured models directory
+    if (path.isAbsolute(filePath) && !(filePath && filePath.startsWith('./') === false)) {
+      // If the client sent an absolute filePath string, reject it outright for safety
+      console.warn('Rejected absolute filePath in /api/save-model:', filePath);
+      return res.status(400).json({ success: false, error: 'Absolute file paths are not allowed' });
+    }
+
+    try {
+      const resolvedTarget = path.resolve(absoluteFilePath);
+      const modelsDirResolved = path.resolve(getAbsoluteModelsPath());
+      const relative = path.relative(modelsDirResolved, resolvedTarget);
+      if (relative.startsWith('..') || (relative === '' && resolvedTarget !== modelsDirResolved)) {
+        console.warn('Attempt to save model outside models directory blocked:', resolvedTarget, 'relativeToModelsDir=', relative);
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+    } catch (e) {
+      console.error('Error resolving paths for save-model containment check:', e);
+      return res.status(400).json({ success: false, error: 'Invalid file path' });
+    }
     
     // Load existing model JSON (be defensive against corrupt or partial files)
     let existing = {};
@@ -161,6 +297,18 @@ app.post('/api/save-model', (req, res) => {
 
     // Remove filePath and other computed properties from incomingChanges to prevent them from being saved
     const { filePath: _, modelUrl: __, ...cleanChanges } = incomingChanges;
+    // Sanitize and log the cleaned changes to help debug whether nested thumbnails
+    // were included by the client. Avoid printing base64 images directly.
+    try {
+      const preview = JSON.parse(JSON.stringify(cleanChanges, (k, v) => {
+        if (typeof v === 'string' && v.length > 200) return `[long string ${v.length} chars]`;
+        if (Array.isArray(v) && v.length > 0 && v.every(it => typeof it === 'string' && it.startsWith('data:'))) return `[${v.length} base64 images]`;
+        return v;
+      }));
+      console.log('[server] cleanChanges preview:', preview);
+    } catch (e) {
+      console.warn('[server] Failed to build cleanChanges preview', e);
+    }
     
     // Normalize tags if provided: trim and dedupe case-insensitively while preserving
     // the original casing of the first occurrence.
@@ -242,6 +390,29 @@ app.post('/api/save-model', (req, res) => {
       rejectedRelatedFiles = nf.rejected;
     }
 
+    // Normalize incoming userDefined shape (accept array, object-with-'0', or object)
+    try {
+      if (cleanChanges.userDefined) {
+        if (Array.isArray(cleanChanges.userDefined) && cleanChanges.userDefined.length > 0) {
+          cleanChanges.userDefined = cleanChanges.userDefined[0];
+        } else if (typeof cleanChanges.userDefined === 'object' && Object.prototype.hasOwnProperty.call(cleanChanges.userDefined, '0')) {
+          // Merge numeric '0' into top-level and keep other top-level fields
+          const zero = cleanChanges.userDefined['0'] && typeof cleanChanges.userDefined['0'] === 'object' ? { ...(cleanChanges.userDefined['0']) } : {};
+          const imgs = Array.isArray(cleanChanges.userDefined.images) ? cleanChanges.userDefined.images : undefined;
+          const thumb = typeof cleanChanges.userDefined.thumbnail !== 'undefined' ? cleanChanges.userDefined.thumbnail : undefined;
+          const order = Array.isArray(cleanChanges.userDefined.imageOrder) ? cleanChanges.userDefined.imageOrder : undefined;
+          const normalized = { ...zero };
+          if (typeof imgs !== 'undefined') normalized.images = imgs;
+          if (typeof thumb !== 'undefined') normalized.thumbnail = thumb;
+          if (typeof order !== 'undefined') normalized.imageOrder = order;
+          cleanChanges.userDefined = normalized;
+        }
+      }
+
+    } catch (e) {
+      console.warn('Failed to normalize incoming userDefined in save-model:', e);
+    }
+
     // At this point we've computed the cleaned changes. Log a concise message:
     if (!cleanChanges || Object.keys(cleanChanges).length === 0) {
       safeLog('Save model request: No changes to apply for', { filePath });
@@ -252,12 +423,66 @@ app.post('/api/save-model', (req, res) => {
       safeLog('Save model request:', { filePath, changes: sanitizeForLog(cleanChanges) });
     }
 
-    // Merge changes (excluding computed properties)
-    const updated = { ...existing, ...cleanChanges };
+  // Merge changes carefully. We specially merge `userDefined` so that
+    // we don't blindly overwrite existing user data (which could strip images
+    // or imageOrder). The client is expected to write descriptors into
+    // `userDefined.imageOrder` (no legacy top-level imageOrder support).
+    const updated = { ...existing };
+    for (const key of Object.keys(cleanChanges)) {
+      if (key === 'userDefined') continue; // handle after loop
+      updated[key] = cleanChanges[key];
+    }
+
+    // Merge userDefined carefully. Support legacy cases where existing.userDefined
+    // might be an array (generation produced [ { ... } ]) and where the client
+    // may send either an array or an object. Normalize both sides to a single
+    // object by using the first element of any array as the base object.
+    if (cleanChanges.userDefined) {
+      // Build base from existing data
+      let existingUDObj = {};
+      try {
+        if (Array.isArray(existing.userDefined) && existing.userDefined.length > 0 && typeof existing.userDefined[0] === 'object') {
+          existingUDObj = { ...(existing.userDefined[0] || {}) };
+        } else if (existing.userDefined && typeof existing.userDefined === 'object') {
+          existingUDObj = { ...(existing.userDefined) };
+        }
+      } catch (e) {
+        existingUDObj = {};
+      }
+
+      // Build incoming object (accept array or object)
+      let incomingUDObj = {};
+      try {
+        if (Array.isArray(cleanChanges.userDefined) && cleanChanges.userDefined.length > 0 && typeof cleanChanges.userDefined[0] === 'object') {
+          incomingUDObj = { ...(cleanChanges.userDefined[0] || {}) };
+        } else if (cleanChanges.userDefined && typeof cleanChanges.userDefined === 'object') {
+          incomingUDObj = { ...(cleanChanges.userDefined) };
+        }
+      } catch (e) {
+        incomingUDObj = {};
+      }
+
+      // Shallow merge: incoming fields override existing ones; arrays like
+      // images and imageOrder will be replaced if provided by incomingUDObj.
+      const mergedUDObj = { ...existingUDObj, ...incomingUDObj };
+      updated.userDefined = mergedUDObj;
+    }
 
     // Ensure the directory exists
     const dir = path.dirname(absoluteFilePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  // REMOVE LEGACY FIELDS: Remove top-level thumbnail and images from the final saved data
+  // These fields are deprecated in favor of parsedImages (for parsed content) 
+  // and userDefined.images (for user-added content)
+    if (updated.hasOwnProperty('thumbnail')) {
+      console.log('Removing deprecated top-level thumbnail field from saved data');
+      delete updated.thumbnail;
+    }
+    if (updated.hasOwnProperty('images')) {
+      console.log('Removing deprecated top-level images field from saved data');
+      delete updated.images;
+    }
 
     // Write atomically: write to a temp file then rename it into place to avoid
     // readers seeing a truncated/partial file during concurrent writes.
@@ -265,6 +490,12 @@ app.post('/api/save-model', (req, res) => {
     fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf8');
     fs.renameSync(tmpPath, absoluteFilePath);
     console.log('Model updated and saved to:', absoluteFilePath);
+    // Ensure newly saved munchie is post-processed to have canonical userDefined
+    try {
+      await postProcessMunchieFile(absoluteFilePath);
+    } catch (e) {
+      console.warn('postProcessMunchieFile failed after save for', absoluteFilePath, e);
+    }
     // Return cleaned and rejected related_files for client feedback
     res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles });
   } catch (err) {
@@ -387,15 +618,147 @@ app.post('/api/scan-models', async (req, res) => {
     const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const dir = getModelsDirectory();
     const result = await scanDirectory(dir, fileType);
-    res.json({ 
-      success: true, 
-      message: 'Model JSON files generated successfully.',
-      processed: result.processed,
-      skipped: result.skipped
-    });
+
+    // Post-process any newly created munchie files to ensure userDefined thumbnail/imageOrder
+    try {
+      const modelsDir = getAbsoluteModelsPath();
+      function findAndPostProcess(directory) {
+        const entries = fs.readdirSync(directory, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(directory, entry.name);
+          if (entry.isDirectory()) {
+            findAndPostProcess(full);
+          } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+            // Always attempt to post-process (the helper is defensive)
+            try { postProcessMunchieFile(full); } catch (e) { /* ignore */ }
+          }
+        }
+      }
+      findAndPostProcess(modelsDir);
+    } catch (e) {
+      console.warn('Post-processing after scan failed:', e);
+    }
+
+    res.json({ success: true, message: 'Model JSON files generated successfully.', processed: result.processed, skipped: result.skipped });
   } catch (error) {
     console.error('Model JSON generation error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate model JSON files.', error: error.message });
+  }
+});
+
+// API endpoint to migrate legacy top-level thumbnail/images into parsedImages + userDefined
+app.post('/api/migrate-legacy-images', async (req, res) => {
+  try {
+    const modelsDir = getAbsoluteModelsPath();
+    const migrated = [];
+    const skipped = [];
+    const errors = [];
+
+    function scanAndMigrate(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scanAndMigrate(full);
+        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+          try {
+            const raw = fs.readFileSync(full, 'utf8');
+            if (!raw || raw.trim().length === 0) { skipped.push({ file: full, reason: 'empty' }); continue; }
+            let data = JSON.parse(raw);
+            let changed = false;
+
+            // Legacy top-level images -> parsedImages
+            if (Array.isArray(data.images) && (!Array.isArray(data.parsedImages) || data.parsedImages.length === 0)) {
+              data.parsedImages = data.images.slice();
+              delete data.images;
+              changed = true;
+            }
+
+            // Legacy top-level thumbnail handling
+            if (data.thumbnail && typeof data.thumbnail === 'string') {
+              // If it's a base64/data URL, move it into parsedImages as the first item
+              if (data.thumbnail.startsWith('data:')) {
+                if (!Array.isArray(data.parsedImages)) data.parsedImages = [];
+                // If the same data already exists in parsedImages, remove duplicates first
+                const existingIdx = data.parsedImages.findIndex(p => p === data.thumbnail || (p && p.data === data.thumbnail));
+                if (existingIdx !== -1) {
+                  // Remove existing occurrence
+                  data.parsedImages.splice(existingIdx, 1);
+                }
+                // Prepend the thumbnail so it becomes parsed:0
+                data.parsedImages.unshift(data.thumbnail);
+                // Ensure we don't accidentally leave a top-level thumbnail
+                delete data.thumbnail;
+                changed = true;
+              } else if (!data.userDefined) {
+                // Non-data thumbnail and no existing userDefined - try to synthesize a nested thumbnail
+                if (/^parsed:\d+|^user:\d+/.test(data.thumbnail)) {
+                  data.userDefined = { thumbnail: data.thumbnail };
+                } else if (Array.isArray(data.parsedImages) && data.parsedImages.indexOf(data.thumbnail) !== -1) {
+                  const idx = data.parsedImages.indexOf(data.thumbnail);
+                  data.userDefined = { thumbnail: `parsed:${idx}` };
+                } else {
+                  data.userDefined = { thumbnail: data.thumbnail };
+                }
+                delete data.thumbnail;
+                changed = true;
+              } else {
+                // If userDefined already exists, just remove the top-level thumbnail to avoid duplication
+                    try { delete data.thumbnail; } catch (e) { }
+                changed = true;
+              }
+            }
+
+            // Ensure userDefined.images exists if there are any user images encoded on the old top-level
+            if (data.userDefined && typeof data.userDefined === 'object') {
+              if (!Array.isArray(data.userDefined.images)) data.userDefined.images = [];
+            }
+
+            // Ensure imageOrder and thumbnail defaults for parsedImages (reuse helper's logic)
+            if (Array.isArray(data.parsedImages) && data.parsedImages.length > 0) {
+              if (!data.userDefined || typeof data.userDefined !== 'object') data.userDefined = {};
+              if (!data.userDefined.thumbnail) {
+                data.userDefined.thumbnail = 'parsed:0';
+                changed = true;
+              }
+              if (!Array.isArray(data.userDefined.imageOrder) || data.userDefined.imageOrder.length === 0) {
+                const order = [];
+                for (let i = 0; i < data.parsedImages.length; i++) order.push(`parsed:${i}`);
+                const userImgs = Array.isArray(data.userDefined.images) ? data.userDefined.images : [];
+                for (let i = 0; i < userImgs.length; i++) order.push(`user:${i}`);
+                data.userDefined.imageOrder = order;
+                changed = true;
+              }
+            }
+
+            // Finally, remove any legacy top-level fields to keep the file normalized
+            if (Object.prototype.hasOwnProperty.call(data, 'images')) {
+              try { delete data.images; changed = true; } catch (e) { /* ignore */ }
+            }
+            if (Object.prototype.hasOwnProperty.call(data, 'thumbnail')) {
+              try { delete data.thumbnail; changed = true; } catch (e) { /* ignore */ }
+            }
+
+            if (changed) {
+              const tmp = full + '.tmp';
+              fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+              fs.renameSync(tmp, full);
+              migrated.push(full);
+            } else {
+              skipped.push(full);
+            }
+          } catch (e) {
+            errors.push({ file: full, error: e.message || String(e) });
+          }
+        }
+      }
+    }
+
+    scanAndMigrate(modelsDir);
+    res.json({ success: true, migrated: migrated.length, migratedFiles: migrated, skipped: skipped.length, skippedFiles: skipped, errors });
+  } catch (e) {
+    console.error('Migration endpoint failed:', e);
+    res.status(500).json({ success: false, error: e.message || String(e) });
   }
 });
 
@@ -447,7 +810,6 @@ app.get('/api/load-config', (req, res) => {
 app.post('/api/regenerate-munchie-files', async (req, res) => {
   try {
     const { modelIds } = req.body;
-    
     if (!Array.isArray(modelIds) || modelIds.length === 0) {
       return res.status(400).json({ success: false, error: 'No model IDs provided' });
     }
@@ -457,15 +819,12 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
     let processed = 0;
     let errors = [];
 
-    // Get all models to find the ones we need to regenerate
+    // Build a list of existing munchie files (with filePath and jsonPath)
     let allModels = [];
-    
     function scanForModels(directory) {
       const entries = fs.readdirSync(directory, { withFileTypes: true });
-      
       for (const entry of entries) {
         const fullPath = path.join(directory, entry.name);
-        
         if (entry.isDirectory()) {
           scanForModels(fullPath);
         } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
@@ -473,45 +832,39 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
             const fileContent = fs.readFileSync(fullPath, 'utf8');
             const model = JSON.parse(fileContent);
             const relativePath = path.relative(modelsDir, fullPath);
-            
-            // Set the correct filePath based on model type
             if (entry.name.endsWith('-stl-munchie.json')) {
               model.filePath = relativePath.replace('-stl-munchie.json', '.stl');
-              model.jsonPath = fullPath;
             } else {
               model.filePath = relativePath.replace('-munchie.json', '.3mf');
-              model.jsonPath = fullPath;
             }
-            
+            model.jsonPath = fullPath;
             allModels.push(model);
-          } catch (error) {
-            console.error(`Error reading model file ${fullPath}:`, error);
+          } catch (e) {
+            console.warn('Skipping invalid munchie file during regenerate scan:', fullPath, e);
           }
         }
       }
     }
-    
+
     scanForModels(modelsDir);
 
     for (const modelId of modelIds) {
       const model = allModels.find(m => m.id === modelId);
-      
       if (!model) {
         errors.push({ modelId, error: 'Model not found' });
         continue;
       }
 
       try {
-        // Get the actual model file path
         const modelFilePath = path.join(modelsDir, model.filePath);
-        
         if (!fs.existsSync(modelFilePath)) {
           errors.push({ modelId, error: 'Model file not found' });
           continue;
         }
 
-        // Backup user data before regenerating
-        const currentData = JSON.parse(fs.readFileSync(model.jsonPath, 'utf8'));
+        // Backup user-managed fields from existing JSON
+        let currentData = {};
+        try { currentData = JSON.parse(fs.readFileSync(model.jsonPath, 'utf8')); } catch (e) { /* ignore */ }
         const userDataBackup = {
           tags: currentData.tags || [],
           isPrinted: currentData.isPrinted || false,
@@ -522,14 +875,14 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           license: currentData.license || "",
           hidden: currentData.hidden || false,
           source: currentData.source || "",
-          price: currentData.price || 0
+          price: currentData.price || 0,
+          related_files: Array.isArray(currentData.related_files) ? currentData.related_files : [],
+          userDefined: currentData.userDefined && typeof currentData.userDefined === 'object' ? currentData.userDefined : {}
         };
 
-        // Generate new metadata
-        let newMetadata;
         const buffer = fs.readFileSync(modelFilePath);
         const hash = computeMD5(buffer);
-        
+        let newMetadata;
         if (model.filePath.toLowerCase().endsWith('.3mf')) {
           newMetadata = await parse3MF(modelFilePath, model.id, hash);
         } else if (model.filePath.toLowerCase().endsWith('.stl')) {
@@ -539,44 +892,48 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           continue;
         }
 
-        // Merge with user data
-        const mergedMetadata = {
-          ...newMetadata,
-          ...userDataBackup,
-          id: model.id, // Preserve the original ID
-          hash: hash
-        };
+        const mergedMetadata = { ...newMetadata, ...userDataBackup, id: model.id, hash };
 
-        // Write the regenerated file
+        // Rebuild imageOrder so descriptors point to correct indexes
+        try {
+          const parsed = Array.isArray(mergedMetadata.parsedImages) ? mergedMetadata.parsedImages : (Array.isArray(mergedMetadata.images) ? mergedMetadata.images : []);
+          const userArr = Array.isArray(mergedMetadata.userDefined?.images) ? mergedMetadata.userDefined.images : [];
+          const getUserImageData = (entry) => {
+            if (!entry) return '';
+            if (typeof entry === 'string') return entry;
+            if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
+            return '';
+          };
+
+          const combined = [].concat(parsed).concat(userArr.map(u => getUserImageData(u)));
+          const rebuiltOrder = [];
+          for (let i = 0; i < parsed.length; i++) rebuiltOrder.push(`parsed:${i}`);
+          for (let i = 0; i < userArr.length; i++) rebuiltOrder.push(`user:${i}`);
+
+          if (!mergedMetadata.userDefined || typeof mergedMetadata.userDefined !== 'object') mergedMetadata.userDefined = {};
+          mergedMetadata.userDefined = { ...(mergedMetadata.userDefined || {}), imageOrder: rebuiltOrder };
+        } catch (e) {
+          console.warn('Failed to rebuild userDefined.imageOrder during regeneration:', e);
+        }
+
+        // Write the regenerated file and post-process
         fs.writeFileSync(model.jsonPath, JSON.stringify(mergedMetadata, null, 2), 'utf8');
+        await postProcessMunchieFile(model.jsonPath);
         processed++;
-        
         console.log(`Regenerated munchie file for model: ${model.name}`);
-        
+
       } catch (error) {
         console.error(`Error regenerating munchie file for model ${modelId}:`, error);
         errors.push({ modelId, error: error.message });
       }
     }
 
-    res.json({
-      success: errors.length === 0,
-      processed,
-      errors,
-      message: `Regenerated ${processed} munchie files${errors.length > 0 ? ` with ${errors.length} errors` : ''}`
-    });
-
+    res.json({ success: errors.length === 0, processed, errors, message: `Regenerated ${processed} munchie files${errors.length > 0 ? ` with ${errors.length} errors` : ''}` });
   } catch (error) {
     console.error('Munchie file regeneration error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to regenerate munchie files.', 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: 'Failed to regenerate munchie files.', error: error.message });
   }
 });
-
-// --- API: Get all -munchie.json files and their hashes ---
 
 // --- API: Get all -munchie.json files and their hashes ---
 app.get('/api/munchie-files', (req, res) => {
@@ -766,19 +1123,75 @@ app.post('/api/hash-check', async (req, res) => {
 // API endpoint to load a model from a munchie.json file
 app.get('/api/load-model', async (req, res) => {
   try {
-    const { filePath } = req.query;
-    console.log('Load model request for:', filePath);
+    const { filePath, id } = req.query;
+    // Prefer id-based lookup when provided (more robust)
+    const modelsDir = path.resolve(getModelsDirectory());
+
+    // If `id` provided, try scanning for a munchie.json with matching id
+    if (id && typeof id === 'string' && id.trim().length > 0) {
+      safeLog('Load model by id requested', { id });
+      // Recursively search munchie files for matching id
+      function findById(dir) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            const r = findById(full);
+            if (r) return r;
+          } else if (entry.name.toLowerCase().endsWith('-munchie.json') || entry.name.toLowerCase().endsWith('-stl-munchie.json')) {
+            try {
+              const raw = fs.readFileSync(full, 'utf8');
+              if (!raw || raw.trim().length === 0) continue;
+              const parsed = JSON.parse(raw);
+              if (parsed && (parsed.id === id || parsed.name === id)) {
+                return full;
+              }
+            } catch (e) {
+              // ignore parse/read errors
+            }
+          }
+        }
+        return null;
+      }
+
+      try {
+        const found = findById(modelsDir);
+        if (found) {
+          const content = fs.readFileSync(found, 'utf8');
+          const parsed = JSON.parse(content);
+          return res.json(parsed);
+        }
+        // If search completed without finding a match, return 404 to indicate not found
+        return res.status(404).json({ success: false, error: 'Model not found for id' });
+      } catch (e) {
+        console.error('Error during id lookup for /api/load-model (falling back to filePath):', e);
+        // On unexpected errors, fall through to filePath handling below
+      }
+    }
+
+    console.log('Load model request for filePath:', filePath, 'id:', id);
+
     if (!filePath || typeof filePath !== 'string') {
       return res.status(400).json({ success: false, error: 'Missing file path' });
     }
 
-    // Resolve the path relative to the application root
-    const fullPath = path.resolve(filePath);
-    console.log('Resolved path:', fullPath);
+    // If filePath is absolute, resolve it directly. If relative, treat it as relative to the models directory
+    let fullPath;
+    if (path.isAbsolute(filePath)) {
+      fullPath = path.resolve(filePath);
+    } else {
+      // Normalize incoming slashes and strip leading slash if present
+      let rel = filePath.replace(/\\/g, '/').replace(/^\//, '');
+      // Prevent traversal attempts
+      if (rel.includes('..')) return res.status(400).json({ success: false, error: 'Invalid relative path' });
+      fullPath = path.join(modelsDir, rel);
+    }
+    safeLog('Resolved path for /api/load-model', { resolved: fullPath });
 
     // Ensure the path is within the models directory for security
-    const modelsDir = path.resolve(getModelsDirectory());
-    if (!fullPath.startsWith(modelsDir)) {
+    const resolvedModelsDir = modelsDir.endsWith(path.sep) ? modelsDir : modelsDir + path.sep;
+    const resolvedFull = fullPath;
+    if (!resolvedFull.startsWith(modelsDir) && !resolvedFull.startsWith(resolvedModelsDir)) {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
@@ -796,7 +1209,6 @@ app.get('/api/load-model', async (req, res) => {
 
     // Read the file content first to check if it's valid
     const fileContent = fs.readFileSync(fullPath, 'utf8');
-    console.log('File content length:', fileContent.length);
     if (fileContent.trim().length === 0) {
       console.log('Empty file detected:', fullPath);
       return res.status(400).json({ success: false, error: 'Empty file' });
@@ -960,6 +1372,64 @@ async function getAllModels(modelsDirectory) {
   
   return models;
 }
+
+// API endpoint: Gemini suggestion (provider-backed with mock fallback)
+app.post('/api/gemini-suggest', async (req, res) => {
+  try {
+    const { imageBase64, mimeType, prompt } = req.body || {};
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ success: false, error: 'Prompt is required' });
+    }
+
+    // imageBase64 is optional; validate shape if provided
+    if (imageBase64 && typeof imageBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'imageBase64 must be a base64 string' });
+    }
+
+    const requestedProvider = (req.body && req.body.provider) || process.env.GEMINI_PROVIDER;
+    safeLog('Received /api/gemini-suggest request', { prompt, mimeType, provider: requestedProvider });
+
+    // Try provider adapter (pass requested provider)
+    let genaiResult = null;
+    try {
+      const adapter = require('./server-utils/genaiAdapter');
+      genaiResult = await adapter.suggest({ prompt, imageBase64, mimeType, provider: requestedProvider });
+    } catch (e) {
+      console.warn('GenAI adapter error or not configured:', e && e.message);
+      genaiResult = null;
+    }
+
+    if (genaiResult) {
+      // Normalize result
+      const suggestion = {
+        description: genaiResult.description || '',
+        category: genaiResult.category || '',
+        tags: Array.isArray(genaiResult.tags) ? genaiResult.tags : []
+      };
+      return res.json({ success: true, suggestion, raw: genaiResult.raw || null });
+    }
+
+    // Fallback mock behavior (previous heuristic)
+    const lower = prompt.toLowerCase();
+    const words = Array.from(new Set(lower.replace(/[\W_]+/g, ' ').split(/\s+/).filter(w => w.length > 3)));
+    const tags = words.slice(0, 6);
+    const description = `AI suggestion (mock) based on prompt: ${prompt}`;
+    const category = tags.length ? tags[0] : '';
+
+    const suggestion = {
+      description,
+      category,
+      tags
+    };
+
+    return res.json({ success: true, suggestion, raw: null });
+  } catch (err) {
+    console.error('/api/gemini-suggest error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 // API endpoint to delete models by ID (deletes specified file types)
 app.delete('/api/models/delete', async (req, res) => {
