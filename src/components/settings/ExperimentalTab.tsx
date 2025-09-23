@@ -548,7 +548,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                 className="flex items-center gap-3 rounded border p-2 text-left hover:bg-muted"
               >
                 <img
-                  src={resolveModelThumbnail(m as any) || "/public/demo-data/images/placeholder.svg"}
+                  src={resolveModelThumbnail(m as any) || "/images/placeholder.svg"}
                   alt={m.name}
                   className="h-12 w-12 object-cover rounded"
                   onError={(e) => {
