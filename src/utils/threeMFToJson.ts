@@ -28,12 +28,12 @@ interface ModelMetadata {
   hash: string;
   printSettings: PrintSettings;
   price: number;
-  userDefined: Array<{
+  userDefined?: {
     description?: string;
     thumbnail?: string;
     images?: string[];
     imageOrder?: string[];
-  }>;
+  };
 }
 
 function bytesToMB(bytes: number): string {
@@ -79,7 +79,7 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
       nozzle: ""
     },
     price: 0,
-    userDefined: []
+    userDefined: {}
   };
 
   try {
@@ -269,12 +269,13 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
       }
     }
 
-    // Create userDefined[0].imageOrder based on parsedImages
+    // Create userDefined.imageOrder based on parsedImages
     if (metadata.parsedImages.length > 0) {
       const imageOrder = metadata.parsedImages.map((_, index) => `parsed:${index}`);
-      metadata.userDefined = [{
+      metadata.userDefined = {
+        ...metadata.userDefined,
         imageOrder: imageOrder
-      }];
+      };
     }
   } catch (err) {
     console.error(`Error parsing 3MF file ${filePath}:`, err);
@@ -309,7 +310,7 @@ export async function parseSTL(filePath: string, id: string, precomputedHash?: s
       nozzle: ""
     },
     price: 0,
-    userDefined: []
+    userDefined: {}
   };
 
   // Use filename as name for STL files

@@ -60,7 +60,7 @@ import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 // Icon component for model thumbnails
 const ModelThumbnail = ({ thumbnail, name, model }: { thumbnail?: string | null; name: string; model?: any }) => {
   // If a model object is provided prefer resolving via resolver which supports
-  // userDefined[0].thumbnail descriptors and parsedImages. Otherwise fall back
+  // userDefined.thumbnail descriptors and parsedImages. Otherwise fall back
   // to the explicit thumbnail prop.
   const src = model ? resolveModelThumbnail(model) : (thumbnail || '');
 

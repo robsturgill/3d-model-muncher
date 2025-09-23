@@ -23,7 +23,7 @@ type ModelEntry = {
   modelUrl?: string;
   tags?: string[];
   parsedImages?: string[];
-  userDefined?: any[];
+  userDefined?: any;
   images?: string[];
 };
 
@@ -59,7 +59,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
             // keep thumbnail compatibility but also preserve parsedImages/userDefined so resolver can work
             thumbnail: m.thumbnail ?? m.image ?? m.preview ?? undefined,
             parsedImages: Array.isArray(m.parsedImages) ? m.parsedImages : (Array.isArray(m.parsed_images) ? m.parsed_images : []),
-            userDefined: Array.isArray(m.userDefined) ? m.userDefined : (Array.isArray(m.user_defined) ? m.user_defined : undefined),
+            userDefined: (m.userDefined && typeof m.userDefined === 'object') ? m.userDefined : (m.user_defined && typeof m.user_defined === 'object' ? m.user_defined : undefined),
             images: Array.isArray(m.images) ? m.images : undefined,
             category: m.category ?? "",
             // preserve underlying file path / modelUrl when provided so we can derive munchie.json
@@ -870,8 +870,8 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                         id: selected?.id ?? selected?.name ?? undefined,
                         category: editCategory || selected?.category || undefined,
                         tags: editTags.length > 0 ? editTags : (selected?.tags ?? undefined),
-                        // overwrite userDefined array with a single entry (experimental behavior)
-                        userDefined: [ toSave ]
+                        // overwrite userDefined object with provided fields (experimental behavior)
+                        userDefined: toSave
                       };
 
                       const r = await fetch('/api/save-model', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });

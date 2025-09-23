@@ -67,7 +67,7 @@ export function ModelCard({
 
   // Resolve thumbnail descriptor to actual image URL
   const resolveThumbnail = () => {
-    const thumbnailDesc = (model as any).userDefined?.[0]?.thumbnail;
+  const thumbnailDesc = (model as any).userDefined?.thumbnail;
     
     if (thumbnailDesc && typeof thumbnailDesc === 'string') {
       // Handle descriptor format (parsed:0, user:1, etc.)
@@ -86,7 +86,7 @@ export function ModelCard({
         }
       } else if (thumbnailDesc.startsWith('user:')) {
         const idx = parseInt(thumbnailDesc.split(':')[1] || '', 10);
-        const userImages = (model as any).userDefined?.[0]?.images;
+  const userImages = (model as any).userDefined?.images;
         if (!isNaN(idx) && Array.isArray(userImages) && userImages[idx]) {
           return getUserImageData(userImages[idx]);
         }

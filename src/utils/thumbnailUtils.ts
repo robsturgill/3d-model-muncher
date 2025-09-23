@@ -9,8 +9,8 @@ export function getUserImageData(entry: any): string {
 export function resolveModelThumbnail(model: any): string {
   if (!model) return '';
 
-  // Descriptor stored by UI in userDefined[0].thumbnail (e.g. 'parsed:0', 'user:1', or a literal data URL)
-  const thumbnailDesc = (model as any)?.userDefined?.[0]?.thumbnail;
+  // Descriptor stored by UI in userDefined.thumbnail (e.g. 'parsed:0', 'user:1', or a literal data URL)
+    const thumbnailDesc = (model as any)?.userDefined?.thumbnail;
 
   if (thumbnailDesc && typeof thumbnailDesc === 'string') {
     if (thumbnailDesc.startsWith('parsed:')) {
@@ -25,7 +25,7 @@ export function resolveModelThumbnail(model: any): string {
       }
     } else if (thumbnailDesc.startsWith('user:')) {
       const idx = parseInt(thumbnailDesc.split(':')[1] || '', 10);
-      const userImages = (model as any)?.userDefined?.[0]?.images;
+        const userImages = (model as any)?.userDefined?.images;
       if (!isNaN(idx) && Array.isArray(userImages) && userImages[idx]) {
         return getUserImageData(userImages[idx]);
       }

@@ -364,7 +364,7 @@ export function BulkEditDrawer({
     // Migrate description into userDefined for consistency with other components
     if (typeof changes.description !== 'undefined') {
       const desc = changes.description;
-      changes.userDefined = [{ description: desc }];
+  changes.userDefined = { description: desc };
       delete changes.description;
     }
     

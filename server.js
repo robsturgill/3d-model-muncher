@@ -104,7 +104,7 @@ function getAbsoluteModelsPath() {
   return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
 }
 
-// Helper: ensure munchie JSON has userDefined[0].thumbnail and imageOrder when appropriate
+  // Helper: ensure munchie JSON has userDefined.thumbnail and imageOrder when appropriate
 async function postProcessMunchieFile(absoluteFilePath) {
   try {
     if (!fs.existsSync(absoluteFilePath)) return;
@@ -114,27 +114,55 @@ async function postProcessMunchieFile(absoluteFilePath) {
     try { data = JSON.parse(raw); } catch (e) { return; }
 
     const parsedImages = Array.isArray(data.parsedImages) ? data.parsedImages : (Array.isArray(data.images) ? data.images : []);
-    const udExists = Array.isArray(data.userDefined) && data.userDefined.length > 0;
-    let changed = false;
+  // Normalize legacy userDefined shapes:
+  // - array (old generator produced [ { ... } ])
+  // - object that contains numeric keys like '0' (previous saves produced object with '0')
+  let changed = false;
+  let udExists = data.userDefined && typeof data.userDefined === 'object';
+  try {
+    if (Array.isArray(data.userDefined)) {
+      // Convert array -> single object using first entry
+      data.userDefined = data.userDefined.length > 0 && typeof data.userDefined[0] === 'object' ? { ...(data.userDefined[0]) } : {};
+      udExists = true;
+      changed = true;
+    } else if (udExists && Object.prototype.hasOwnProperty.call(data.userDefined, '0')) {
+      // Convert object with numeric '0' key into normal object shape
+      const zero = data.userDefined['0'] && typeof data.userDefined['0'] === 'object' ? { ...(data.userDefined['0']) } : {};
+      // preserve any top-level fields (images, thumbnail, imageOrder) that exist
+      const imgs = Array.isArray(data.userDefined.images) ? data.userDefined.images : undefined;
+      const thumb = typeof data.userDefined.thumbnail !== 'undefined' ? data.userDefined.thumbnail : undefined;
+      const order = Array.isArray(data.userDefined.imageOrder) ? data.userDefined.imageOrder : undefined;
+      const normalized = { ...zero };
+      if (typeof imgs !== 'undefined') normalized.images = imgs;
+      if (typeof thumb !== 'undefined') normalized.thumbnail = thumb;
+      if (typeof order !== 'undefined') normalized.imageOrder = order;
+      data.userDefined = normalized;
+      udExists = true;
+      changed = true;
+    }
+  } catch (e) {
+    // if normalization fails, don't block post-processing
+    console.warn('Failed to normalize legacy userDefined shape:', e);
+  }
 
     if (parsedImages && parsedImages.length > 0) {
-      // Ensure userDefined[0] exists
+      // Ensure userDefined object exists
       if (!udExists) {
-        data.userDefined = [{}];
+        data.userDefined = {};
         changed = true;
       }
       // Ensure thumbnail descriptor exists
-      if (!data.userDefined[0].thumbnail) {
-        data.userDefined[0].thumbnail = 'parsed:0';
+      if (!data.userDefined.thumbnail) {
+        data.userDefined.thumbnail = 'parsed:0';
         changed = true;
       }
       // Ensure imageOrder exists and lists parsed images first
-      if (!Array.isArray(data.userDefined[0].imageOrder) || data.userDefined[0].imageOrder.length === 0) {
+      if (!Array.isArray(data.userDefined.imageOrder) || data.userDefined.imageOrder.length === 0) {
         const imageOrder = [];
         for (let i = 0; i < parsedImages.length; i++) imageOrder.push(`parsed:${i}`);
-        const userImgs = Array.isArray(data.userDefined[0].images) ? data.userDefined[0].images : [];
+        const userImgs = Array.isArray(data.userDefined.images) ? data.userDefined.images : [];
         for (let i = 0; i < userImgs.length; i++) imageOrder.push(`user:${i}`);
-        data.userDefined[0].imageOrder = imageOrder;
+        data.userDefined.imageOrder = imageOrder;
         changed = true;
       }
     }
@@ -151,7 +179,7 @@ async function postProcessMunchieFile(absoluteFilePath) {
 }
 
 // API endpoint to save a model to its munchie.json file
-app.post('/api/save-model', (req, res) => {
+app.post('/api/save-model', async (req, res) => {
   console.log('Save model endpoint hit!'); // Debug log
   console.log('Request body:', req.body); // Debug log
   let { filePath, id, ...changes } = req.body || {};
@@ -362,6 +390,29 @@ app.post('/api/save-model', (req, res) => {
       rejectedRelatedFiles = nf.rejected;
     }
 
+    // Normalize incoming userDefined shape (accept array, object-with-'0', or object)
+    try {
+      if (cleanChanges.userDefined) {
+        if (Array.isArray(cleanChanges.userDefined) && cleanChanges.userDefined.length > 0) {
+          cleanChanges.userDefined = cleanChanges.userDefined[0];
+        } else if (typeof cleanChanges.userDefined === 'object' && Object.prototype.hasOwnProperty.call(cleanChanges.userDefined, '0')) {
+          // Merge numeric '0' into top-level and keep other top-level fields
+          const zero = cleanChanges.userDefined['0'] && typeof cleanChanges.userDefined['0'] === 'object' ? { ...(cleanChanges.userDefined['0']) } : {};
+          const imgs = Array.isArray(cleanChanges.userDefined.images) ? cleanChanges.userDefined.images : undefined;
+          const thumb = typeof cleanChanges.userDefined.thumbnail !== 'undefined' ? cleanChanges.userDefined.thumbnail : undefined;
+          const order = Array.isArray(cleanChanges.userDefined.imageOrder) ? cleanChanges.userDefined.imageOrder : undefined;
+          const normalized = { ...zero };
+          if (typeof imgs !== 'undefined') normalized.images = imgs;
+          if (typeof thumb !== 'undefined') normalized.thumbnail = thumb;
+          if (typeof order !== 'undefined') normalized.imageOrder = order;
+          cleanChanges.userDefined = normalized;
+        }
+      }
+
+    } catch (e) {
+      console.warn('Failed to normalize incoming userDefined in save-model:', e);
+    }
+
     // At this point we've computed the cleaned changes. Log a concise message:
     if (!cleanChanges || Object.keys(cleanChanges).length === 0) {
       safeLog('Save model request: No changes to apply for', { filePath });
@@ -372,50 +423,58 @@ app.post('/api/save-model', (req, res) => {
       safeLog('Save model request:', { filePath, changes: sanitizeForLog(cleanChanges) });
     }
 
-  // Merge changes carefully. We specially merge `userDefined` arrays so that
+  // Merge changes carefully. We specially merge `userDefined` so that
     // we don't blindly overwrite existing user data (which could strip images
     // or imageOrder). The client is expected to write descriptors into
-    // `userDefined[0].imageOrder` (no legacy top-level imageOrder support).
+    // `userDefined.imageOrder` (no legacy top-level imageOrder support).
     const updated = { ...existing };
     for (const key of Object.keys(cleanChanges)) {
       if (key === 'userDefined') continue; // handle after loop
       updated[key] = cleanChanges[key];
     }
 
-    if (Array.isArray(cleanChanges.userDefined)) {
-      const existingUD = Array.isArray(existing.userDefined) ? existing.userDefined.slice() : [];
-      const incomingUD = cleanChanges.userDefined.slice();
-      const mergedUD = [];
-      // Merge first entry shallowly (preserve existing fields unless overridden)
-      const mergedFirst = { ...(existingUD[0] || {}), ...(incomingUD[0] || {}) };
-      mergedUD.push(mergedFirst);
-      // If incoming provided more entries, append them; otherwise preserve existing tail entries
-      if (incomingUD.length > 1) {
-        mergedUD.push(...incomingUD.slice(1));
-      } else if (existingUD.length > 1) {
-        mergedUD.push(...existingUD.slice(1));
-      }
-      // Defensive: if the client explicitly sent a nested thumbnail value (including null to clear),
-      // ensure we preserve that exact intent rather than accidentally dropping it during later
-      // normalization. incomingUD is preferred when present.
+    // Merge userDefined carefully. Support legacy cases where existing.userDefined
+    // might be an array (generation produced [ { ... } ]) and where the client
+    // may send either an array or an object. Normalize both sides to a single
+    // object by using the first element of any array as the base object.
+    if (cleanChanges.userDefined) {
+      // Build base from existing data
+      let existingUDObj = {};
       try {
-        if (Array.isArray(incomingUD) && incomingUD.length > 0 && Object.prototype.hasOwnProperty.call(incomingUD[0], 'thumbnail')) {
-          mergedUD[0] = { ...(mergedUD[0] || {}), thumbnail: incomingUD[0].thumbnail };
+        if (Array.isArray(existing.userDefined) && existing.userDefined.length > 0 && typeof existing.userDefined[0] === 'object') {
+          existingUDObj = { ...(existing.userDefined[0] || {}) };
+        } else if (existing.userDefined && typeof existing.userDefined === 'object') {
+          existingUDObj = { ...(existing.userDefined) };
         }
       } catch (e) {
-        // non-fatal: if anything goes wrong here, fall back to the already-merged value
-        console.warn('Warning: failed to apply incoming nested thumbnail during merge:', e);
+        existingUDObj = {};
       }
-      updated.userDefined = mergedUD;
+
+      // Build incoming object (accept array or object)
+      let incomingUDObj = {};
+      try {
+        if (Array.isArray(cleanChanges.userDefined) && cleanChanges.userDefined.length > 0 && typeof cleanChanges.userDefined[0] === 'object') {
+          incomingUDObj = { ...(cleanChanges.userDefined[0] || {}) };
+        } else if (cleanChanges.userDefined && typeof cleanChanges.userDefined === 'object') {
+          incomingUDObj = { ...(cleanChanges.userDefined) };
+        }
+      } catch (e) {
+        incomingUDObj = {};
+      }
+
+      // Shallow merge: incoming fields override existing ones; arrays like
+      // images and imageOrder will be replaced if provided by incomingUDObj.
+      const mergedUDObj = { ...existingUDObj, ...incomingUDObj };
+      updated.userDefined = mergedUDObj;
     }
 
     // Ensure the directory exists
     const dir = path.dirname(absoluteFilePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    // REMOVE LEGACY FIELDS: Remove top-level thumbnail and images from the final saved data
-    // These fields are deprecated in favor of parsedImages (for parsed content) 
-    // and userDefined[0].images (for user-added content)
+  // REMOVE LEGACY FIELDS: Remove top-level thumbnail and images from the final saved data
+  // These fields are deprecated in favor of parsedImages (for parsed content) 
+  // and userDefined.images (for user-added content)
     if (updated.hasOwnProperty('thumbnail')) {
       console.log('Removing deprecated top-level thumbnail field from saved data');
       delete updated.thumbnail;
@@ -431,6 +490,12 @@ app.post('/api/save-model', (req, res) => {
     fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf8');
     fs.renameSync(tmpPath, absoluteFilePath);
     console.log('Model updated and saved to:', absoluteFilePath);
+    // Ensure newly saved munchie is post-processed to have canonical userDefined
+    try {
+      await postProcessMunchieFile(absoluteFilePath);
+    } catch (e) {
+      console.warn('postProcessMunchieFile failed after save for', absoluteFilePath, e);
+    }
     // Return cleaned and rejected related_files for client feedback
     res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles });
   } catch (err) {
@@ -628,40 +693,40 @@ app.post('/api/migrate-legacy-images', async (req, res) => {
               } else if (!data.userDefined) {
                 // Non-data thumbnail and no existing userDefined - try to synthesize a nested thumbnail
                 if (/^parsed:\d+|^user:\d+/.test(data.thumbnail)) {
-                  data.userDefined = [{ thumbnail: data.thumbnail }];
+                  data.userDefined = { thumbnail: data.thumbnail };
                 } else if (Array.isArray(data.parsedImages) && data.parsedImages.indexOf(data.thumbnail) !== -1) {
                   const idx = data.parsedImages.indexOf(data.thumbnail);
-                  data.userDefined = [{ thumbnail: `parsed:${idx}` }];
+                  data.userDefined = { thumbnail: `parsed:${idx}` };
                 } else {
-                  data.userDefined = [{ thumbnail: data.thumbnail }];
+                  data.userDefined = { thumbnail: data.thumbnail };
                 }
                 delete data.thumbnail;
                 changed = true;
               } else {
                 // If userDefined already exists, just remove the top-level thumbnail to avoid duplication
-                try { delete data.thumbnail; } catch (e) { }
+                    try { delete data.thumbnail; } catch (e) { }
                 changed = true;
               }
             }
 
-            // Ensure userDefined[0].images exists if there are any user images encoded on the old top-level
-            if (Array.isArray(data.userDefined) && data.userDefined.length > 0) {
-              if (!Array.isArray(data.userDefined[0].images)) data.userDefined[0].images = [];
+            // Ensure userDefined.images exists if there are any user images encoded on the old top-level
+            if (data.userDefined && typeof data.userDefined === 'object') {
+              if (!Array.isArray(data.userDefined.images)) data.userDefined.images = [];
             }
 
             // Ensure imageOrder and thumbnail defaults for parsedImages (reuse helper's logic)
             if (Array.isArray(data.parsedImages) && data.parsedImages.length > 0) {
-              if (!Array.isArray(data.userDefined) || data.userDefined.length === 0) data.userDefined = [{}];
-              if (!data.userDefined[0].thumbnail) {
-                data.userDefined[0].thumbnail = 'parsed:0';
+              if (!data.userDefined || typeof data.userDefined !== 'object') data.userDefined = {};
+              if (!data.userDefined.thumbnail) {
+                data.userDefined.thumbnail = 'parsed:0';
                 changed = true;
               }
-              if (!Array.isArray(data.userDefined[0].imageOrder) || data.userDefined[0].imageOrder.length === 0) {
+              if (!Array.isArray(data.userDefined.imageOrder) || data.userDefined.imageOrder.length === 0) {
                 const order = [];
                 for (let i = 0; i < data.parsedImages.length; i++) order.push(`parsed:${i}`);
-                const userImgs = Array.isArray(data.userDefined[0].images) ? data.userDefined[0].images : [];
+                const userImgs = Array.isArray(data.userDefined.images) ? data.userDefined.images : [];
                 for (let i = 0; i < userImgs.length; i++) order.push(`user:${i}`);
-                data.userDefined[0].imageOrder = order;
+                data.userDefined.imageOrder = order;
                 changed = true;
               }
             }
@@ -812,7 +877,7 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           source: currentData.source || "",
           price: currentData.price || 0,
           related_files: Array.isArray(currentData.related_files) ? currentData.related_files : [],
-          userDefined: Array.isArray(currentData.userDefined) ? currentData.userDefined : []
+          userDefined: currentData.userDefined && typeof currentData.userDefined === 'object' ? currentData.userDefined : {}
         };
 
         const buffer = fs.readFileSync(modelFilePath);
@@ -832,7 +897,7 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
         // Rebuild imageOrder so descriptors point to correct indexes
         try {
           const parsed = Array.isArray(mergedMetadata.parsedImages) ? mergedMetadata.parsedImages : (Array.isArray(mergedMetadata.images) ? mergedMetadata.images : []);
-          const userArr = Array.isArray(mergedMetadata.userDefined?.[0]?.images) ? mergedMetadata.userDefined[0].images : [];
+          const userArr = Array.isArray(mergedMetadata.userDefined?.images) ? mergedMetadata.userDefined.images : [];
           const getUserImageData = (entry) => {
             if (!entry) return '';
             if (typeof entry === 'string') return entry;
@@ -845,10 +910,10 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           for (let i = 0; i < parsed.length; i++) rebuiltOrder.push(`parsed:${i}`);
           for (let i = 0; i < userArr.length; i++) rebuiltOrder.push(`user:${i}`);
 
-          if (!Array.isArray(mergedMetadata.userDefined) || mergedMetadata.userDefined.length === 0) mergedMetadata.userDefined = [{}];
-          mergedMetadata.userDefined[0] = { ...(mergedMetadata.userDefined[0] || {}), imageOrder: rebuiltOrder };
+          if (!mergedMetadata.userDefined || typeof mergedMetadata.userDefined !== 'object') mergedMetadata.userDefined = {};
+          mergedMetadata.userDefined = { ...(mergedMetadata.userDefined || {}), imageOrder: rebuiltOrder };
         } catch (e) {
-          console.warn('Failed to rebuild userDefined[0].imageOrder during regeneration:', e);
+          console.warn('Failed to rebuild userDefined.imageOrder during regeneration:', e);
         }
 
         // Write the regenerated file and post-process
