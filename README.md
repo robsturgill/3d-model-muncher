@@ -7,6 +7,7 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 ## Features
 
 - **3D Model Viewer**: Built-in Three.js viewer for .3mf & .stl files with automatic thumbnails
+- **Capture 3D previews**: Capture the current camera/view from the built-in 3D viewer and save it directly into a model's images (useful for thumbnails or gallery images). While editing a model in the details drawer, use the capture button to add the exact view you want.
 - **Model Management**: Organize, categorize, and track print status
 - **Advanced Search & Filtering**: Search by name, tags, category, print status, and license
 - **Automatic Scanning**: Auto-generate metadata JSON files from 3MF files

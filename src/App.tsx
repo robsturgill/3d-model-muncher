@@ -52,6 +52,8 @@ function AppContent() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Loading state for initial models fetch (separate from manual refresh)
+  const [isModelsLoading, setIsModelsLoading] = useState(false);
 
   // Dialog states
   const [isDonationDialogOpen, setIsDonationDialogOpen] = useState(false);
@@ -124,6 +126,12 @@ function AppContent() {
         setCategories(config.categories);
 
         // Load models from the backend API
+        setIsModelsLoading(true);
+        // Inform the user that model metadata is being loaded (initial load)
+        toast("Loading model metadata...", {
+          description: "Models are being loaded. This may take a minute for large libraries. Please wait."
+        });
+
         const response = await fetch('/api/models');
         if (!response.ok) {
           throw new Error('Failed to fetch models');
@@ -141,15 +149,17 @@ function AppContent() {
           tags: [] as string[],
           showHidden: false,
         };
-
+  
   const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
   setFilteredModels(visibleModels);
+  setIsModelsLoading(false);
       } catch (error) {
         console.error('Failed to load configuration or models:', error);
         // Use default categories if config fails to load
         const defaultConfig = ConfigManager.getDefaultConfig();
         setAppConfig(defaultConfig);
         setCategories(defaultConfig.categories);
+        setIsModelsLoading(false);
       }
     }
 
@@ -853,6 +863,15 @@ function AppContent() {
 
         {/* Main Content Area */}
         <div className="flex-1 min-h-0">
+          {/* Loading banner shown during initial models load */}
+          {isModelsLoading && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-yellow-800">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <div className="text-sm">
+                Loading models — this may take a minute for large libraries. Please wait...
+              </div>
+            </div>
+          )}
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
@@ -928,6 +947,11 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
+              <h3 className="text-lg">v0.10.x - Release updates</h3>
+              <ul className="list-disc pl-5 list-inside mb-4">
+                <li><strong>Capture 3D previews</strong> - You can now capture the current camera/view from the 3D viewer and save it directly into a model's images while editing. This makes it easy to create thumbnails or gallery images from the exact view you want.</li>
+              </ul>
+              <h3 className="text-lg">v0.9.x - Release updates</h3>
               <ul className="list-disc pl-5 list-inside">
                 <li><strong>Migrations</strong> - Improved image handling to persist user images from parsed images requires migration from versions 0.8.0 and earlier. Use 'Migrate' button in Settings &gt; File Integrity to update files.</li>
                 <li>Regenerating now preserves user metadata.</li>
