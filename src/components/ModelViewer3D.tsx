@@ -74,7 +74,7 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
   const [materialType, setMaterialType] = useState<'standard' | 'normal'>('standard');
   const [customColor, setCustomColor] = useState<string | undefined>(undefined);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const colorInputRef = useRef<HTMLInputElement | null>(null);
+  const colorInputRef = useRef<HTMLInputElement>(null);
   const [isDestroyed, setIsDestroyed] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const instanceId = useRef(`viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
