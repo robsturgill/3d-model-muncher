@@ -1,3 +1,16 @@
+# [0.10.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.9.0...v0.10.0) (2025-09-24)
+
+
+### Bug Fixes
+
+* loading indicators for refresh and initalizing large libraries ([51d71c3](https://github.com/robsturgill/3d-model-muncher/commit/51d71c36fa7f93252d38f539e76ac22596de7ec3)), closes [#20](https://github.com/robsturgill/3d-model-muncher/issues/20)
+* toast secondary text color, fix drawer width on smaller screens exceeding container ([3d07acc](https://github.com/robsturgill/3d-model-muncher/commit/3d07acced08196eadb47e4889a59effcafc3e95d)), closes [#21](https://github.com/robsturgill/3d-model-muncher/issues/21)
+
+
+### Features
+
+* add image capture functionality to ModelViewer3D and saving to model images ([3b1c79c](https://github.com/robsturgill/3d-model-muncher/commit/3b1c79c2d71eb584f438ff276f436e1063a8123c))
+
 # [0.9.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.8.0...v0.9.0) (2025-09-23)
 
 
