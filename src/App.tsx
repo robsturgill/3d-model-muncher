@@ -52,6 +52,8 @@ function AppContent() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Loading state for initial models fetch (separate from manual refresh)
+  const [isModelsLoading, setIsModelsLoading] = useState(false);
 
   // Dialog states
   const [isDonationDialogOpen, setIsDonationDialogOpen] = useState(false);
@@ -124,6 +126,12 @@ function AppContent() {
         setCategories(config.categories);
 
         // Load models from the backend API
+        setIsModelsLoading(true);
+        // Inform the user that model metadata is being loaded (initial load)
+        toast("Loading model metadata...", {
+          description: "Models are being loaded. This may take a minute for large libraries. Please wait."
+        });
+
         const response = await fetch('/api/models');
         if (!response.ok) {
           throw new Error('Failed to fetch models');
@@ -141,15 +149,17 @@ function AppContent() {
           tags: [] as string[],
           showHidden: false,
         };
-
+  
   const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
   setFilteredModels(visibleModels);
+  setIsModelsLoading(false);
       } catch (error) {
         console.error('Failed to load configuration or models:', error);
         // Use default categories if config fails to load
         const defaultConfig = ConfigManager.getDefaultConfig();
         setAppConfig(defaultConfig);
         setCategories(defaultConfig.categories);
+        setIsModelsLoading(false);
       }
     }
 
@@ -853,6 +863,15 @@ function AppContent() {
 
         {/* Main Content Area */}
         <div className="flex-1 min-h-0">
+          {/* Loading banner shown during initial models load */}
+          {isModelsLoading && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-yellow-800">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <div className="text-sm">
+                Loading models — this may take a minute for large libraries. Please wait...
+              </div>
+            </div>
+          )}
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
