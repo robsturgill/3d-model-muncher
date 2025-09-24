@@ -245,3 +245,13 @@ html {
 .list-inside {
   list-style: inside;
 }
+
+[data-sonner-toaster][data-sonner-theme=dark] [data-description]  {
+  color: var(--muted-foreground);
+}
+
+/* Radix ScrollArea inserts an inner wrapper with `display: table` via an inline style.
+   That can break mobile layout for components placed inside the ScrollArea. */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}
