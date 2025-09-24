@@ -3,7 +3,8 @@ import { Canvas } from "@react-three/fiber";
 import '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment, Center, Bounds } from "@react-three/drei";
 import { Button } from "./ui/button";
-import { Eye, EyeOff, RotateCw, Palette } from "lucide-react";
+import { Eye, EyeOff, RotateCw, Palette, ImagePlus } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { Skeleton } from "./ui/skeleton";
 import { ThreeJSManager, disposeWebGLContext } from "../utils/threeJSManager";
 import { ModelMesh } from "./ModelMesh";
@@ -11,6 +12,8 @@ import { ModelMesh } from "./ModelMesh";
 interface ModelViewer3DProps {
   modelUrl?: string;
   modelName?: string;
+  // callback invoked with a PNG data URL of the current canvas render
+  onCapture?: (dataUrl: string) => void;
 }
 
 
@@ -65,12 +68,13 @@ const Scene = memo(({ modelUrl, isWireframe, autoRotate, materialType, customCol
 Scene.displayName = "Scene";
 
 
-export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelViewer3DProps) => {
+export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
   const [materialType, setMaterialType] = useState<'standard' | 'normal'>('standard');
   const [customColor, setCustomColor] = useState<string | undefined>(undefined);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const colorInputRef = useRef<HTMLInputElement | null>(null);
   const [isDestroyed, setIsDestroyed] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const instanceId = useRef(`viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
@@ -122,7 +126,8 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
     gl: { 
       antialias: true, 
       alpha: true, 
-      preserveDrawingBuffer: false,
+      // set to true to allow capturing the canvas via toDataURL()
+      preserveDrawingBuffer: true,
       powerPreference: "high-performance" as const,
       stencil: false, // Reduce memory usage
       depth: true,
@@ -178,49 +183,109 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model" }: ModelVi
 
       {/* Controls */}
       <div className="absolute top-3 right-3 flex gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => !isDestroyed && setAutoRotate(!autoRotate)}
-          className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
-          disabled={isDestroyed}
-          aria-label={autoRotate ? "Stop auto-rotation" : "Start auto-rotation"}
-        >
-          <RotateCw className={`h-4 w-4 ${autoRotate ? 'text-primary animate-spin' : ''}`} />
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => !isDestroyed && setIsWireframe(!isWireframe)}
-          className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
-          disabled={isDestroyed}
-          aria-label={isWireframe ? "Switch to solid view" : "Switch to wireframe view"}
-        >
-          {isWireframe ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-        </Button>
-        {!is3MF && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => !isDestroyed && setMaterialType(materialType === 'standard' ? 'normal' : 'standard')}
-            className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
-            disabled={isDestroyed}
-            aria-label={materialType === 'standard' ? "Switch to normal material" : "Switch to standard material"}
-          >
-            <Palette className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
+        <Tooltip>
+          <TooltipTrigger>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => !isDestroyed && setAutoRotate(!autoRotate)}
+              className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+              disabled={isDestroyed}
+              aria-label={autoRotate ? "Stop auto-rotation" : "Start auto-rotation"}
+            >
+              <RotateCw className={`h-4 w-4 ${autoRotate ? 'text-primary animate-spin' : ''}`} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={8}>{autoRotate ? 'Stop auto-rotation' : 'Start auto-rotation'}</TooltipContent>
+        </Tooltip>
 
-      {/* Color picker for models */}
-      <input
-        type="color"
-        value={customColor || '#aaaaaa'}
-        onChange={(e) => setCustomColor(e.target.value)}
-        className="w-8 h-8 rounded border border-border bg-background/90 backdrop-blur-sm"
-        disabled={isDestroyed}
-        title="Pick custom color for model"
-      />
+        <Tooltip>
+          <TooltipTrigger>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => !isDestroyed && setIsWireframe(!isWireframe)}
+              className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+              disabled={isDestroyed}
+              aria-label={isWireframe ? "Solid view" : "Wireframe view"}
+            >
+              {isWireframe ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={8}>{isWireframe ? 'Solid view' : 'Wireframe view'}</TooltipContent>
+        </Tooltip>
+
+        {!is3MF && (
+          <Tooltip>
+            <TooltipTrigger>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => !isDestroyed && setMaterialType(materialType === 'standard' ? 'normal' : 'standard')}
+                className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+                disabled={isDestroyed}
+                aria-label={materialType === 'standard' ? "Normal material" : "Standard material"}
+              >
+                <Palette className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={8}>{materialType === 'standard' ? 'Normal material' : 'Standard material'}</TooltipContent>
+          </Tooltip>
+        )}
+        {/* Capture current view as image */}
+        <Tooltip>
+          <TooltipTrigger>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                try {
+                  const canvas = canvasRef.current as HTMLCanvasElement | null;
+                  if (!canvas) return;
+                  const data = canvas.toDataURL('image/png');
+                  if (onCapture) onCapture(data);
+                } catch (e) {
+                  console.warn('Capture failed', e);
+                }
+              }}
+              className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+              disabled={isDestroyed}
+              aria-label="Capture view as image"
+            >
+              <ImagePlus className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={8}>Capture image</TooltipContent>
+        </Tooltip>
+
+        {/* Color picker for models */}
+        <Tooltip>
+          <TooltipTrigger>
+            <div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => !isDestroyed && colorInputRef.current?.click()}
+                className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border p-0 w-8 h-8 flex items-center justify-center"
+                disabled={isDestroyed}
+                aria-label="Pick custom color for model"
+              >
+                <span className="w-4 h-4 rounded border" style={{ background: customColor || '#aaaaaa' }} />
+              </Button>
+              <input
+                ref={colorInputRef}
+                type="color"
+                value={customColor || '#aaaaaa'}
+                onChange={(e) => setCustomColor(e.target.value)}
+                className="sr-only"
+                disabled={isDestroyed}
+                aria-hidden
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={8}>Pick custom color</TooltipContent>
+        </Tooltip>
+      </div>
 
       {/* Instructions */}
       <div className="mt-3 text-center">

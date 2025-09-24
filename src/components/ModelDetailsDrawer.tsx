@@ -20,6 +20,7 @@ import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User } from "lucide-react";
 import { Download } from "lucide-react";
+import { toast } from 'sonner';
 import { triggerDownload } from "../utils/downloadUtils";
 
 interface ModelDetailsDrawerProps {
@@ -89,6 +90,8 @@ export function ModelDetailsDrawer({
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
   // Ref mirror to synchronously track fullscreen state (avoids React state update race)
   const isWindowFullscreenRef = useRef<boolean>(false);
+  // Hold a pending captured image if we need to start edit mode first
+  const pendingCapturedImageRef = useRef<string | null>(null);
 
   const handleToggleFullscreen = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -757,6 +760,41 @@ export function ModelDetailsDrawer({
     setIsEditing(true);
   };
 
+  // Insert a captured image data URL into editedModel similar to a user upload.
+  const insertCapturedImageIntoEditedModel = (dataUrl: string) => {
+    if (!editedModel) {
+      // Shouldn't happen; caller ensures editedModel exists or will call startEditing
+      return;
+    }
+
+    // Ensure userDefined structure exists
+    const udObj = (editedModel as any).userDefined && typeof (editedModel as any).userDefined === 'object'
+      ? { ...(editedModel as any).userDefined }
+      : {};
+
+    const existingUserImages: any[] = Array.isArray(udObj.images) ? udObj.images.slice() : [];
+    // Push the new captured image as a simple data URL entry (legacy string form supported)
+    existingUserImages.push(dataUrl);
+    udObj.images = existingUserImages;
+
+    // Build or extend imageOrder to include a descriptor for the new user image.
+    const currentOrder: string[] = Array.isArray(udObj.imageOrder) ? udObj.imageOrder.slice() : buildImageOrderFromModel(editedModel);
+    const newUserIndex = existingUserImages.length - 1;
+    currentOrder.push(`user:${newUserIndex}`);
+    udObj.imageOrder = currentOrder;
+
+    const nextModel = { ...(editedModel as any), userDefined: udObj } as Model;
+
+    // Update edited model and UI gallery (inlineCombined) so the new image appears immediately.
+    setEditedModel(nextModel);
+    const resolved = resolveImageOrderToUrls(nextModel) || [];
+    setInlineCombined(resolved);
+    // Select the newly-added image
+    setSelectedImageIndex(resolved.length - 1);
+    setSelectedImageIndexes([]);
+    try { toast.success('Captured image added to model\'s gallery'); } catch (e) { /* ignore */ }
+  };
+
   const cancelEditing = () => {
     setEditedModel(null);
     setIsEditing(false);
@@ -764,6 +802,28 @@ export function ModelDetailsDrawer({
     setSelectedImageIndexes([]);
     setInlineCombined(null);
   };
+
+  // Called by ModelViewer3D when user captures the current canvas as a PNG data URL.
+  const handleCapturedImage = (dataUrl: string) => {
+    // If not editing yet, stash and start editing. Once editedModel is created,
+    // a useEffect below will consume pendingCapturedImageRef and insert it.
+    pendingCapturedImageRef.current = dataUrl;
+    if (!isEditing) {
+      startEditing();
+    } else if (editedModel) {
+      insertCapturedImageIntoEditedModel(dataUrl);
+      pendingCapturedImageRef.current = null;
+    }
+  };
+
+  // When editedModel becomes available after startEditing(), check for a pending capture
+  useEffect(() => {
+    if (pendingCapturedImageRef.current && editedModel) {
+      const dataUrl = pendingCapturedImageRef.current;
+      pendingCapturedImageRef.current = null;
+      insertCapturedImageIntoEditedModel(dataUrl);
+    }
+  }, [editedModel]);
 
   // Validate and normalize related_files. Returns { cleaned, invalid }.
   // Rules:
@@ -1817,9 +1877,10 @@ export function ModelDetailsDrawer({
               {viewMode === '3d' ? (
                 <ModelViewerErrorBoundary>
                   <ModelViewer3D 
-                    modelUrl={currentModel.modelUrl} 
-                    modelName={currentModel.name}
-                  />
+                      modelUrl={currentModel.modelUrl} 
+                      modelName={currentModel.name}
+                      onCapture={handleCapturedImage}
+                    />
                 </ModelViewerErrorBoundary>
               ) : (
                 <div
