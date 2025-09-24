@@ -1,3 +1,10 @@
+## [0.10.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.10.0...v0.10.1) (2025-09-24)
+
+
+### Bug Fixes
+
+* add configurable model card fields and printed badge visibility ([b9ab6cf](https://github.com/robsturgill/3d-model-muncher/commit/b9ab6cfab385ef1b445bb7fc09ee9e94afa87b1d)), closes [#15](https://github.com/robsturgill/3d-model-muncher/issues/15)
+
 # [0.10.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.9.0...v0.10.0) (2025-09-24)
 
 
