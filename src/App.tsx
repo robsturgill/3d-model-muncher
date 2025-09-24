@@ -884,6 +884,7 @@ function AppContent() {
               onDeselectAll={deselectAllModels}
               onBulkEdit={handleBulkEdit}
               onBulkDelete={handleBulkDeleteClick}
+              config={appConfig}
             />
           ) : currentView === 'settings' ? (
             <SettingsPage 

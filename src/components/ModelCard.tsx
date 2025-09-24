@@ -11,6 +11,9 @@ import {
 } from "./ui/dropdown-menu";
 import { Checkbox } from "./ui/checkbox";
 import { Model } from "../types/model";
+import { ConfigManager } from "../utils/configManager";
+import { getLabel } from "../utils/labels";
+import type { AppConfig } from "../types/config";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { triggerDownload, normalizeModelPath } from "../utils/downloadUtils";
 
@@ -20,6 +23,8 @@ interface ModelCardProps {
   isSelectionMode?: boolean;
   isSelected?: boolean;
   onSelectionChange?: (modelId: string) => void;
+  // Optional config passed from parent for live updates
+  config?: AppConfig;
 }
 
 export function ModelCard({ 
@@ -28,6 +33,7 @@ export function ModelCard({
   isSelectionMode = false,
   isSelected = false,
   onSelectionChange
+  , config
 }: ModelCardProps) {
   
   const handleSelectionClick = (e: React.MouseEvent) => {
@@ -146,20 +152,38 @@ export function ModelCard({
             </div>
           )}
           
-          {/* Print Status - Top Right */}
-          <div className="absolute top-3 right-3">
-            {model.isPrinted ? (
-              <Badge className="bg-green-700 hover:bg-green-600">
-                <Check className="h-3 w-3 mr-1" />
-                Printed
-              </Badge>
-            ) : (
-              <Badge variant="secondary">
-                <Clock className="h-3 w-3 mr-1" />
-                Not Printed
-              </Badge>
-            )}
-          </div>
+          {/* Print Status - Top Right (toggleable via config.showPrintedBadge) */}
+          {(() => {
+            // Prefer passed-in config for live updates, otherwise load persisted config
+            const effectiveCfg = config || ConfigManager.loadConfig();
+            const showPrintedBadge = effectiveCfg?.settings?.showPrintedBadge !== false; // default true
+
+            // Always show the Not Printed badge when the model has not been printed.
+            if (!model.isPrinted) {
+              return (
+                <div className="absolute top-3 right-3">
+                  <Badge variant="secondary">
+                    <Clock className="h-3 w-3 mr-1" />
+                    Not Printed
+                  </Badge>
+                </div>
+              );
+            }
+
+            // If model is printed, only show the Printed badge when enabled in settings
+            if (model.isPrinted && showPrintedBadge) {
+              return (
+                <div className="absolute top-3 right-3">
+                  <Badge className="bg-green-700 hover:bg-green-600">
+                    <Check className="h-3 w-3 mr-1" />
+                    Printed
+                  </Badge>
+                </div>
+              );
+            }
+
+            return null;
+          })()}
         </div>
       </CardHeader>
       
@@ -182,14 +206,46 @@ export function ModelCard({
           )}
         </div>
         <div className="text-muted-foreground space-y-1">
-          <div className="flex justify-between">
-            <span>Print Time:</span>
-            <span>{model.printTime}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Filament:</span>
-            <span>{model.filamentUsed}</span>
-          </div>
+          {(() => {
+            // Prefer config passed in as prop for live updates, otherwise read persisted config
+            const cfg = (arguments.length > 0 && (arguments as any)[0]?.config) || undefined;
+            const effectiveCfg = cfg || ConfigManager.loadConfig();
+            const primary = effectiveCfg?.settings?.modelCardPrimary || 'printTime';
+            const secondary = effectiveCfg?.settings?.modelCardSecondary || 'filamentUsed';
+
+            const fieldValue = (key: string) => {
+              switch (key) {
+                case 'printTime': return model.printTime || '';
+                case 'filamentUsed': return model.filamentUsed || '';
+                case 'fileSize': return model.fileSize || '';
+                case 'category': return model.category || '';
+                case 'designer': return (model as any).designer || '';
+                case 'layerHeight': return model.printSettings?.layerHeight || '';
+                case 'nozzle': return model.printSettings?.nozzle || '';
+                case 'price': return typeof model.price === 'number' ? `$${model.price.toFixed(2)}` : (model.price ? String(model.price) : '');
+                default: return '';
+              }
+            };
+
+            const labelForKey = (key: string) => getLabel(key) + ':';
+
+            const rows: Array<{ label: string; value: string }> = [];
+            if (primary && primary !== 'none') {
+              rows.push({ label: labelForKey(primary), value: fieldValue(primary) });
+            }
+            if (secondary && secondary !== 'none' && secondary !== primary) {
+              rows.push({ label: labelForKey(secondary), value: fieldValue(secondary) });
+            }
+
+            if (rows.length === 0) return null;
+
+            return rows.map((r, i) => (
+              <div className="flex justify-between" key={i}>
+                <span>{r.label}</span>
+                <span>{r.value}</span>
+              </div>
+            ));
+          })()}
         </div>
       </CardContent>
       

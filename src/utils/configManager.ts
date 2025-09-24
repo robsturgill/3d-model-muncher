@@ -19,6 +19,9 @@ export class ConfigManager {
       defaultView: "grid",
       defaultGridDensity: 4,
       defaultModelView: "images",
+      showPrintedBadge: true,
+      modelCardPrimary: 'printTime',
+      modelCardSecondary: 'filamentUsed',
       autoSave: true,
       modelDirectory: "./models",
     },
@@ -68,6 +71,19 @@ export class ConfigManager {
           const validated = this.validateModelView(modelView);
           return validated !== undefined ? validated : this.defaultConfig.settings.defaultModelView;
         })(),
+        modelCardPrimary: ((): 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price' => {
+          const val = config?.settings?.modelCardPrimary;
+          const allowed = ['none', 'printTime', 'filamentUsed', 'fileSize', 'category', 'designer', 'layerHeight', 'nozzle', 'price'];
+          return allowed.includes(val) ? val : this.defaultConfig.settings.modelCardPrimary;
+        })(),
+        modelCardSecondary: ((): 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price' => {
+          const val = config?.settings?.modelCardSecondary;
+          const allowed = ['none', 'printTime', 'filamentUsed', 'fileSize', 'category', 'designer', 'layerHeight', 'nozzle', 'price'];
+          return allowed.includes(val) ? val : this.defaultConfig.settings.modelCardSecondary;
+        })(),
+        showPrintedBadge: typeof config?.settings?.showPrintedBadge === 'boolean'
+          ? config.settings.showPrintedBadge
+          : this.defaultConfig.settings.showPrintedBadge,
         autoSave: config?.settings?.autoSave !== undefined && config.settings.autoSave !== null
           ? Boolean(config.settings.autoSave)
           : this.defaultConfig.settings.autoSave,

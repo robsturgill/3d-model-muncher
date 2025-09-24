@@ -54,6 +54,7 @@ const {
 } = LucideIcons;
 import { toast } from 'sonner';
 import { ImageWithFallback } from './ImageWithFallback';
+import { getLabel } from '../utils/labels';
 
 import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 
@@ -1703,6 +1704,71 @@ export function SettingsPage({
                       <p className="text-xs text-muted-foreground">
                         Choose which view opens by default when viewing model details
                       </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Model Card Fields</Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Primary Field</Label>
+                          <Select
+                            value={localConfig.settings.modelCardPrimary}
+                            onValueChange={(value: string) => handleConfigFieldChange('settings.modelCardPrimary', value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">{getLabel('none')}</SelectItem>
+                              <SelectItem value="printTime">{getLabel('printTime')}</SelectItem>
+                              <SelectItem value="filamentUsed">{getLabel('filamentUsed')}</SelectItem>
+                              <SelectItem value="fileSize">{getLabel('fileSize')}</SelectItem>
+                              <SelectItem value="category">{getLabel('category')}</SelectItem>
+                              <SelectItem value="designer">{getLabel('designer')}</SelectItem>
+                              <SelectItem value="layerHeight">{getLabel('layerHeight')}</SelectItem>
+                              <SelectItem value="nozzle">{getLabel('nozzle')}</SelectItem>
+                              <SelectItem value="price">{getLabel('price')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs">Secondary Field</Label>
+                          <Select
+                            value={localConfig.settings.modelCardSecondary}
+                            onValueChange={(value: string) => handleConfigFieldChange('settings.modelCardSecondary', value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">{getLabel('none')}</SelectItem>
+                              <SelectItem value="printTime">{getLabel('printTime')}</SelectItem>
+                              <SelectItem value="filamentUsed">{getLabel('filamentUsed')}</SelectItem>
+                              <SelectItem value="fileSize">{getLabel('fileSize')}</SelectItem>
+                              <SelectItem value="category">{getLabel('category')}</SelectItem>
+                              <SelectItem value="designer">{getLabel('designer')}</SelectItem>
+                              <SelectItem value="layerHeight">{getLabel('layerHeight')}</SelectItem>
+                              <SelectItem value="nozzle">{getLabel('nozzle')}</SelectItem>
+                              <SelectItem value="price">{getLabel('price')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Select which two properties (if any) are shown under the model name in the cards.</p>
+                    </div>
+
+                    <div className="space-y-2 mt-4">
+                      <Label htmlFor="hide-printed-badge">Hide printed badge</Label>
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          id="hide-printed-badge"
+                          // The switch represents "hide" so invert the stored showPrintedBadge value
+                          checked={!localConfig.settings.showPrintedBadge}
+                          onCheckedChange={(v) => handleConfigFieldChange('settings.showPrintedBadge', !Boolean(v))}
+                        />
+                        <p className="text-xs text-muted-foreground">Toggle to hide the Printed badge on model cards and list views.</p>
+                      </div>
                     </div>
 
                     <div className="flex items-center space-x-3 pt-6 md:col-span-2">

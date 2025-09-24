@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Model } from "../types/model";
+import { AppConfig } from "../types/config";
 import { ModelCard } from "./ModelCard";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { resolveModelThumbnail } from '../utils/thumbnailUtils';
@@ -22,6 +23,9 @@ interface ModelGridProps {
   onDeselectAll?: () => void;
   onBulkEdit?: () => void | Promise<void>;
   onBulkDelete?: () => void | Promise<void>;
+  // Optional app-wide config passed from parent (App) so ModelGrid and ModelCard
+  // can reflect live setting changes without reloading from storage.
+  config?: AppConfig | null;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -57,10 +61,12 @@ export function ModelGrid({
   onSelectAll,
   onDeselectAll,
   onBulkEdit,
-  onBulkDelete
+  onBulkDelete,
+  config: providedConfig
 }: ModelGridProps) {
-  // Initialize from UI prefs first, fall back to global config
-  const config = ConfigManager.loadConfig();
+  // Prefer the provided app config (passed from App) so changes propagate immediately.
+  // Fall back to loading from ConfigManager for standalone usage.
+  const config = providedConfig ?? ConfigManager.loadConfig();
   const uiPrefs = loadUiPrefs();
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -300,6 +306,7 @@ export function ModelGrid({
                   isSelectionMode={isSelectionMode}
                   isSelected={selectedModelIds.includes(model.id)}
                   onSelectionChange={onModelSelection}
+                  config={config}
                 />
               ))}
             </div>
@@ -330,7 +337,7 @@ export function ModelGrid({
 
                   {/* Thumbnail */}
                   <div className="flex-shrink-0">
-                    <div className="relative">
+                      <div className="relative">
                       <ImageWithFallback
                         src={resolveModelThumbnail(model)}
                         alt={model.name}
@@ -340,10 +347,23 @@ export function ModelGrid({
                             : ''
                         }`}
                       />
-                      {/* Print status overlay */}
-                      <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card ${
-                        model.isPrinted ? 'bg-green-700' : 'bg-yellow-500'
-                      }`} />
+                      {/* Print status overlay (hideable via config.showPrintedBadge) */}
+                      {(() => {
+                        const effectiveCfg = providedConfig ?? ConfigManager.loadConfig();
+                        const showBadge = effectiveCfg?.settings?.showPrintedBadge !== false;
+
+                        // If model is NOT printed, always show the not-printed dot
+                        if (!model.isPrinted) {
+                          return <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card bg-yellow-500`} />;
+                        }
+
+                        // If model is printed, only show the printed (green) dot when allowed
+                        if (model.isPrinted && showBadge) {
+                          return <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card bg-green-700`} />;
+                        }
+
+                        return null;
+                      })()}
                     </div>
                   </div>
                   
@@ -391,12 +411,20 @@ export function ModelGrid({
                       
                       {/* Status and Stats */}
                       <div className="flex flex-col items-end gap-3 ml-6">
-                        <Badge 
-                          variant={model.isPrinted ? "default" : "secondary"}
-                          className="font-medium"
-                        >
-                          {model.isPrinted ? "✓ Printed" : "○ Not Printed"}
-                        </Badge>
+                        {(() => {
+                          const effectiveCfg = providedConfig ?? ConfigManager.loadConfig();
+                          const showBadge = effectiveCfg?.settings?.showPrintedBadge !== false;
+                          if (!showBadge) return null;
+
+                          return (
+                            <Badge 
+                              variant={model.isPrinted ? "default" : "secondary"}
+                              className="font-medium"
+                            >
+                              {model.isPrinted ? "✓ Printed" : "○ Not Printed"}
+                            </Badge>
+                          );
+                        })()}
                         
                         <div className="text-xs text-muted-foreground text-right space-y-1">
                           <div className="flex items-center gap-1">
