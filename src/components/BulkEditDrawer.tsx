@@ -135,6 +135,16 @@ export function BulkEditDrawer({
   // Track which of the selected models are included in the related-files group
   const [relatedIncludedIds, setRelatedIncludedIds] = useState<string[]>([]);
 
+  // Generate a stable unique key for a model for use in related-files UI/state.
+  // Prefer modelUrl (most specific), then filePath, then fallback to id::name to
+  // ensure models that only differ by extension (e.g. .3mf vs .stl) are distinct.
+  const uniqueKeyForModel = (m: Model) => {
+    if (!m) return "";
+    if (m.modelUrl) return m.modelUrl;
+    if (m.filePath) return m.filePath;
+    return `${m.id}::${m.name}`;
+  };
+
   // Available licenses (centralized)
   const availableLicenses = LICENSES;
 
@@ -221,8 +231,10 @@ export function BulkEditDrawer({
     if (isOpen) {
       setEditState({
         tags: { add: [], remove: [] },
-        relatedIncluded: models.map(m => m.id),
-        relatedPrimary: models.length > 0 ? models[0].id : undefined,
+        // use stable unique keys so two files with the same name but different
+        // extensions don't collapse into one entry
+        relatedIncluded: models.map((m) => uniqueKeyForModel(m)),
+        relatedPrimary: models.length > 0 ? uniqueKeyForModel(models[0]) : undefined,
         relatedHideOthers: false,
         relatedClearAll: false,
       });
@@ -242,7 +254,7 @@ export function BulkEditDrawer({
         relatedFiles: false,
       });
       setNewTag("");
-      setRelatedIncludedIds(models.map(m => m.id));
+      setRelatedIncludedIds(models.map((m) => uniqueKeyForModel(m)));
     }
   }, [isOpen, models]);
 
@@ -604,12 +616,14 @@ export function BulkEditDrawer({
           if (editState.relatedClearAll) {
             (updatedModel as any).related_files = [];
           } else if (editState.relatedIncluded && editState.relatedIncluded.length > 0) {
-          // Build list of related file URLs from included ids (excluding self)
+          // Build list of related file URLs from included ids (excluding self).
+          // Note: editState.relatedIncluded contains stable keys (modelUrl/filePath/id::name)
           const includedIds = editState.relatedIncluded;
           const relatedUrls: string[] = includedIds
-            .filter(id => id !== model.id)
-            .map(id => {
-              const m = models.find(x => x.id === id);
+            .filter((key) => key !== uniqueKeyForModel(model))
+            .map((key) => {
+              // Resolve the model by matching its unique key
+              const m = models.find((x) => uniqueKeyForModel(x) === key);
               let url = m?.modelUrl || '';
               // Normalize: strip leading configured modelDirectory (default 'models/')
               // so related_files are stored relative to the models directory.
@@ -636,11 +650,12 @@ export function BulkEditDrawer({
             // If hide others option selected and a primary is chosen, then mark non-primary included models as hidden
             if (editState.relatedHideOthers && editState.relatedPrimary) {
               // For the model we're saving: if it's included but not the primary, hide it
-              if (includedIds.includes(model.id) && editState.relatedPrimary !== model.id) {
+              const modelKey = uniqueKeyForModel(model);
+              if (includedIds.includes(modelKey) && editState.relatedPrimary !== modelKey) {
                 (updatedModel as any).hidden = true;
               }
               // If this model is the primary, ensure it's visible
-              if (editState.relatedPrimary === model.id) {
+              if (editState.relatedPrimary === modelKey) {
                 (updatedModel as any).hidden = false;
               }
             }
@@ -1205,16 +1220,17 @@ export function BulkEditDrawer({
                   <Label className="text-sm font-medium">Included Models</Label>
                   <div className="grid grid-cols-2 gap-2">
                     {models.map((m) => {
-                      const included = (editState.relatedIncluded || relatedIncludedIds || []).includes(m.id);
+                      const key = uniqueKeyForModel(m);
+                      const included = (editState.relatedIncluded || relatedIncludedIds || []).includes(key);
                       return (
-                        <div key={m.id} className="flex items-center gap-2">
+                        <div key={key} className="flex items-center gap-2">
                           <Checkbox
                             checked={included}
                             onCheckedChange={() => {
-                              // toggle include
-                              const current = new Set(editState.relatedIncluded || relatedIncludedIds || models.map(x => x.id));
-                              if (current.has(m.id)) current.delete(m.id);
-                              else current.add(m.id);
+                              // toggle include using stable unique keys
+                              const current = new Set(editState.relatedIncluded || relatedIncludedIds || models.map(x => uniqueKeyForModel(x)));
+                              if (current.has(key)) current.delete(key);
+                              else current.add(key);
                               const arr = Array.from(current);
                               setEditState(prev => ({ ...prev, relatedIncluded: arr }));
                               setRelatedIncludedIds(arr);
@@ -1244,8 +1260,8 @@ export function BulkEditDrawer({
                   <Label className="text-sm font-medium">Primary File</Label>
                   <p className="text-xs text-muted-foreground">Choose which included model should be considered the primary.</p>
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {(editState.relatedIncluded || relatedIncludedIds || models.map(m=>m.id)).map((id) => {
-                      const m = models.find(x => x.id === id);
+                    {(editState.relatedIncluded || relatedIncludedIds || models.map(m=>uniqueKeyForModel(m))).map((id) => {
+                      const m = models.find(x => uniqueKeyForModel(x) === id);
                       if (!m) return null;
                       const isPrimary = editState.relatedPrimary === id;
                       return (
