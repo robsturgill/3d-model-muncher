@@ -54,7 +54,7 @@ const {
 } = LucideIcons;
 import { toast } from 'sonner';
 import { ImageWithFallback } from './ImageWithFallback';
-import { getLabel } from '../utils/labels';
+import { getLabel } from '../constants/labels';
 
 import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 

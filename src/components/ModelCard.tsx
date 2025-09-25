@@ -12,7 +12,7 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { Model } from "../types/model";
 import { ConfigManager } from "../utils/configManager";
-import { getLabel } from "../utils/labels";
+import { getLabel } from "../constants/labels";
 import type { AppConfig } from "../types/config";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { triggerDownload, normalizeModelPath } from "../utils/downloadUtils";

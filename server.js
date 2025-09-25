@@ -99,7 +99,7 @@ const config = ConfigManager.loadConfig();
 // Always serve from the source models directory for single source of truth
 const modelDir = (config.settings && config.settings.modelDirectory) || './models';
 const absoluteModelPath = path.isAbsolute(modelDir) ? modelDir : path.join(process.cwd(), modelDir);
-console.log(`Serving models from: ${absoluteModelPath} (single source of truth)`);
+console.log(`Serving models from: ${absoluteModelPath}`);
 app.use('/models', express.static(absoluteModelPath));
 
 // Helper function to get the models directory (always from source)
@@ -536,7 +536,7 @@ app.get('/api/models', async (req, res) => {
           scanForModels(fullPath);
         } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
           // Load and parse each munchie file
-          console.log(`Found munchie file: ${fullPath}`);
+          // console.log(`Found munchie file: ${fullPath}`);
           try {
             const fileContent = fs.readFileSync(fullPath, 'utf8');
             const model = JSON.parse(fileContent);
@@ -572,7 +572,7 @@ app.get('/api/models', async (req, res) => {
                   model.modelUrl = modelUrl;
                   model.filePath = filePath;
                   
-                    console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
+                  // console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
                   models.push(model);
                 } else {
                   console.log(`Skipping ${fullPath} - corresponding .stl/.STL file not found`);
@@ -597,7 +597,7 @@ app.get('/api/models', async (req, res) => {
                   model.modelUrl = modelUrl;
                   model.filePath = filePath;
                   
-                  console.log(`Added 3MF model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
+                  // console.log(`Added 3MF model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
                   models.push(model);
                 } else {
                   console.log(`Skipping ${fullPath} - corresponding .3mf file not found at ${absoluteThreeMfPath}`);
