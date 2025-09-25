@@ -260,7 +260,7 @@ export function ModelGrid({
 
             {/* Grid Density Control - Only show in grid mode and not in selection mode */}
             {viewMode === 'grid' && !isSelectionMode && (
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0 hidden md:flex">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Sliders className="h-4 w-4" />
                   <span className="hidden sm:inline">Density</span>

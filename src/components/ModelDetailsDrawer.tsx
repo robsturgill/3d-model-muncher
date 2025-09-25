@@ -2059,7 +2059,7 @@ export function ModelDetailsDrawer({
                                   <Badge variant="secondary" className="text-xs px-1 py-0">Main</Badge>
                                 </div>
                               )}
-                              {/* Set as Main button for non-main images in edit mode */}
+                              {/* Set as Main button for non-main images in edit mode (currently: hidden)*/}
                               {isEditing && index !== 0 && !isImageSelected(index) && (
                                 <button
                                   type="button"
@@ -2067,7 +2067,7 @@ export function ModelDetailsDrawer({
                                     e.stopPropagation();
                                     handleSetAsMain(index);
                                   }}
-                                  className="absolute top-1 right-1 bg-black/70 hover:bg-black/90 text-white text-xs px-1 py-0.5 rounded transition-colors z-10"
+                                  className="absolute top-1 right-1 bg-black/70 hover:bg-black/90 text-white text-xs px-1 py-0.5 rounded transition-colors z-10 hidden"
                                   title="Set as main thumbnail"
                                 >
                                   Set Main

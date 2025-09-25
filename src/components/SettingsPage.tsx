@@ -2033,7 +2033,7 @@ export function SettingsPage({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                     <Button onClick={handleSaveCategories} className="gap-2">
                       <Save className="h-4 w-4" />
                       Save Category Order
@@ -2872,7 +2872,7 @@ export function SettingsPage({
                     <p className="text-sm text-muted-foreground">
                       Save your current configuration manually. This is useful when auto-save is disabled.
                     </p>
-                    <div className="flex items-center gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
                       <Button onClick={() => handleSaveConfig()} className="gap-2">
                         <Save className="h-4 w-4" />
                         Save Configuration

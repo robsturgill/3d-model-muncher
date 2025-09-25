@@ -12,7 +12,8 @@
   --brand-muted-dark: #2d1b4e;
   --brand-accent-light: #ede8f5;
   --brand-light-bg: #f3f1f7;
-  --brand-border-light: #e8e4f0;
+  --brand-border-light: #d6cfe6;
+  --brand-border-dark: #3a2b4a;
   --brand-text-light: #f4f1f8;
   --brand-text-muted: #d6c7e3;
   --brand-surface-dark: #241934;
@@ -79,7 +80,7 @@
   --accent-foreground: var(--brand-text-muted);
   --destructive: #ef4444;
   --destructive-foreground: var(--brand-white);
-  --border: var(--brand-muted-dark);
+  --border: var(--brand-border-dark);
   --input: var(--brand-surface-dark);
   --ring: var(--brand-secondary);
   --font-weight-medium: 500;
@@ -173,6 +174,15 @@
 .bg-placeholder {
   background-color: var(--card-foreground);
   opacity: 0.4;
+}
+
+.border-input {
+  border-color: var(--border);
+}
+
+.dark [data-state="unchecked"][data-slot="switch"] {
+  background-color: var(--brand-dark);
+  border-color: var(--border);
 }
 
 /*

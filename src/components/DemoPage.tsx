@@ -30,18 +30,18 @@ export function DemoPage({ onBack }: DemoPageProps) {
 
   // Color palette data
   const colorPalette = [
-    { name: "Primary", var: "--brand-primary", hex: "#4b0082", description: "Main brand color" },
-    { name: "Secondary", var: "--brand-secondary", hex: "#7c3aed", description: "Secondary brand color" },
-    { name: "White", var: "--brand-white", hex: "#ffffff", description: "Pure white" },
-    { name: "Dark", var: "--brand-dark", hex: "#1a1625", description: "Dark surfaces" },
-    { name: "Dark Background", var: "--brand-dark-bg", hex: "#0f0a1a", description: "Dark theme background" },
-    { name: "Muted Dark", var: "--brand-muted-dark", hex: "#2d1b4e", description: "Muted dark elements" },
-    { name: "Accent Light", var: "--brand-accent-light", hex: "#ede8f5", description: "Light accent color" },
-    { name: "Light Background", var: "--brand-light-bg", hex: "#f3f1f7", description: "Light theme surfaces" },
-    { name: "Border Light", var: "--brand-border-light", hex: "#e8e4f0", description: "Light theme borders" },
-    { name: "Purple Light", var: "--brand-purple-light", hex: "#a855f7", description: "Light purple variant" },
-    { name: "Purple Lightest", var: "--brand-purple-lightest", hex: "#c084fc", description: "Lightest purple" },
-    { name: "Purple Pale", var: "--brand-purple-pale", hex: "#ddd6fe", description: "Very pale purple" },
+    { name: "Primary", cssVar: "--brand-primary", hex: "#4b0082", description: "Main brand color" },
+    { name: "Secondary", cssVar: "--brand-secondary", hex: "#7c3aed", description: "Secondary brand color" },
+    { name: "White", cssVar: "--brand-white", hex: "#ffffff", description: "Pure white" },
+    { name: "Dark", cssVar: "--brand-dark", hex: "#1a1625", description: "Dark surfaces" },
+    { name: "Dark Background", cssVar: "--brand-dark-bg", hex: "#0f0a1a", description: "Dark theme background" },
+    { name: "Muted Dark", cssVar: "--brand-muted-dark", hex: "#2d1b4e", description: "Muted dark elements" },
+    { name: "Accent Light", cssVar: "--brand-accent-light", hex: "#ede8f5", description: "Light accent color" },
+    { name: "Light Background", cssVar: "--brand-light-bg", hex: "#f3f1f7", description: "Light theme surfaces" },
+    { name: "Border Light", cssVar: "--brand-border-light", hex: "#e8e4f0", description: "Light theme borders" },
+    { name: "Purple Light", cssVar: "--brand-purple-light", hex: "#a855f7", description: "Light purple variant" },
+    { name: "Purple Lightest", cssVar: "--brand-purple-lightest", hex: "#c084fc", description: "Lightest purple" },
+    { name: "Purple Pale", cssVar: "--brand-purple-pale", hex: "#ddd6fe", description: "Very pale purple" },
   ];
 
   return (
@@ -121,15 +121,17 @@ export function DemoPage({ onBack }: DemoPageProps) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {colorPalette.map((color) => (
                     <div key={color.name} className="space-y-2">
-                      <div 
+                      <div
+                        role="img"
+                        aria-label={`${color.name} color swatch: ${color.description} (${color.hex})`}
                         className="h-16 rounded-lg border shadow-sm"
-                        style={{ backgroundColor: color.hex }}
+                        style={{ backgroundColor: `var(${color.cssVar}, ${color.hex})` }}
                       />
                       <div className="space-y-1">
                         <h4 className="font-medium text-sm">{color.name}</h4>
                         <p className="text-xs text-muted-foreground">{color.description}</p>
                         <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">{color.hex}</code>
-                        <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono block">{color.var}</code>
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono block">{`var(${color.cssVar})`}</code>
                       </div>
                     </div>
                   ))}

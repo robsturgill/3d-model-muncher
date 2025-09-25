@@ -555,7 +555,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                     (e.currentTarget as HTMLImageElement).src = "/images/placeholder.svg";
                   }}
                 />
-                <div>
+                <div className="overflow-hidden text-clip">
                   <div className="font-medium">{m.name}</div>
                   <div className="text-xs text-muted-foreground truncate w-72">{m.description}</div>
                 </div>
@@ -581,9 +581,6 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <h3 className="text-lg font-semibold px-2">{selected?.name}</h3>
-                  {geminiError && (
-                    <div className="text-xs text-red-600 dark:text-red-400 px-2 py-1 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">AI: {geminiError}</div>
-                  )}
                 </div>
                 <button aria-label="Close" title="Close" className="btn btn-ghost p-2" onClick={() => setSelected(null)}>
                   <X className="h-4 w-4" />
