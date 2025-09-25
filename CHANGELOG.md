@@ -1,3 +1,19 @@
+# [0.11.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.10.1...v0.11.0) (2025-09-25)
+
+
+### Bug Fixes
+
+* better styling management, increased default font-size ([18bb21f](https://github.com/robsturgill/3d-model-muncher/commit/18bb21fa642cc46e7e47829b20d95ff5553e9570))
+* bulk edit related files with same names but different filetypes ([ede76fb](https://github.com/robsturgill/3d-model-muncher/commit/ede76fb3f248aad36d6e3d4726143a0553947387))
+* improve styling and layout in various components ([b083552](https://github.com/robsturgill/3d-model-muncher/commit/b083552d43854586f00538011be305ebe8050082))
+* integrate legacy image migration into scan endpoint, removed migration button from settings ([cfc80d1](https://github.com/robsturgill/3d-model-muncher/commit/cfc80d1d166b270ad14bd6d219b8b039745be654))
+* positioned download button to bottom of model card for consistency ([307bb30](https://github.com/robsturgill/3d-model-muncher/commit/307bb30d7d027d1efa0a7ba468ba4cbe7a48d25f))
+
+
+### Features
+
+* added bulk editing related files, can now link other models together ([1dd0bb3](https://github.com/robsturgill/3d-model-muncher/commit/1dd0bb367713c17cb2dfb50b47f72434025acfb3))
+
 ## [0.10.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.10.0...v0.10.1) (2025-09-24)
 
 
