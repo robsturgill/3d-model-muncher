@@ -1,3 +1,4 @@
+@import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
 
 /* Color aliases for frequently used hex values */
@@ -139,6 +140,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -147,65 +149,6 @@
   body {
     @apply bg-background text-foreground;
   }
-}
-
-/**
- * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
- */
-@layer base {
-  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
-    h1 {
-      font-size: var(--text-2xl);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    h2 {
-      font-size: var(--text-xl);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    h3 {
-      font-size: var(--text-lg);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    h4 {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    p {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-normal);
-      line-height: 1.5;
-    }
-
-    label {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    button {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    input {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-normal);
-      line-height: 1.5;
-    }
-  }
-}
-
-html {
-  font-size: var(--font-size);
 }
 
 /* Custom gradient backgrounds for enhanced visual depth */
@@ -232,19 +175,13 @@ html {
   opacity: 0.4;
 }
 
-
+/*
 @media (width >= 64rem) {
   .lg\:block {
       display: block;
   }
 }
-
-.bg-green-700 {
-  background-color: var(--color-green-700);
-}
-.list-inside {
-  list-style: inside;
-}
+*/
 
 [data-sonner-toaster][data-sonner-theme=dark] [data-description]  {
   color: var(--muted-foreground);

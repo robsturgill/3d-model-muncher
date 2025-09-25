@@ -1,9 +1,16 @@
 import { defineConfig } from 'vite';
-  import react from '@vitejs/plugin-react-swc';
-  import path from 'path';
+import react from '@vitejs/plugin-react-swc';
+import path from 'path';
 
-  export default defineConfig({
-    plugins: [react()],
+export default defineConfig(async () => {
+  // @tailwindcss/vite is ESM-only. Dynamically import it so Vite doesn't try to load it via require.
+  const tailwindModule = await import('@tailwindcss/vite');
+  const tailwindcss = tailwindModule.default ?? tailwindModule;
+  return {
+    plugins: [
+      react(),
+      tailwindcss()
+    ],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
@@ -73,4 +80,5 @@ import { defineConfig } from 'vite';
     define: {
       global: 'globalThis',
     },
-  });
+  };
+});

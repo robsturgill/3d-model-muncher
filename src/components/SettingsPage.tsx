@@ -2354,7 +2354,7 @@ export function SettingsPage({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex flex-col items-start gap-4">
                     <div className="flex-1 space-y-4">
                       <div>
                         <h3 className="font-medium">File Verification</h3>
@@ -2439,7 +2439,7 @@ export function SettingsPage({
                     </div>
 
                     {(hashCheckResult || generateResult) && (
-                      <div className="flex flex-wrap gap-4 mt-3 md:mt-0 md:self-end">
+                      <div className="flex flex-wrap gap-4 mt-3 w-full">
                         {migrateResult && (
                           <div key="migrate-result" className="flex items-center gap-2">
                             <Files className="h-4 w-4 text-primary" />
