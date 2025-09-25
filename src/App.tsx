@@ -968,15 +968,15 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
+              <h3 className="text-lg">v0.11.x - Release updates</h3>
+              <ul className="list-disc pl-5 list-inside mb-4">
+                <li><strong>Bulk edit related files</strong> - Select multiple models and add them as related files. Choose a "primary" and hide the others to have a single model with all files available for download.</li>
+                <li><strong>UI & layout fixes</strong> - Refactored global styles, increasing the default font-size and adding subtle details throughout.</li>
+                <li><strong>Refactored JSON generation</strong> - The backend generation processes have been improved; deprecated the image migration actions.</li>
+              </ul>
               <h3 className="text-lg">v0.10.x - Release updates</h3>
               <ul className="list-disc pl-5 list-inside mb-4">
                 <li><strong>Capture 3D previews</strong> - You can now capture the current camera/view from the 3D viewer and save it directly into a model's images while editing. This makes it easy to create thumbnails or gallery images from the exact view you want.</li>
-              </ul>
-              <h3 className="text-lg">v0.9.x - Release updates</h3>
-              <ul className="list-disc pl-5 list-inside">
-                <li><strong>Migrations</strong> - Improved image handling to persist user images from parsed images requires migration from versions 0.8.0 and earlier. Use 'Migrate' button in Settings &gt; File Integrity to update files.</li>
-                <li>Regenerating now preserves user metadata.</li>
-                <li><strong>AI Assisted Generation</strong> - Experimental utility for generating model descriptions, category, tags. See Settings &gt; Experimental tab.</li>
               </ul>
             </div>
 
