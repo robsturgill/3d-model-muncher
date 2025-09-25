@@ -58,11 +58,8 @@ import { getLabel } from '../constants/labels';
 
 import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 
-// Icon component for model thumbnails
+// Thumbnail resolver: prefer model object, fall back to explicit prop
 const ModelThumbnail = ({ thumbnail, name, model }: { thumbnail?: string | null; name: string; model?: any }) => {
-  // If a model object is provided prefer resolving via resolver which supports
-  // userDefined.thumbnail descriptors and parsedImages. Otherwise fall back
-  // to the explicit thumbnail prop.
   const src = model ? resolveModelThumbnail(model) : (thumbnail || '');
 
   if (src) {
@@ -139,8 +136,7 @@ export function SettingsPage({
     return initialConfig;
   });
 
-  // Ensure SettingsPage prioritizes server-side `data/config.json` when loading.
-  // This makes the Application settings reflect the canonical server config rather than a local-only value.
+  // Prefer server-side `data/config.json` over local defaults on load
   useEffect(() => {
     let cancelled = false;
 
@@ -221,14 +217,12 @@ export function SettingsPage({
   // If parent opened settings with an action, run it and then notify parent
   useEffect(() => {
     if (!settingsAction) return;
-    // Switch to the integrity tab so the user sees progress/results
-    setSelectedTab('integrity');
-    // Capture fileType locally and ensure handlers use it directly to avoid
-    // a React state update race (setSelectedFileType is async)
+  // Switch to integrity tab and capture fileType to avoid async state races
+  setSelectedTab('integrity');
     const actionFileType = settingsAction.fileType;
     setSelectedFileType(actionFileType);
 
-    (async () => {
+  (async () => {
       try {
         if (settingsAction.type === 'hash-check') {
           // Call the hash check with the explicit file type
@@ -350,14 +344,10 @@ export function SettingsPage({
   // State and handler for generating model JSONs via backend API
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
   const [generateResult, setGenerateResult] = useState<{ skipped?: number; generated?: number; verified?: number; processed?: number } | null>(null);
-  const [isMigratingLegacyImages, setIsMigratingLegacyImages] = useState(false);
-  const [migrateResult, setMigrateResult] = useState<any>(null);
   
   const handleGenerateModelJson = async (fileType?: "3mf" | "stl") => {
     const effectiveFileType = fileType || selectedFileType;
-    // Capture previous generated count before clearing the result so we can infer verified on subsequent runs
-    const prevGenerated = generateResult?.generated || 0;
-    // Clear any previous hash check results so the UI doesn't show stale verified counts
+    // Clear any previous hash-check results so UI doesn't show stale verified counts
     if (hashCheckResult) setHashCheckResult(null);
     setIsGeneratingJson(true);
     // Clear previous generation result so UI shows fresh status while running
@@ -365,47 +355,37 @@ export function SettingsPage({
     const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
     setStatusMessage(`Generating JSON for all ${fileTypeText} files...`);
     try {
-      const response = await fetch('/api/scan-models', {
+      // Request streaming progress from backend
+      setIsGeneratingJson(true);
+
+      const resp = await fetch('/api/scan-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileType: effectiveFileType })
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setSaveStatus('saved');
-        setStatusMessage('Model JSON files generated successfully.');
-        // Backend may provide different field names; support common ones and fallback
-        const skipped = typeof data.skipped === 'number' ? data.skipped : (data.skippedCount ?? 0);
-        let generated = typeof data.generated === 'number' ? data.generated : (data.created ?? data.added ?? data.new ?? null);
-        const verified = typeof data.verified === 'number' ? data.verified : (data.verifiedCount ?? null);
 
-        // Processed may be reported by the backend; if present, prefer it. Otherwise infer later.
-        const processedFromBackend = typeof data.processed === 'number' ? data.processed : (data.processedCount ?? null);
-
-        // Determine newly-generated count and make `processed` reflect only newly-created items
-        let finalGenerated: number = 0;
-        if (typeof generated === 'number') {
-          finalGenerated = generated;
-        } else if (processedFromBackend !== null) {
-          // If backend provided 'processed' and 'generated' is missing, treat 'processed' as the
-          // count of newly-generated files (the backend's processed value represents created files).
-          finalGenerated = processedFromBackend;
-        }
-
-        // If verified not provided and this run generated nothing but previous run did, promote previous generated -> verified
-        if ((typeof verified !== 'number' || verified === null) && finalGenerated === 0 && prevGenerated > 0) {
-          setGenerateResult({ skipped, generated: 0, verified: prevGenerated, processed: 0 });
-          return;
-        }
-
-        const finalVerified = typeof verified === 'number' ? verified : 0;
-        const finalProcessed = finalGenerated; // processed should be the count of newly-created files
-
-        setGenerateResult({ skipped, generated: finalGenerated, verified: finalVerified, processed: finalProcessed });
-      } else {
-        setSaveStatus('error');
-        setStatusMessage(data.message || 'Failed to generate model JSON files.');
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => '');
+        throw new Error(`Scan failed: ${resp.status} ${errBody}`);
       }
+
+      // Read final JSON summary from the server
+      const data = await resp.json().catch(() => ({} as any));
+      if (!data || (data.success === false)) {
+        throw new Error(data?.error || 'Scan failed');
+      }
+
+      // Populate generateResult with any counts the server provided
+      setGenerateResult({
+        processed: typeof data.processed === 'number' ? data.processed : undefined,
+        skipped: typeof data.skipped === 'number' ? data.skipped : undefined,
+        generated: typeof data.generated === 'number' ? data.generated : undefined,
+        verified: typeof data.verified === 'number' ? data.verified : undefined,
+      });
+
+      setSaveStatus('saved');
+      setStatusMessage('Generation complete.');
+      setTimeout(() => { setSaveStatus('idle'); setStatusMessage(''); }, 3000);
     } catch (error) {
       setSaveStatus('error');
       setStatusMessage('Failed to generate model JSON files.');
@@ -1424,6 +1404,66 @@ export function SettingsPage({
     }
   };
 
+  // Regenerate munchie.json for a single model id and refresh the hash check
+  const handleRegenerate = async (model: any) => {
+    if (!model) {
+      toast.error('Cannot regenerate: missing model information');
+      return;
+    }
+
+    // Prefer model id when present; otherwise allow passing a relative filePath
+    const hasId = typeof model.id === 'string' && model.id.trim().length > 0;
+    const hasFilePath = typeof model.filePath === 'string' && model.filePath.trim().length > 0;
+
+    if (!hasId && !hasFilePath) {
+      toast.error('Cannot regenerate: missing model id or filePath');
+      return;
+    }
+
+    try {
+      setSaveStatus('saving');
+      setStatusMessage('Regenerating munchie.json...');
+
+      const body: any = {};
+      if (hasId) body.modelIds = [model.id];
+      else {
+        // Normalize filePath to be relative to /models (strip leading /models/ if present)
+        let rel = model.filePath.replace(/^\/?models\//, '').replace(/\\/g, '/');
+        body.filePaths = [rel];
+      }
+
+      const resp = await fetch('/api/regenerate-munchie-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const data = await resp.json().catch(() => ({} as any));
+
+      if (!resp.ok || data.success === false) {
+        const errMsg = data && data.error ? data.error : (Array.isArray(data.errors) ? data.errors.map((e: any) => e.error || JSON.stringify(e)).join('; ') : 'Regeneration failed');
+        throw new Error(errMsg);
+      }
+
+      // If server returned errors array, show them as warnings
+      if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+        const msgs = data.errors.map((e: any) => e.error || JSON.stringify(e)).join('; ');
+        toast.error(`Regeneration completed with errors: ${msgs}`);
+      } else {
+        toast.success('Regenerated munchie data');
+      }
+
+      // Re-run the hash check to refresh UI
+      handleRunHashCheck(selectedFileType);
+    } catch (e: any) {
+      console.error('Regenerate error:', e);
+      toast.error(e?.message || 'Failed to regenerate munchie file');
+    } finally {
+      setSaveStatus('idle');
+      setStatusMessage('');
+    }
+  };
+
   const getTagStats = () => {
     const allTags = getAllTags();
     const totalTags = allTags.length;
@@ -2405,47 +2445,11 @@ export function SettingsPage({
                           )}
                           {isGeneratingJson ? 'Generating...' : 'Generate'}
                         </Button>
-                        <Button
-                          onClick={async () => {
-                            if (isMigratingLegacyImages) return;
-                            setIsMigratingLegacyImages(true);
-                            setMigrateResult(null);
-                            try {
-                              const resp = await fetch('/api/migrate-legacy-images', { method: 'POST' });
-                              const data = await resp.json();
-                              if (!resp.ok) throw new Error(data.error || 'Migration failed');
-                              setMigrateResult(data);
-                              setStatusMessage(`Migration complete: ${data.migrated || 0} migrated`);
-                            } catch (e: any) {
-                              setMigrateResult({ success: false, error: e.message || String(e) });
-                              setStatusMessage('Migration failed');
-                            } finally {
-                              setIsMigratingLegacyImages(false);
-                              setTimeout(() => setStatusMessage(''), 3000);
-                            }
-                          }}
-                          disabled={isMigratingLegacyImages}
-                          variant="ghost"
-                          className="gap-2"
-                        >
-                          {isMigratingLegacyImages ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Upload className="h-4 w-4" />
-                          )}
-                          {isMigratingLegacyImages ? 'Migrating...' : 'Migrate Legacy Images'}
-                        </Button>
                       </div>
                     </div>
 
                     {(hashCheckResult || generateResult) && (
                       <div className="flex flex-wrap gap-4 mt-3 w-full">
-                        {migrateResult && (
-                          <div key="migrate-result" className="flex items-center gap-2">
-                            <Files className="h-4 w-4 text-primary" />
-                            <span className="text-sm">{migrateResult.migrated || 0} migrated, {migrateResult.skipped || 0} skipped</span>
-                          </div>
-                        )}
                         {hashCheckResult && (
                           <>
                             <div key="verified-count" className="flex items-center gap-2">
@@ -2472,38 +2476,60 @@ export function SettingsPage({
                             )}
                           </>
                         )}
-                        {generateResult && (
-                          <>
-                            {/* Calculate processed count: sum of generated, verified, skipped */}
-                            {(() => {
-                              const processed = (generateResult.generated || 0) + (generateResult.verified || 0) + (generateResult.skipped || 0);
-                              return processed > 0 ? (
-                                <div key="gen-processed-count" className="flex items-center gap-2">
+                        {generateResult && (() => {
+                          // Compute once
+                          const processedNum = typeof generateResult.processed === 'number'
+                            ? generateResult.processed
+                            : (generateResult.generated || 0) + (generateResult.verified || 0);
+                          const skippedNum = generateResult.skipped || 0;
+                          const totalSeen = processedNum + skippedNum;
+
+                          // Prefer explicit `generated`; otherwise treat `processed` as generated for display
+                          const hasExplicitGenerated = typeof generateResult.generated === 'number';
+                          const showAsGenerated = hasExplicitGenerated || (typeof generateResult.generated === 'undefined' && processedNum > 0);
+
+                          // Show separate 'generated' only when it differs from processed
+                          const showGeneratedSeparate = hasExplicitGenerated && (generateResult.generated !== processedNum);
+
+                          return (
+                            <>
+                              {totalSeen > 0 && (
+                                <div key="gen-total-status" className="flex items-center gap-2">
                                   <BarChart3 className="h-4 w-4 text-primary" />
-                                  <span className="text-sm">{processed} total processed:</span>
+                                  <span className="text-sm">{totalSeen} total</span>
                                 </div>
-                              ) : null;
-                            })()}
-                            {((generateResult.generated || 0) > 0) && (
-                              <div key="gen-generated-count" className="flex items-center gap-2">
-                                <HardDrive className="h-4 w-4 text-green-600" />
-                                <span className="text-sm">{generateResult.generated || 0} generated</span>
-                              </div>
-                            )}
-                            {((generateResult.verified || 0) > 0) && (
-                              <div key="gen-verified-count" className="flex items-center gap-2">
-                                <FileCheck className="h-4 w-4 text-blue-600" />
-                                <span className="text-sm">{generateResult.verified || 0} verified</span>
-                              </div>
-                            )}
-                            {((generateResult.skipped || 0) > 0) && (
-                              <div key="gen-skipped-count" className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-gray-600" />
-                                <span className="text-sm">{generateResult.skipped || 0} skipped</span>
-                              </div>
-                            )}
-                          </>
-                        )}
+                              )}
+
+                              {processedNum > 0 && (
+                                <div key="gen-processed-status" className="flex items-center gap-2">
+                                  <FileCheck className={`h-4 w-4 ${showAsGenerated ? 'text-green-600' : 'text-blue-600'}`} />
+                                  <span className="text-sm">{processedNum} {showAsGenerated ? 'generated' : 'processed'}</span>
+                                </div>
+                              )}
+
+                              {(skippedNum > 0) && (
+                                <div key="gen-skipped-count" className="flex items-center gap-2">
+                                  <Clock className="h-4 w-4 text-gray-600" />
+                                  <span className="text-sm">{skippedNum} skipped</span>
+                                </div>
+                              )}
+
+                              {showGeneratedSeparate && (
+                                <div key="gen-generated-count" className="flex items-center gap-2">
+                                  <HardDrive className="h-4 w-4 text-green-600" />
+                                  <span className="text-sm text-green-600">{generateResult.generated || 0} generated</span>
+                                </div>
+                              )}
+
+                              {((generateResult.verified || 0) > 0) && (
+                                <div key="gen-verified-count" className="flex items-center gap-2">
+                                  <FileCheck className="h-4 w-4 text-blue-600" />
+                                  <span className="text-sm">{generateResult.verified || 0} verified</span>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -2551,18 +2577,21 @@ export function SettingsPage({
                                     {model ? getDisplayPath(model) : file.filePath.split('/').pop()?.replace(/\.(3mf|stl)$/i, '') || 'Unknown'}
                                   </p>
                                   <p className="text-sm text-red-600 dark:text-red-400">
-                                    {file.error || `Missing metadata or hash mismatch`}
+                                    {file.error || (file.actualHash && file.expectedHash && file.actualHash !== file.expectedHash
+                                      ? 'Hash mismatch: model file may have been updated and saved. Regenerate munchie.json to update metadata.'
+                                      : 'Missing metadata or hash mismatch')}
                                   </p>
                                 </div>
-                                {model && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                      onClick={() => onModelClick?.(model)}
-                                      className="mt-3 sm:mt-0 ml-0 sm:ml-4 shrink-0"
-                                  >
-                                    View
-                                  </Button>
+                                {file.actualHash && file.expectedHash && file.expectedHash !== 'UNKNOWN' && file.actualHash !== file.expectedHash && (
+                                  <div className="mt-3 sm:mt-0 ml-0 sm:ml-4 shrink-0">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleRegenerate(model || { id: `regen-${(file.filePath || 'unknown').replace(/[^a-zA-Z0-9]/g, '-')}`, filePath: file.filePath } as any)}
+                                    >
+                                      Regenerate
+                                    </Button>
+                                  </div>
                                 )}
                               </div>
                             );
@@ -2603,7 +2632,7 @@ export function SettingsPage({
                                     <DialogHeader>
                                       <DialogTitle>Remove Duplicate Files</DialogTitle>
                                       <DialogDescription>
-                                        Choose which file to keep. All other copies will be removed.
+                                        Choose which file to keep. All other copies will be deleted. <br/><strong className="text-destructive">This action cannot be undone.</strong>
                                       </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-2">
@@ -2630,7 +2659,7 @@ export function SettingsPage({
                                             <span className="text-sm truncate">{getDisplayPath(model)}</span>
                                           </div>
                                           <Button
-                                            variant="secondary"
+                                            variant="destructive"
                                             size="sm"
                                             onClick={async () => {
                                               const success = await handleRemoveDuplicates(group, model.id);
