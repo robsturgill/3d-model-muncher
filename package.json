@@ -3,6 +3,7 @@
       "version": "0.10.0",
       "private": true,
       "dependencies": {
+            "dotenv": "^16.1.4",
             "@google/genai": "^1.20.0",
             "@radix-ui/react-accordion": "^1.2.3",
             "@radix-ui/react-alert-dialog": "^1.1.6",

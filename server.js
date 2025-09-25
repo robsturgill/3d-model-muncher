@@ -5,11 +5,20 @@ const path = require('path');
 const fs = require('fs');
 const zlib = require('zlib');
 const multer = require('multer');
+try { require('dotenv').config(); } catch (e) { /* dotenv not installed or not needed in production */ }
 const { scanDirectory } = require('./dist-backend/utils/threeMFToJson');
 const { ConfigManager } = require('./dist-backend/utils/configManager');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Startup diagnostic: show which GenAI env vars are present (sanitized)
+safeLog('GenAI env presence:', {
+  GEMINI_PROVIDER: !!process.env.GEMINI_PROVIDER,
+  GOOGLE_API_KEY: !!process.env.GOOGLE_API_KEY,
+  GOOGLE_APPLICATION_CREDENTIALS: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  OPENAI_API_KEY: !!process.env.OPENAI_API_KEY
+});
 
 // Helper: sanitize objects before logging to avoid dumping large base64 images
 function sanitizeForLog(value, options = {}) {
@@ -1393,7 +1402,9 @@ app.post('/api/gemini-suggest', async (req, res) => {
     // Try provider adapter (pass requested provider)
     let genaiResult = null;
     try {
-      const adapter = require('./server-utils/genaiAdapter');
+      // Resolve relative to this file's directory so the module loads regardless of process.cwd()
+      const adapterPath = path.join(__dirname, 'server-utils', 'genaiAdapter');
+      const adapter = require(adapterPath);
       genaiResult = await adapter.suggest({ prompt, imageBase64, mimeType, provider: requestedProvider });
     } catch (e) {
       console.warn('GenAI adapter error or not configured:', e && e.message);

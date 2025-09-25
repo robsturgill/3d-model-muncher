@@ -34,6 +34,9 @@ COPY --from=builder /app/build ./build
 COPY --from=builder /app/dist-backend ./dist-backend
 COPY --from=builder /app/server.js ./server.js
 
+# Ensure server-utils (runtime adapters/helpers) are included in the production image
+COPY --from=builder /app/server-utils ./server-utils
+
 # Copy configuration files if they exist
 COPY --from=builder /app/src/config ./src/config
 
