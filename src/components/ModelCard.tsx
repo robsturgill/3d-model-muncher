@@ -109,7 +109,7 @@ export function ModelCard({
   const thumbnailSrc = resolveThumbnail();
 
   return (
-    <Card className={`cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 ${
+    <Card className={`flex flex-col cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 ${
       isSelectionMode && isSelected ? 'ring-2 ring-primary bg-primary/5' : ''
     }`} onClick={onClick}>
       <CardHeader className="p-0">
@@ -187,7 +187,7 @@ export function ModelCard({
         </div>
       </CardHeader>
       
-      <CardContent className="p-4">
+      <CardContent className="p-4 flex-1">
         <h3 className={`mb-2 line-clamp-2 transition-colors ${
           isSelectionMode && isSelected ? 'text-primary font-medium' : ''
         }`}>
@@ -251,7 +251,8 @@ export function ModelCard({
       
       {/* Only show footer actions when not in selection mode */}
       {!isSelectionMode && (
-        <CardFooter className="p-4 pt-0">
+        // Keep footer at the bottom of the flex column
+        <CardFooter className="p-4 pt-0 mt-auto">
           {/* Split button: primary left downloads main model file, right shows related files menu (if any) */}
           <div className="w-full relative">
             <div className="flex w-full">
