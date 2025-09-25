@@ -488,6 +488,24 @@ function AppContent() {
     });
   };
 
+  // Merge exact updated models returned from BulkEditDrawer to avoid a full re-fetch.
+  const handleBulkSavedModels = (updatedModels: Model[]) => {
+    if (!updatedModels || updatedModels.length === 0) return;
+
+    const updatedMap = new Map(updatedModels.map(m => [m.id, m]));
+
+    const mergedModels = models.map(m => updatedMap.has(m.id) ? { ...m, ...(updatedMap.get(m.id) as Model) } : m);
+    setModels(mergedModels);
+
+    const mergedFiltered = filteredModels.map(m => updatedMap.has(m.id) ? { ...m, ...(updatedMap.get(m.id) as Model) } : m);
+    setFilteredModels(mergedFiltered);
+
+    // Clear selection mode and bulk edit drawer
+    setSelectedModelIds([]);
+    setIsSelectionMode(false);
+    setIsBulkEditOpen(false);
+  };
+
   const handleFilterChange = (filters: {
     search: string;
     category: string;
@@ -927,8 +945,10 @@ function AppContent() {
           onClose={() => setIsBulkEditOpen(false)}
           onBulkUpdate={handleBulkUpdateModels}
           onRefresh={handleRefreshModels}
+          onBulkSaved={handleBulkSavedModels}
           onClearSelections={exitSelectionMode}
           categories={categories}
+          modelDirectory={appConfig?.settings?.modelDirectory || './models'}
         />
       )}
 

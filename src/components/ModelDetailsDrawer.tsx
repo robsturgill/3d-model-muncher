@@ -45,6 +45,10 @@ export function ModelDetailsDrawer({
   const [invalidRelated, setInvalidRelated] = useState<string[]>([]);
   const [serverRejectedRelated, setServerRejectedRelated] = useState<string[]>([]);
   const [relatedVerifyStatus, setRelatedVerifyStatus] = useState<Record<number, {loading: boolean; ok?: boolean; message?: string}>>({});
+  // Track whether a related file has an associated munchie JSON we can view
+  const [availableRelatedMunchie, setAvailableRelatedMunchie] = useState<Record<number, boolean>>({});
+  // ScrollArea viewport ref so we can programmatically scroll the drawer
+  const detailsViewportRef = useRef<HTMLDivElement | null>(null);
   const [newTag, setNewTag] = useState("");
   const [focusRelatedIndex, setFocusRelatedIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'3d' | 'images'>(defaultModelView);
@@ -79,6 +83,56 @@ export function ModelDetailsDrawer({
       setSelectedImageIndexes([]);
     }
   }, [isOpen, defaultModelView]);
+
+  // Helper to derive the munchie json path for a related file path
+  const deriveMunchieCandidate = (raw: string) => {
+    let candidate = raw || '';
+    try {
+      if (candidate.endsWith('.3mf')) {
+        candidate = candidate.replace(/\.3mf$/i, '-munchie.json');
+      } else if (/\.stl$/i.test(candidate)) {
+        candidate = candidate.replace(/\.stl$/i, '-stl-munchie.json');
+      }
+      // strip leading /models/ if present
+      if (candidate.startsWith('/models/')) candidate = candidate.replace(/^\/models\//, '');
+      if (candidate.startsWith('models/')) candidate = candidate.replace(/^models\//, '');
+    } catch (e) {
+      // ignore and return as-is
+    }
+    return candidate;
+  };
+
+  // Probe for munchie JSON existence for related files when in view mode
+  useEffect(() => {
+    if (isEditing) return;
+    const rel = model?.related_files || [];
+    if (!Array.isArray(rel) || rel.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const map: Record<number, boolean> = {};
+      await Promise.all(rel.map(async (p: string, idx: number) => {
+        try {
+          const candidate = deriveMunchieCandidate(p);
+          const url = `/models/${candidate}`;
+          // Try a HEAD first to minimize payload; fall back to GET if not allowed
+          const resp = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+          map[idx] = resp.ok;
+        } catch (e) {
+          try {
+            // Fallback to GET check
+            const candidate = deriveMunchieCandidate(p);
+            const resp2 = await fetch(`/models/${candidate}`, { method: 'GET', cache: 'no-store' });
+            map[idx] = resp2.ok;
+          } catch (e2) {
+            map[idx] = false;
+          }
+        }
+      }));
+      if (!cancelled) setAvailableRelatedMunchie(map);
+    })();
+    return () => { cancelled = true; };
+  }, [isEditing, model?.related_files]);
 
 
 
@@ -1828,7 +1882,7 @@ export function ModelDetailsDrawer({
           </div>
         </SheetHeader>
 
-        <ScrollArea className="flex-1 min-h-0">
+  <ScrollArea className="flex-1 min-h-0" viewportRef={detailsViewportRef}>
           <div className="p-4 space-y-8">
           {/* Model file path / URL (readonly, download) - moved above preview */}
           <div className="mb-4">
@@ -2467,6 +2521,44 @@ export function ModelDetailsDrawer({
                               'Verify'
                             )}
                           </Button>
+                          {/* View button: only visible when verification succeeded */}
+                          {(!isEditing && relatedVerifyStatus[idx]?.ok) ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={relatedVerifyStatus[idx]?.loading}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                let candidate = rf;
+                                try {
+                                  if (candidate.endsWith('.3mf')) {
+                                    candidate = candidate.replace(/\.3mf$/i, '-munchie.json');
+                                  } else if (/\.stl$/i.test(candidate)) {
+                                    candidate = candidate.replace(/\.stl$/i, '-stl-munchie.json');
+                                  }
+                                  if (candidate.startsWith('/models/')) candidate = candidate.replace(/^\/models\//, '');
+
+                                  const url = `/models/${candidate}`;
+                                  const resp = await fetch(url, { cache: 'no-store' });
+                                  if (!resp.ok) {
+                                    try { toast?.error && toast.error('Related munchie JSON not found'); } catch (e) {}
+                                    return;
+                                  }
+                                  const parsed = await resp.json();
+                                  try {
+                                    if (typeof onModelUpdate === 'function') onModelUpdate(parsed as Model);
+                                  } catch (e) {
+                                    console.warn('onModelUpdate failed when loading related model', e);
+                                  }
+                                } catch (err) {
+                                  try { toast?.error && toast.error('Failed to load related model'); } catch (e) {}
+                                  console.error('Failed to load related model', err);
+                                }
+                              }}
+                            >
+                              View
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -2639,6 +2731,33 @@ export function ModelDetailsDrawer({
                         <p className="font-medium break-all">{path}</p>
                       </div>
                       <div className="flex items-center gap-2">
+                        {availableRelatedMunchie[idx] ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                let candidate = deriveMunchieCandidate(path);
+                                const url = `/models/${candidate}`;
+                                const resp = await fetch(url, { cache: 'no-store' });
+                                if (!resp.ok) {
+                                  try { toast?.error && toast.error('Related munchie JSON not found'); } catch (e) {}
+                                  return;
+                                }
+                                const parsed = await resp.json();
+                                try { onModelUpdate(parsed as Model); } catch (e) { console.warn('onModelUpdate failed', e); }
+                                // scroll the drawer content back to top so the newly-loaded model is visible
+                                try { detailsViewportRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { /* ignore */ }
+                              } catch (err) {
+                                try { toast?.error && toast.error('Failed to load related model'); } catch (e) {}
+                                console.error('Failed to load related model', err);
+                              }
+                            }}
+                          >
+                            View
+                          </Button>
+                        ) : null}
                         <Button size="sm" onClick={(e) => {
                           e.stopPropagation();
                           // Use shared triggerDownload which will normalize the path and trigger the browser download

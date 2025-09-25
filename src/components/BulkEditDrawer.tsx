@@ -53,8 +53,14 @@ interface BulkEditDrawerProps {
   onClose: () => void;
   onBulkUpdate: (updates: Partial<Model>) => void;
   onRefresh?: () => Promise<void>;
+  // Optional callback to provide the exact updated models after saving. If provided,
+  // the parent can merge them into its state without a full re-fetch.
+  onBulkSaved?: (updatedModels: Model[]) => void;
   onClearSelections?: () => void;
   categories: Category[];
+  // Optional configured models directory (from app config). Used to
+  // normalize related file paths when saving (strip leading directory).
+  modelDirectory?: string;
 }
 
 interface BulkEditState {
@@ -72,6 +78,11 @@ interface BulkEditState {
   price?: number;
   printTime?: string;
   filamentUsed?: string;
+  // Related files: which model id is primary, whether to hide others, and which ids are included
+  relatedPrimary?: string;
+  relatedHideOthers?: boolean;
+  relatedIncluded?: string[];
+  relatedClearAll?: boolean;
 }
 
 interface FieldSelection {
@@ -87,6 +98,7 @@ interface FieldSelection {
   printTime: boolean;
   filamentUsed: boolean;
   regenerateMunchie: boolean;
+  relatedFiles: boolean;
 }
 
 export function BulkEditDrawer({
@@ -95,8 +107,10 @@ export function BulkEditDrawer({
   onClose,
   onBulkUpdate,
   onRefresh,
+  onBulkSaved,
   onClearSelections,
   categories,
+  modelDirectory,
 }: BulkEditDrawerProps) {
   const [editState, setEditState] = useState<BulkEditState>({});
   const [fieldSelection, setFieldSelection] =
@@ -113,9 +127,13 @@ export function BulkEditDrawer({
       printTime: false,
       filamentUsed: false,
       regenerateMunchie: false,
+      relatedFiles: false,
     });
   const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Track which of the selected models are included in the related-files group
+  const [relatedIncludedIds, setRelatedIncludedIds] = useState<string[]>([]);
 
   // Available licenses (centralized)
   const availableLicenses = LICENSES;
@@ -203,6 +221,10 @@ export function BulkEditDrawer({
     if (isOpen) {
       setEditState({
         tags: { add: [], remove: [] },
+        relatedIncluded: models.map(m => m.id),
+        relatedPrimary: models.length > 0 ? models[0].id : undefined,
+        relatedHideOthers: false,
+        relatedClearAll: false,
       });
       setFieldSelection({
         category: false,
@@ -217,8 +239,10 @@ export function BulkEditDrawer({
         printTime: false,
         filamentUsed: false,
         regenerateMunchie: false,
+        relatedFiles: false,
       });
       setNewTag("");
+      setRelatedIncludedIds(models.map(m => m.id));
     }
   }, [isOpen, models]);
 
@@ -280,6 +304,8 @@ export function BulkEditDrawer({
   const handleFilamentChange = (value: string) => {
     setEditState((prev) => ({ ...prev, filamentUsed: value }));
   };
+
+  // related-files state is managed inline in the UI handlers
 
   const handleAddTag = () => {
     if (!newTag.trim()) return;
@@ -501,7 +527,8 @@ export function BulkEditDrawer({
       // Save each model to its respective file
       console.log(`[BulkEdit] Processing ${models.length} models for bulk save`);
       
-      for (const model of models) {
+  const savedModels: Model[] = [];
+  for (const model of models) {
         // Ensure filePath is present for saving - convert to JSON file path
         let jsonFilePath;
         if (model.filePath) {
@@ -571,6 +598,54 @@ export function BulkEditDrawer({
         // Create updated model with changes applied
         const updatedModel = { ...model, filePath: jsonFilePath };
         
+        // Related files handling: when selected, set related_files on each model
+        if (fieldSelection.relatedFiles) {
+          // If the user requested clearing all related files, do that regardless of included list
+          if (editState.relatedClearAll) {
+            (updatedModel as any).related_files = [];
+          } else if (editState.relatedIncluded && editState.relatedIncluded.length > 0) {
+          // Build list of related file URLs from included ids (excluding self)
+          const includedIds = editState.relatedIncluded;
+          const relatedUrls: string[] = includedIds
+            .filter(id => id !== model.id)
+            .map(id => {
+              const m = models.find(x => x.id === id);
+              let url = m?.modelUrl || '';
+              // Normalize: strip leading configured modelDirectory (default 'models/')
+              // so related_files are stored relative to the models directory.
+              const configured = (modelDirectory || './models').replace(/\\/g, '/');
+              // Accept '/models/', 'models/', './models/', or absolute paths. Normalize for matching.
+              const variants = [configured, configured.replace(/^\.\//, ''), '/' + configured.replace(/^\.\//, '')].map(v => v.replace(/\\/g, '/'));
+              for (const v of variants) {
+                if (v && url.startsWith(v)) {
+                  url = url.substring(v.length);
+                  break;
+                }
+              }
+              return url;
+            })
+            .filter(Boolean);
+
+          if (relatedUrls.length > 0) {
+            (updatedModel as any).related_files = relatedUrls;
+          } else {
+            // If no related urls (maybe only self selected), clear related_files
+            (updatedModel as any).related_files = [];
+          }
+
+            // If hide others option selected and a primary is chosen, then mark non-primary included models as hidden
+            if (editState.relatedHideOthers && editState.relatedPrimary) {
+              // For the model we're saving: if it's included but not the primary, hide it
+              if (includedIds.includes(model.id) && editState.relatedPrimary !== model.id) {
+                (updatedModel as any).hidden = true;
+              }
+              // If this model is the primary, ensure it's visible
+              if (editState.relatedPrimary === model.id) {
+                (updatedModel as any).hidden = false;
+              }
+            }
+          }
+        }
         // Apply bulk tag changes if selected
         if (fieldSelection.tags && editState.tags) {
           let newTags = [...(model.tags || [])];
@@ -610,6 +685,25 @@ export function BulkEditDrawer({
   console.log(`[BulkEdit][DEBUG] Saving model ${model.name} -> file: ${updatedModel.filePath}, tags:`, updatedModel.tags);
   // Save to file
   await saveModelToFile(updatedModel, model);
+        // Track the saved model so parent can merge without a full refresh
+        savedModels.push(updatedModel as Model);
+      }
+
+      // If parent provided onBulkSaved, give it the exact updated models so it
+      // can merge them into state without a full re-fetch. Otherwise fall back
+      // to calling onRefresh() to reload metadata from disk.
+      if (onBulkSaved) {
+        try {
+          onBulkSaved(savedModels);
+        } catch (err) {
+          console.error('onBulkSaved handler threw an error:', err);
+        }
+      } else if (onRefresh) {
+        try {
+          await onRefresh();
+        } catch (err) {
+          console.error('Failed to refresh models after bulk save:', err);
+        }
       }
 
       // If regeneration was part of the operation, refresh models
@@ -1085,6 +1179,99 @@ export function BulkEditDrawer({
                   These notes will replace existing notes for
                   all selected models
                 </p>
+              </div>
+            )}
+          </div>
+
+          {/* Related Files Field */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="related-files-field"
+                checked={fieldSelection.relatedFiles}
+                onCheckedChange={() => handleFieldToggle("relatedFiles")}
+              />
+              <Label htmlFor="related-files-field" className="font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Related Files
+              </Label>
+            </div>
+
+            {fieldSelection.relatedFiles && (
+              <div className="ml-6 space-y-3">
+                <p className="text-sm">Select which of the selected models should be included as related files for each model, choose the primary, and optionally hide the others.</p>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Included Models</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {models.map((m) => {
+                      const included = (editState.relatedIncluded || relatedIncludedIds || []).includes(m.id);
+                      return (
+                        <div key={m.id} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={included}
+                            onCheckedChange={() => {
+                              // toggle include
+                              const current = new Set(editState.relatedIncluded || relatedIncludedIds || models.map(x => x.id));
+                              if (current.has(m.id)) current.delete(m.id);
+                              else current.add(m.id);
+                              const arr = Array.from(current);
+                              setEditState(prev => ({ ...prev, relatedIncluded: arr }));
+                              setRelatedIncludedIds(arr);
+                            }}
+                          />
+                          <span className="text-sm">{m.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setEditState(prev => ({ ...prev, relatedClearAll: true }))}
+                  >
+                    Remove related files from selected models
+                  </Button>
+                  {editState.relatedClearAll && (
+                    <p className="text-sm text-destructive mt-2">All selected models will have their related files cleared when you save.</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Primary File</Label>
+                  <p className="text-xs text-muted-foreground">Choose which included model should be considered the primary.</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(editState.relatedIncluded || relatedIncludedIds || models.map(m=>m.id)).map((id) => {
+                      const m = models.find(x => x.id === id);
+                      if (!m) return null;
+                      const isPrimary = editState.relatedPrimary === id;
+                      return (
+                        <Button
+                          key={id}
+                          size="sm"
+                          variant={isPrimary ? 'secondary' : 'outline'}
+                          onClick={() => setEditState(prev => ({ ...prev, relatedPrimary: id }))}
+                        >
+                          {m.name}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <Switch
+                    checked={editState.relatedHideOthers || false}
+                    onCheckedChange={(v) => setEditState(prev => ({ ...prev, relatedHideOthers: v }))}
+                    id="related-hide-others"
+                  />
+                  <Label htmlFor="related-hide-others" className="flex items-center gap-2">
+                    Hide all other models (only primary remains visible)
+                  </Label>
+                </div>
               </div>
             )}
           </div>
