@@ -1132,7 +1132,7 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
         let destFolder = 'uploads';
         if (destinations && Array.isArray(destinations) && typeof destinations[fileIndex] === 'string' && destinations[fileIndex].trim() !== '') {
           // normalize and prevent traversal
-          let candidate = destinations[fileIndex].replace(/\\\\/g, '/').replace(/^\/*/, '');
+          let candidate = destinations[fileIndex].replace(/\\/g, '/').replace(/^\/*/, '');
           if (candidate.includes('..')) candidate = 'uploads';
           destFolder = candidate || 'uploads';
         }
