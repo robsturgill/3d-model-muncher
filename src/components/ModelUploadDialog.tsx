@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { ScrollArea } from './ui/scroll-area';
+import { Input } from './ui/input';
 import { FolderPlus, Trash } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { toast } from 'sonner';
@@ -155,7 +156,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
             onClick={() => inputRef.current?.click()}
           >
             <p className="text-sm text-muted-foreground">Drag & drop .3mf or .stl files here, or click to browse</p>
-            <p className="text-xs text-muted-foreground mt-2">Files will be saved to the configured models/uploads directory and processed automatically.</p>
+            <p className="text-xs text-muted-foreground mt-2">Files will be saved to the configured models/ directory and processed automatically.</p>
             <input ref={inputRef} type="file" multiple accept=".3mf,.stl" onChange={onFileChange} className="hidden" />
           </div>
 
@@ -178,10 +179,10 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button className="p-1" onClick={() => setShowCreateFolderInput(!showCreateFolderInput)}>
-                      <FolderPlus className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
+                      <button className="p-1 cursor-pointer" onClick={() => setShowCreateFolderInput(!showCreateFolderInput)}>
+                        <FolderPlus className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
                   <TooltipContent sideOffset={4}>
                     Create folder
                   </TooltipContent>
@@ -190,9 +191,14 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
             </div>
 
             {showCreateFolderInput && (
-              <div className="mt-2 flex items-center gap-2">
-                <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="new/folder/path" className="input input-sm p-1 rounded border bg-background" />
-                <Button variant="ghost" size="sm" onClick={() => createFolder()}>Create</Button>
+              <div className="mt-2 flex items-center gap-2 w-full">
+                <Input
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="new/folder/path"
+                  className="flex-1"
+                />
+                <Button size="sm" onClick={() => createFolder()}>Create</Button>
               </div>
             )}
 
@@ -225,7 +231,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
 
         <DialogFooter>
           <div className="flex gap-2 justify-end w-full">
-            <Button variant="secondary" onClick={onClose} disabled={isUploading}>Cancel</Button>
+            <Button variant="outline" onClick={onClose} disabled={isUploading}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={isUploading || files.length === 0}>{isUploading ? 'Uploading...' : 'Upload & Process'}</Button>
           </div>
         </DialogFooter>
