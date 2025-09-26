@@ -1068,6 +1068,180 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
   }
 });
 
+// API endpoint to upload .3mf / .stl files and generate their munchie.json files
+app.post('/api/upload-models', upload.array('files'), async (req, res) => {
+  try {
+    const files = req.files || [];
+    if (!Array.isArray(files) || files.length === 0) return res.status(400).json({ success: false, error: 'No files uploaded' });
+
+    const modelsDir = getAbsoluteModelsPath();
+    const uploadsDir = path.join(modelsDir, 'uploads');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const { parse3MF, parseSTL, computeMD5 } = require('./dist-backend/utils/threeMFToJson');
+
+  const saved = [];
+  const processed = [];
+  const errors = [];
+
+    // Parse optional destinations JSON (array aligned with files order)
+    let destinations = null;
+    try {
+      if (req.body && req.body.destinations) {
+        destinations = JSON.parse(req.body.destinations);
+        if (!Array.isArray(destinations)) destinations = null;
+      }
+    } catch (e) {
+      destinations = null;
+    }
+
+    for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+      const f = files[fileIndex];
+      try {
+        // multer memoryStorage provides buffer
+        const buffer = f.buffer;
+        const original = (f.originalname || 'upload').replace(/\\/g, '/');
+        // sanitize filename
+        let base = path.basename(original).replace(/[^a-zA-Z0-9_.\- ]/g, '_');
+        if (!/\.3mf$/i.test(base) && !/\.stl$/i.test(base)) {
+          errors.push({ file: original, error: 'Unsupported file extension' });
+          continue;
+        }
+        // Determine destination folder (if provided) relative to models dir
+        let destFolder = 'uploads';
+        if (destinations && Array.isArray(destinations) && typeof destinations[fileIndex] === 'string' && destinations[fileIndex].trim() !== '') {
+          // normalize and prevent traversal
+          let candidate = destinations[fileIndex].replace(/\\\\/g, '/').replace(/^\/*/, '');
+          if (candidate.includes('..')) candidate = 'uploads';
+          destFolder = candidate || 'uploads';
+        }
+
+        const destDir = path.join(modelsDir, destFolder);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+        let targetPath = path.join(destDir, base);
+        // avoid collisions by appending timestamp when necessary
+        if (fs.existsSync(targetPath)) {
+          const name = base.replace(/(\.[^.]+)$/, '');
+          const ext = path.extname(base);
+          const ts = Date.now();
+          base = `${name}-${ts}${ext}`;
+          targetPath = path.join(destDir, base);
+        }
+
+        fs.writeFileSync(targetPath, buffer);
+        saved.push(path.relative(modelsDir, targetPath).replace(/\\/g, '/'));
+
+        // Now generate munchie.json for the saved file (reuse regeneration logic)
+        try {
+          const modelFilePath = targetPath;
+          const rel = path.relative(modelsDir, modelFilePath).replace(/\\/g, '/');
+          let jsonRel;
+          if (rel.toLowerCase().endsWith('.3mf')) jsonRel = rel.replace(/\.3mf$/i, '-munchie.json');
+          else if (rel.toLowerCase().endsWith('.stl')) jsonRel = rel.replace(/\.stl$/i, '-stl-munchie.json');
+          else {
+            errors.push({ file: rel, error: 'Unsupported file type for processing' });
+            continue;
+          }
+
+          const jsonPath = path.join(modelsDir, jsonRel);
+          const derivedId = path.basename(rel).replace(/\.3mf$/i, '').replace(/\.stl$/i, '');
+
+          const fileBuf = fs.readFileSync(modelFilePath);
+          const hash = computeMD5(fileBuf);
+          let newMetadata;
+          if (modelFilePath.toLowerCase().endsWith('.3mf')) {
+            newMetadata = await parse3MF(modelFilePath, derivedId, hash);
+          } else {
+            newMetadata = await parseSTL(modelFilePath, derivedId, hash);
+          }
+
+          const mergedMetadata = { ...newMetadata, id: derivedId, hash };
+
+          // Rebuild imageOrder similar to regeneration logic
+          try {
+            const parsed = Array.isArray(mergedMetadata.parsedImages) ? mergedMetadata.parsedImages : (Array.isArray(mergedMetadata.images) ? mergedMetadata.images : []);
+            const userArr = Array.isArray(mergedMetadata.userDefined?.images) ? mergedMetadata.userDefined.images : [];
+            const rebuiltOrder = [];
+            for (let i = 0; i < parsed.length; i++) rebuiltOrder.push(`parsed:${i}`);
+            for (let i = 0; i < userArr.length; i++) rebuiltOrder.push(`user:${i}`);
+            if (!mergedMetadata.userDefined || typeof mergedMetadata.userDefined !== 'object') mergedMetadata.userDefined = {};
+            mergedMetadata.userDefined = { ...(mergedMetadata.userDefined || {}), imageOrder: rebuiltOrder };
+          } catch (e) {
+            console.warn('Failed to rebuild userDefined.imageOrder during upload processing:', e);
+          }
+
+          // Ensure directory exists for jsonPath
+          const jdir = path.dirname(jsonPath);
+          if (!fs.existsSync(jdir)) fs.mkdirSync(jdir, { recursive: true });
+          fs.writeFileSync(jsonPath, JSON.stringify(mergedMetadata, null, 2), 'utf8');
+          await postProcessMunchieFile(jsonPath);
+          processed.push(jsonRel);
+        } catch (e) {
+          errors.push({ file: base, error: e && e.message ? e.message : String(e) });
+        }
+      } catch (e) {
+        errors.push({ file: f.originalname || 'unknown', error: e && e.message ? e.message : String(e) });
+      }
+    }
+
+    res.json({ success: errors.length === 0, saved, processed, errors });
+  } catch (e) {
+    console.error('Upload processing error:', e);
+    res.status(500).json({ success: false, error: e && e.message ? e.message : String(e) });
+  }
+});
+
+// API endpoint to list model folders (for upload destination selection)
+app.get('/api/model-folders', (req, res) => {
+  try {
+    const modelsDir = getAbsoluteModelsPath();
+    const folders = [];
+
+    function walk(dir, rel = '') {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subRel = rel ? (rel + '/' + entry.name) : entry.name;
+          folders.push(subRel);
+          try { walk(path.join(dir, entry.name), subRel); } catch (e) { /* ignore */ }
+        }
+      }
+    }
+
+    // include root 'uploads' by default
+    folders.push('uploads');
+    if (fs.existsSync(modelsDir)) {
+      walk(modelsDir);
+    }
+    // Deduplicate and sort
+    const uniq = Array.from(new Set(folders)).sort();
+    res.json({ success: true, folders: uniq });
+  } catch (e) {
+    console.error('Failed to list model folders:', e);
+    res.status(500).json({ success: false, error: e && e.message ? e.message : String(e) });
+  }
+});
+
+// API endpoint to create a new folder under the models directory
+app.post('/api/create-model-folder', express.json(), (req, res) => {
+  try {
+    const { folder } = req.body || {};
+    if (!folder || typeof folder !== 'string' || folder.trim() === '') return res.status(400).json({ success: false, error: 'No folder provided' });
+    // sanitize
+    let candidate = folder.replace(/\\/g, '/').replace(/^\/*/, '').replace(/\.\./g, '');
+    if (candidate.includes('..')) return res.status(400).json({ success: false, error: 'Invalid folder' });
+    const modelsDir = getAbsoluteModelsPath();
+    const target = path.join(modelsDir, candidate);
+    if (fs.existsSync(target)) return res.json({ success: true, created: false, path: path.relative(modelsDir, target).replace(/\\/g, '/') });
+    fs.mkdirSync(target, { recursive: true });
+    res.json({ success: true, created: true, path: path.relative(modelsDir, target).replace(/\\/g, '/') });
+  } catch (e) {
+    console.error('Failed to create model folder:', e);
+    res.status(500).json({ success: false, error: e && e.message ? e.message : String(e) });
+  }
+});
+
 // --- API: Get all -munchie.json files and their hashes ---
 app.get('/api/munchie-files', (req, res) => {
   const modelsDir = getAbsoluteModelsPath();
