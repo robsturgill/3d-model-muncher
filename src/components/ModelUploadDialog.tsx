@@ -95,11 +95,11 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
   // Fetch available folders when opened
   useEffect(() => {
     if (!isOpen) return;
-  // Reset dialog state when opened
-  setFiles([]);
-  setSingleDestination('uploads');
-  setShowCreateFolderInput(false);
-  setNewFolderName('');
+    // Reset dialog state when opened
+    setFiles([]);
+    setSingleDestination('uploads');
+    setShowCreateFolderInput(false);
+    setNewFolderName('');
 
     (async () => {
       try {
