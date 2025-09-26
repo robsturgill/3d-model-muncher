@@ -30,7 +30,7 @@ describe('POST /api/upload-models', () => {
   it('uploads a small stl file and returns saved/processed entries', async () => {
     const stlContent = Buffer.from(`solid test\nendsolid test\n`);
 
-    const resp = await request(app)
+    const resp = await (request(app) as any)
       .post('/api/upload-models')
       .field('destinations', JSON.stringify(['uploads']))
       .attach('files', stlContent, { filename: 'test_upload.stl', contentType: 'application/sla' });
