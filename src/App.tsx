@@ -15,7 +15,9 @@ import { ConfigManager } from "./utils/configManager";
 // Import package.json to read the last published version (used as previous release)
 import * as pkg from '../package.json';
 import { applyFiltersToModels, FilterState } from "./utils/filterUtils";
-import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box } from "lucide-react";
+import { sortModels } from "./utils/sortUtils";
+import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload } from "lucide-react";
+import ModelUploadDialog from "./components/ModelUploadDialog";
 import { Button } from "./components/ui/button";
 import {
   DropdownMenu,
@@ -514,6 +516,7 @@ function AppContent() {
     fileType: string;
     tags: string[];
     showHidden: boolean;
+    sortBy?: string;
   }) => {
     let filtered = models;
 
@@ -571,7 +574,9 @@ function AppContent() {
       });
     }
 
-    setFilteredModels(filtered);
+    // Apply sorting via utility
+    const sorted = sortModels(filtered as any[], (filters.sortBy || 'none') as any);
+    setFilteredModels(sorted);
     
     // Clear selections if filtered models change
     if (isSelectionMode) {
@@ -670,6 +675,9 @@ function AppContent() {
     setIsSelectionMode(false);
     setSelectedModelIds([]);
   };
+
+  // Upload dialog state
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
 
   const openSettingsOnTab = (tab: string, action?: { type: 'hash-check' | 'generate'; fileType: '3mf' | 'stl' }) => {
     setSettingsInitialTab(tab);
@@ -849,6 +857,9 @@ function AppContent() {
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'generate', fileType: 'stl' })}>
                     <Files className="h-4 w-4 mr-2" /> STL Generate
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsUploadDialogOpen(true)}>
+                    <Upload className="h-4 w-4 mr-2" /> Upload Files
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1049,6 +1060,14 @@ function AppContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Upload Dialog */}
+      <ModelUploadDialog
+        isOpen={isUploadDialogOpen}
+        onClose={() => setIsUploadDialogOpen(false)}
+        onUploaded={() => { handleRefreshModels(); }}
+      />
+
     </div>
   );
 }

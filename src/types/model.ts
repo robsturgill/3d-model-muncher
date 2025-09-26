@@ -49,6 +49,9 @@ export interface Model {
   // Added for file integrity and duplicate detection
   hash?: string;
   lastScanned?: string;
+  // Timestamps added by server: when munchie.json was first created and last modified
+  created?: string;
+  lastModified?: string;
 }
 
 // Group of duplicate models by hash
