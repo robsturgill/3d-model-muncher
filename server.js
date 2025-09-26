@@ -2334,7 +2334,12 @@ app.get(/^(?!\/api|\/models).*$/, (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`3D Model Muncher backend API running on port ${PORT}`);
-  console.log(`Frontend served from build directory`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`3D Model Muncher backend API running on port ${PORT}`);
+    console.log(`Frontend served from build directory`);
+  });
+}
+
+// Export app for testing (so tests can import and run requests against it)
+module.exports = app;
