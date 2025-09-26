@@ -1255,11 +1255,16 @@ app.post('/api/create-model-folder', express.json(), (req, res) => {
   try {
     const { folder } = req.body || {};
     if (!folder || typeof folder !== 'string' || folder.trim() === '') return res.status(400).json({ success: false, error: 'No folder provided' });
-    // sanitize
-    let candidate = folder.replace(/\\/g, '/').replace(/^\/*/, '').replace(/\.\./g, '');
-    if (candidate.includes('..')) return res.status(400).json({ success: false, error: 'Invalid folder' });
+    // sanitize and validate: ensure folder is within modelsDir
     const modelsDir = getAbsoluteModelsPath();
-    const target = path.join(modelsDir, candidate);
+    // Remove leading/trailing whitespace and slashes
+    let candidate = folder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    // Resolve the absolute path of the target folder
+    const target = path.resolve(modelsDir, candidate);
+    // Ensure the target is within modelsDir
+    if (!target.startsWith(modelsDir)) {
+      return res.status(400).json({ success: false, error: 'Invalid folder path' });
+    }
     if (fs.existsSync(target)) return res.json({ success: true, created: false, path: path.relative(modelsDir, target).replace(/\\/g, '/') });
     fs.mkdirSync(target, { recursive: true });
     res.json({ success: true, created: true, path: path.relative(modelsDir, target).replace(/\\/g, '/') });
