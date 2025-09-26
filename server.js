@@ -493,6 +493,19 @@ app.post('/api/save-model', async (req, res) => {
       delete updated.images;
     }
 
+    // Set created if missing and update lastModified
+    try {
+      const now = new Date().toISOString();
+      if (!existing || !existing.created) {
+        updated.created = now;
+      } else if (existing.created) {
+        updated.created = existing.created;
+      }
+      updated.lastModified = now;
+    } catch (e) {
+      // ignore timestamp errors
+    }
+
     // Write atomically: write to a temp file then rename it into place to avoid
     // readers seeing a truncated/partial file during concurrent writes.
     const tmpPath = absoluteFilePath + '.tmp';
@@ -966,6 +979,14 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
         }
 
         const mergedMetadata = { ...newMetadata, ...userDataBackup, id: idForModel, hash };
+        // Ensure created/lastModified timestamps for regenerated file
+        try {
+          const now = new Date().toISOString();
+          if (!mergedMetadata.created) mergedMetadata.created = now;
+          mergedMetadata.lastModified = now;
+        } catch (e) {
+          // ignore
+        }
 
         // Rebuild imageOrder so descriptors point to correct indexes
         try {
@@ -1157,6 +1178,12 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
           }
 
           const mergedMetadata = { ...newMetadata, id: derivedId, hash };
+          // Ensure created/lastModified timestamps for newly uploaded file
+          try {
+            const now = new Date().toISOString();
+            if (!mergedMetadata.created) mergedMetadata.created = now;
+            mergedMetadata.lastModified = now;
+          } catch (e) { /* ignore */ }
 
           // Rebuild imageOrder similar to regeneration logic
           try {
