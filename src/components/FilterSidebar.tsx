@@ -316,7 +316,7 @@ export function FilterSidebar({
 
       {isOpen && (
         <ScrollArea className="flex-1 min-h-0">
-          <div className="h-full p-4 space-y-6">
+          <div className="h-full p-4 space-y-4">
 
             {/* Search */}
             <div className="space-y-2">
@@ -333,7 +333,7 @@ export function FilterSidebar({
             </div>
 
             {/* Categories */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Layers className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">Categories</label>
@@ -351,10 +351,10 @@ export function FilterSidebar({
                   <Filter className="h-4 w-4 mr-3" />
                   <span>All Categories</span>
                 </Button>
-                
-                              {categories.map((category) => {
-                                const iconKey = normalizeIconName(category.icon);
-                                const Icon = (LucideIcons as any)[iconKey] as React.ComponentType<any> || (LucideIcons as any)['Folder'];
+  
+                {categories.map((category) => {
+                  const iconKey = normalizeIconName(category.icon);
+                  const Icon = (LucideIcons as any)[iconKey] as React.ComponentType<any> || (LucideIcons as any)['Folder'];
                   return (
                     <Button
                       key={category.id}
@@ -375,7 +375,7 @@ export function FilterSidebar({
             </div>
 
             {/* Print Status */}
-            <div className="space-y-3">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <CircleCheck className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">Print Status</label>
@@ -393,7 +393,7 @@ export function FilterSidebar({
             </div>
 
             {/* File Type Filter */}
-            <div className="space-y-3">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <FileBox className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">File Type</label>
@@ -411,7 +411,7 @@ export function FilterSidebar({
             </div>
 
             {/* Sort By */}
-            <div className="space-y-3">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <LucideIcons.SortAsc className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">Sort By</label>
@@ -431,7 +431,7 @@ export function FilterSidebar({
             </div>
 
             {/* License Filter */}
-            <div className="space-y-3">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">License</label>
@@ -452,11 +452,11 @@ export function FilterSidebar({
             </div>
 
             {/* Show Hidden Models */}
-            <div className="space-y-3">
+            <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Eye className="h-4 w-4 text-foreground" />
-                  <label className="text-sm font-medium text-foreground">Show Hidden Models</label>
+                  <label className="text-sm font-medium text-foreground">Show Hidden</label>
                 </div>
                 <Switch
                   checked={showHidden}
@@ -467,7 +467,7 @@ export function FilterSidebar({
             </div>
 
             {/* Tags */}
-            <div className="space-y-3">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">Tags</label>
