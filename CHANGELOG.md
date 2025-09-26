@@ -1,3 +1,17 @@
+# [0.12.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.11.0...v0.12.0) (2025-09-26)
+
+
+### Bug Fixes
+
+* adjust spacing in FilterSidebar component for new sort by field ([6e93140](https://github.com/robsturgill/3d-model-muncher/commit/6e9314051ab04eefdd6c373c06955fe0227f8439))
+
+
+### Features
+
+* add created and lastModified timestamps to model metadata ([2ba5af1](https://github.com/robsturgill/3d-model-muncher/commit/2ba5af1e32d1020e6ae7dd3164de559dee9d2393))
+* add model upload functionality with folder management ([253f5d3](https://github.com/robsturgill/3d-model-muncher/commit/253f5d3d5b034e8d425d44fec2948d6cbeb494a3))
+* add sorting functionality to model filters ([e720c0e](https://github.com/robsturgill/3d-model-muncher/commit/e720c0e13310f9de741222e58c1dbb07c529c66b))
+
 # [0.11.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.10.1...v0.11.0) (2025-09-25)
 
 
