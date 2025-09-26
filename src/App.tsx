@@ -979,15 +979,16 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
+              <h3 className="text-lg">v0.12.x - Release updates</h3>
+              <ul className="list-disc pl-5 list-inside mb-4">
+                <li><strong>Upload files</strong> - Set destination folder, upload multiple files to be processed.</li>
+                <li><strong>Sort by filtering</strong> - Created and last modified properties added to munchie.json files for filtering sorting.</li>
+              </ul>
               <h3 className="text-lg">v0.11.x - Release updates</h3>
               <ul className="list-disc pl-5 list-inside mb-4">
                 <li><strong>Bulk edit related files</strong> - Select multiple models and add them as related files. Choose a "primary" and hide the others to have a single model with all files available for download.</li>
                 <li><strong>UI & layout fixes</strong> - Refactored global styles, increasing the default font-size and adding subtle details throughout.</li>
                 <li><strong>Refactored JSON generation</strong> - The backend generation processes have been improved; deprecated the image migration actions.</li>
-              </ul>
-              <h3 className="text-lg">v0.10.x - Release updates</h3>
-              <ul className="list-disc pl-5 list-inside mb-4">
-                <li><strong>Capture 3D previews</strong> - You can now capture the current camera/view from the 3D viewer and save it directly into a model's images while editing. This makes it easy to create thumbnails or gallery images from the exact view you want.</li>
               </ul>
             </div>
 
