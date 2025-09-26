@@ -1,3 +1,10 @@
+## [0.12.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.12.0...v0.12.1) (2025-09-26)
+
+
+### Bug Fixes
+
+* updated release notes dialog ([ce1f8cb](https://github.com/robsturgill/3d-model-muncher/commit/ce1f8cbc195affc484314c16b440c391d6992de7))
+
 # [0.12.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.11.0...v0.12.0) (2025-09-26)
 
 
