@@ -21,6 +21,7 @@ interface FilterSidebarProps {
     fileType: string;
     tags: string[];
     showHidden: boolean;
+    sortBy?: string;
   }) => void;
   isOpen: boolean;
   onClose: () => void;
@@ -35,6 +36,7 @@ interface FilterSidebarProps {
     fileType: string;
     tags: string[];
     showHidden: boolean;
+    sortBy?: string;
   };
 }
 
@@ -77,6 +79,7 @@ export function FilterSidebar({
   const [selectedFileType, setSelectedFileType] = useState(initialFilters?.fileType ?? "all");
   const [selectedTags, setSelectedTags] = useState<string[]>(initialFilters?.tags ?? []);
   const [showHidden, setShowHidden] = useState(initialFilters?.showHidden ?? false);
+  const [selectedSort, setSelectedSort] = useState<string>(initialFilters?.sortBy ?? 'none');
 
   // Dynamically get all unique tags from the models
   const getAllTags = (): string[] => {
@@ -117,6 +120,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      sortBy: selectedSort,
     });
   };
 
@@ -133,6 +137,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      sortBy: selectedSort,
     });
   };
 
@@ -146,6 +151,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      sortBy: selectedSort,
     });
   };
 
@@ -159,6 +165,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      sortBy: selectedSort,
     });
   };
 
@@ -172,8 +179,24 @@ export function FilterSidebar({
       fileType: value,
       tags: selectedTags,
       showHidden: showHidden,
+      sortBy: selectedSort,
     });
   };
+
+  const handleSortChange = (value: string) => {
+    setSelectedSort(value);
+    onFilterChange({
+      search: searchTerm,
+      category: selectedCategory,
+      printStatus: selectedPrintStatus,
+      license: selectedLicense,
+      fileType: selectedFileType,
+      tags: selectedTags,
+      showHidden: showHidden,
+      sortBy: value,
+    });
+  };
+
 
   const handleTagToggle = (tag: string) => {
     const newSelectedTags = selectedTags.includes(tag)
@@ -190,6 +213,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: newSelectedTags,
       showHidden: showHidden,
+      sortBy: selectedSort,
     });
   };
 
@@ -203,6 +227,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: checked,
+      sortBy: selectedSort,
     });
   };
 
@@ -214,6 +239,7 @@ export function FilterSidebar({
     setSelectedFileType("all");
     setSelectedTags([]);
     setShowHidden(false);
+    setSelectedSort('none');
     onFilterChange({
       search: "",
       category: "all",
@@ -222,6 +248,7 @@ export function FilterSidebar({
       fileType: "all",
       tags: [],
       showHidden: false,
+      sortBy: 'none',
     });
   };
 
@@ -379,6 +406,26 @@ export function FilterSidebar({
                   <SelectItem value="all">All Files</SelectItem>
                   <SelectItem value="3mf">3MF</SelectItem>
                   <SelectItem value="stl">STL</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Sort By */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <LucideIcons.SortAsc className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">Sort By</label>
+              </div>
+              <Select value={selectedSort} onValueChange={handleSortChange}>
+                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Default</SelectItem>
+                  <SelectItem value="modified_desc">Recently modified (newest)</SelectItem>
+                  <SelectItem value="modified_asc">Modified (oldest)</SelectItem>
+                  <SelectItem value="name_asc">Name A → Z</SelectItem>
+                  <SelectItem value="name_desc">Name Z → A</SelectItem>
                 </SelectContent>
               </Select>
             </div>

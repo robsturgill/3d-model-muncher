@@ -515,6 +515,7 @@ function AppContent() {
     fileType: string;
     tags: string[];
     showHidden: boolean;
+    sortBy?: string;
   }) => {
     let filtered = models;
 
@@ -570,6 +571,36 @@ function AppContent() {
         const path = (model.filePath || model.modelUrl || '').toLowerCase();
         return path.endsWith('.' + ext);
       });
+    }
+
+    // Apply sorting if requested
+    const sortBy = filters.sortBy || 'none';
+    const getModelTimestamp = (m: any) => {
+      const v = m.lastModified || m.created || '';
+      const t = Date.parse(v || '');
+      return isNaN(t) ? 0 : t;
+    };
+
+    if (sortBy && sortBy !== 'none') {
+      const copy = filtered.slice();
+      switch (sortBy) {
+        case 'modified_desc':
+          copy.sort((a, b) => getModelTimestamp(b) - getModelTimestamp(a));
+          break;
+        case 'modified_asc':
+          copy.sort((a, b) => getModelTimestamp(a) - getModelTimestamp(b));
+          break;
+        case 'name_asc':
+          copy.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          break;
+        case 'name_desc':
+          copy.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+          break;
+        default:
+          // leave as-is
+          break;
+      }
+      filtered = copy;
     }
 
     setFilteredModels(filtered);
