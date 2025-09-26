@@ -33,7 +33,7 @@ describe('POST /api/upload-models', () => {
     const resp = await (request(app) as any)
       .post('/api/upload-models')
       .field('destinations', JSON.stringify(['uploads']))
-      .attach('files', stlContent, { filename: 'test_upload.stl', contentType: 'application/sla' });
+      .attach('files', stlContent, { filename: 'test_upload.stl', contentType: 'model/stl' });
 
     expect(resp.status).toBe(200);
     expect(resp.body).toHaveProperty('success');
