@@ -2781,51 +2781,62 @@ export function SettingsPage({
                                       Remove Duplicates
                                     </Button>
                                   </DialogTrigger>
-                                  <DialogContent>
+                                  <DialogContent className="w-full max-w-[72rem]">
                                     <DialogHeader>
                                       <DialogTitle>Remove Duplicate Files</DialogTitle>
                                       <DialogDescription>
                                         Choose which file to keep. All other copies will be deleted. <br/><strong className="text-destructive">This action cannot be undone.</strong>
                                       </DialogDescription>
                                     </DialogHeader>
-                                    <div className="space-y-2">
-                                      {group.models.map((model) => (
-                                        <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 bg-muted rounded-md gap-2">
-                                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            {(() => {
-                                              const src = resolveModelThumbnail(model);
-                                              if (src) {
-                                                return (
-                                                  <ImageWithFallback
-                                                    src={src}
-                                                    alt={model.name}
-                                                    className="w-8 h-8 object-cover rounded border"
-                                                  />
-                                                );
-                                              }
-                                              return (
-                                                <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border">
-                                                  <Box className="h-4 w-4 text-muted-foreground" />
+                                    {/* Wrap list in an overflow-x-auto container so very long paths don't push the buttons out of view */}
+                                    <div className="space-y-2 min-w-0">
+                                      <ScrollArea className="w-full" showHorizontalScrollbar={true}>
+                                        <div className="w-max">
+                                          {group.models.map((model) => (
+                                            <div key={`dup-dialog-${group.hash}-${model.id}-${model.name}`} className="flex items-center justify-between p-2 bg-muted rounded-md gap-2 mb-2">
+                                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                {(() => {
+                                                  const src = resolveModelThumbnail(model);
+                                                  if (src) {
+                                                    return (
+                                                      <ImageWithFallback
+                                                        src={src}
+                                                        alt={model.name}
+                                                        className="w-8 h-8 object-cover rounded border flex-shrink-0"
+                                                      />
+                                                    );
+                                                  }
+                                                  return (
+                                                    <div className="w-8 h-8 flex items-center justify-center bg-muted rounded border flex-shrink-0">
+                                                      <Box className="h-4 w-4 text-muted-foreground" />
+                                                    </div>
+                                                  );
+                                                })()}
+                                                <div className="ml-2 text-sm pr-4 min-w-0 w-full">
+                                                  <div className="overflow-x-auto whitespace-nowrap">
+                                                    <span className="select-all">{getDisplayPath(model)}</span>
+                                                  </div>
                                                 </div>
-                                              );
-                                            })()}
-                                            <span className="text-sm truncate">{getDisplayPath(model)}</span>
-                                          </div>
-                                          <Button
-                                            variant="destructive"
-                                            size="sm"
-                                            onClick={async () => {
-                                              const success = await handleRemoveDuplicates(group, model.id);
-                                              if (success) {
-                                                // Close the dialog for this group
-                                                setOpenDuplicateGroupHash(null);
-                                              }
-                                            }}
-                                          >
-                                            Keep This
-                                          </Button>
+                                              </div>
+                                              <div className="flex-shrink-0 ml-4">
+                                                <Button
+                                                  variant="destructive"
+                                                  size="sm"
+                                                  onClick={async () => {
+                                                    const success = await handleRemoveDuplicates(group, model.id);
+                                                    if (success) {
+                                                      // Close the dialog for this group
+                                                      setOpenDuplicateGroupHash(null);
+                                                    }
+                                                  }}
+                                                >
+                                                  Keep This
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ))}
                                         </div>
-                                      ))}
+                                      </ScrollArea>
                                     </div>
                                   </DialogContent>
                                 </Dialog>
