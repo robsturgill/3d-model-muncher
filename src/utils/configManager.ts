@@ -19,6 +19,7 @@ export class ConfigManager {
       defaultView: "grid",
       defaultGridDensity: 4,
       defaultModelView: "images",
+      defaultModelColor: "#aaaaaa",
       showPrintedBadge: true,
       modelCardPrimary: 'printTime',
       modelCardSecondary: 'filamentUsed',
@@ -71,6 +72,9 @@ export class ConfigManager {
           const validated = this.validateModelView(modelView);
           return validated !== undefined ? validated : this.defaultConfig.settings.defaultModelView;
         })(),
+        defaultModelColor: typeof config?.settings?.defaultModelColor === 'string' && config.settings.defaultModelColor.trim() !== ''
+          ? config.settings.defaultModelColor
+          : this.defaultConfig.settings.defaultModelColor,
         modelCardPrimary: ((): 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price' => {
           const val = config?.settings?.modelCardPrimary;
           const allowed = ['none', 'printTime', 'filamentUsed', 'fileSize', 'category', 'designer', 'layerHeight', 'nozzle', 'price'];

@@ -8,6 +8,7 @@ export interface AppConfig {
     defaultView: "grid" | "list";
     defaultGridDensity: number;
     defaultModelView: "3d" | "images";
+    defaultModelColor?: string;
     showPrintedBadge?: boolean;
     modelCardPrimary: 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price';
     modelCardSecondary: 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price';

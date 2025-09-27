@@ -328,6 +328,11 @@ export function SettingsPage({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
+  const colorInputRef = useRef<HTMLInputElement | null>(null);
+  // Unsaved color state to avoid auto-saving when user picks a color
+  const [unsavedDefaultModelColor, setUnsavedDefaultModelColor] = useState<string>(() => {
+    return (localConfig as any)?.settings?.defaultModelColor ?? '#aaaaaa';
+  });
   // Track the active status toast id so we can update loading -> success/error
   const statusToastId = useRef<string | number | null>(null);
 
@@ -1825,6 +1830,147 @@ export function SettingsPage({
 
                   <Separator />
 
+                  {/* Default Filters */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium">Default Filters</h3>
+                    <p className="text-sm text-muted-foreground">Set default filter values when the app starts</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Default Category</Label>
+                        <Select 
+                          value={localConfig.filters.defaultCategory}
+                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultCategory', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {localCategories.map((category) => (
+                              <SelectItem key={category.id} value={category.id}>
+                                {category.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Default Print Status</Label>
+                        <Select 
+                          value={localConfig.filters.defaultPrintStatus}
+                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultPrintStatus', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="printed">Printed</SelectItem>
+                            <SelectItem value="not-printed">Not Printed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Default License</Label>
+                        <Select 
+                          value={localConfig.filters.defaultLicense}
+                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultLicense', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Licenses</SelectItem>
+                            {LICENSES.map((lic) => (
+                              <SelectItem key={lic} value={lic}>{lic}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>                  
+                  <Separator />
+
+                  {/* Image generation */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium">3D Model Viewer</h3>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col">
+                        <Label className="text-xs mb-2">Default Model Color</Label>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <input
+                                ref={colorInputRef}
+                                type="color"
+                                value={unsavedDefaultModelColor ?? '#aaaaaa'}
+                                onChange={(e: any) => setUnsavedDefaultModelColor(e.target.value)}
+                                title="Default model color"
+                                aria-label="Default model color picker"
+                                style={{
+                                  position: 'absolute',
+                                  inset: 0,
+                                  width: 40,
+                                  height: 40,
+                                  padding: 0,
+                                  margin: 0,
+                                  opacity: 0,
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer'
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => colorInputRef.current?.click()}
+                                className="w-10 h-10 rounded-full border border-border shadow-sm flex items-center justify-center"
+                                title="Pick default model color"
+                                aria-hidden="true"
+                                style={{ background: unsavedDefaultModelColor || '#aaaaaa' }}
+                              />
+                            </div>
+                            <div className="text-sm font-mono text-xs">{(unsavedDefaultModelColor || '#aaaaaa').toUpperCase()}</div>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                // Save the picked color into the config
+                                handleConfigFieldChange('settings.defaultModelColor', unsavedDefaultModelColor || '#aaaaaa');
+                                toast.success('Default model color saved');
+                              }}
+                              title="Save color"
+                            >
+                              Save
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                // Revert the unsaved color to the default, but do not persist
+                                const defaultColor = ConfigManager.getDefaultConfig().settings.defaultModelColor || '#aaaaaa';
+                                setUnsavedDefaultModelColor(defaultColor);
+                              }}
+                              title="Reset color"
+                            >
+                              Reset
+                            </Button>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Pick the default color used by the 3D model viewer when a model does not provide a color.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -1907,69 +2053,6 @@ export function SettingsPage({
                       </div>
                     </div>
                   </div>
-                  <Separator />
-
-                  {/* Default Filters */}
-                  <div className="space-y-4">
-                    <h3 className="font-medium">Default Filters</h3>
-                    <p className="text-sm text-muted-foreground">Set default filter values when the app starts</p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label>Default Category</Label>
-                        <Select 
-                          value={localConfig.filters.defaultCategory}
-                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultCategory', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Categories</SelectItem>
-                            {localCategories.map((category) => (
-                              <SelectItem key={category.id} value={category.id}>
-                                {category.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Default Print Status</Label>
-                        <Select 
-                          value={localConfig.filters.defaultPrintStatus}
-                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultPrintStatus', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="printed">Printed</SelectItem>
-                            <SelectItem value="not-printed">Not Printed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Default License</Label>
-                        <Select 
-                          value={localConfig.filters.defaultLicense}
-                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultLicense', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Licenses</SelectItem>
-                            {LICENSES.map((lic) => (
-                              <SelectItem key={lic} value={lic}>{lic}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>                  
                   <Separator />
 
                   {/* Add Load Configuration button to Application Settings (matches Configuration tab) */}

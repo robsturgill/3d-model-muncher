@@ -944,6 +944,7 @@ function AppContent() {
           onClose={() => setIsDrawerOpen(false)}
           onModelUpdate={handleModelUpdate}
           defaultModelView={appConfig?.settings.defaultModelView || 'images'}
+          defaultModelColor={appConfig?.settings?.defaultModelColor}
           categories={categories}
         />
       )}

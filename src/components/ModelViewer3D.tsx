@@ -14,6 +14,8 @@ interface ModelViewer3DProps {
   modelName?: string;
   // callback invoked with a PNG data URL of the current canvas render
   onCapture?: (dataUrl: string) => void;
+  // optional external default/custom color to apply to models
+  customColor?: string;
 }
 
 
@@ -68,11 +70,11 @@ const Scene = memo(({ modelUrl, isWireframe, autoRotate, materialType, customCol
 Scene.displayName = "Scene";
 
 
-export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture }: ModelViewer3DProps) => {
+export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture, customColor: externalCustomColor }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
   const [materialType, setMaterialType] = useState<'standard' | 'normal'>('standard');
-  const [customColor, setCustomColor] = useState<string | undefined>(undefined);
+  const [customColor, setCustomColor] = useState<string | undefined>(externalCustomColor);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
   const [isDestroyed, setIsDestroyed] = useState(false);
@@ -87,6 +89,13 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
     setIsWireframe(false);
     setIsDestroyed(false);
   }, [modelName]);
+
+  // Sync external custom color prop into internal state when it changes
+  useEffect(() => {
+    if (externalCustomColor) {
+      setCustomColor(externalCustomColor);
+    }
+  }, [externalCustomColor]);
 
   // Global Canvas instance management - prevent multiple Three.js instances
   useEffect(() => {

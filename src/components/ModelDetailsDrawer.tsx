@@ -30,6 +30,7 @@ interface ModelDetailsDrawerProps {
   onModelUpdate: (model: Model) => void;
   defaultModelView?: '3d' | 'images';
   categories: Category[];
+  defaultModelColor?: string | null;
 }
 
 export function ModelDetailsDrawer({
@@ -38,6 +39,7 @@ export function ModelDetailsDrawer({
   onClose,
   onModelUpdate,
   defaultModelView = 'images',
+  defaultModelColor = null,
   categories
 }: ModelDetailsDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -1958,12 +1960,13 @@ export function ModelDetailsDrawer({
             </div>
 
             <div className="relative bg-gradient-to-br from-muted/30 to-muted/60 rounded-xl border overflow-hidden">
-              {viewMode === '3d' ? (
+                {viewMode === '3d' ? (
                 <ModelViewerErrorBoundary>
                   <ModelViewer3D 
                       modelUrl={currentModel.modelUrl} 
                       modelName={currentModel.name}
                       onCapture={handleCapturedImage}
+                      customColor={defaultModelColor || undefined}
                     />
                 </ModelViewerErrorBoundary>
               ) : (
