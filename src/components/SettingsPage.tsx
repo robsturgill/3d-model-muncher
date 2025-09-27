@@ -1392,8 +1392,11 @@ export function SettingsPage({
       const updatedModels = removeDuplicates(models, group, keepModelId);
       onModelsUpdate(updatedModels);
       // Update duplicate groups
-      const updatedGroups = duplicateGroups.filter(g => g.hash !== group.hash);
-      setDuplicateGroups(updatedGroups);
+  const updatedGroups = duplicateGroups.filter(g => g.hash !== group.hash);
+  setDuplicateGroups(updatedGroups);
+  // Also update the hash check result so the UI section that renders
+  // `hashCheckResult.duplicateGroups` hides this group immediately.
+  setHashCheckResult(prev => prev ? { ...prev, duplicateGroups: updatedGroups } : prev);
       const removedCount = group.models.length - 1;
       setSaveStatus('saved');
       setStatusMessage(`Removed ${removedCount} duplicate file${removedCount > 1 ? 's' : ''}`);
