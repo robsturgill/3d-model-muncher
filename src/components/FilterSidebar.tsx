@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Search, Filter, Layers, X, Settings, FileText, Eye, CircleCheck, FileBox, Tag } from "lucide-react";
 import * as LucideIcons from 'lucide-react';
 import { Input } from "./ui/input";
@@ -73,6 +73,25 @@ export function FilterSidebar({
   };
 
   const [searchTerm, setSearchTerm] = useState(initialFilters?.search ?? "");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Keyboard bindings:
+  // - Escape: clear current search when input is focused
+  // - Ctrl/Cmd+K: focus the search input when the sidebar is open
+  useEffect(() => {
+    const onGlobalKey = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+K to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (isOpen && searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
+  }, [isOpen]);
   const [selectedCategory, setSelectedCategory] = useState(normalizeCategoryToLabel(initialFilters?.category ?? "all"));
   const [selectedPrintStatus, setSelectedPrintStatus] = useState(initialFilters?.printStatus ?? "all");
   const [selectedLicense, setSelectedLicense] = useState(initialFilters?.license ?? "all");
@@ -324,11 +343,37 @@ export function FilterSidebar({
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
+                  ref={searchInputRef}
                   placeholder="Search models..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-10 bg-background border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      // clear search when Escape pressed
+                      handleSearchChange('');
+                      // keep focus on the input
+                      if (searchInputRef.current) searchInputRef.current.focus();
+                    }
+                  }}
+                  className="pl-10 pr-9 bg-background border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                  aria-label="Search models"
                 />
+                {searchTerm && searchTerm.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      handleSearchChange("");
+                      // refocus input after clearing
+                      if (searchInputRef.current) searchInputRef.current.focus();
+                    }}
+                    className="absolute right-2 top-2 p-1 h-6 w-6 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                    title="Clear search"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             </div>
 
