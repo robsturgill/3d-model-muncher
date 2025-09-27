@@ -94,16 +94,46 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve model files from the models directory
-const config = ConfigManager.loadConfig();
-// Always serve from the source models directory for single source of truth
-const modelDir = (config.settings && config.settings.modelDirectory) || './models';
-const absoluteModelPath = path.isAbsolute(modelDir) ? modelDir : path.join(process.cwd(), modelDir);
-console.log(`Serving models from: ${absoluteModelPath}`);
-app.use('/models', express.static(absoluteModelPath));
+// Serve model files from the models directory. The configured directory can be
+// updated at runtime by saving `data/config.json`. We create a small wrapper
+// that ensures the static handler points at the current configured directory.
+let currentModelsStaticHandler = null;
+let currentModelsPath = null;
+
+function ensureModelsStaticHandler() {
+  try {
+    const abs = getAbsoluteModelsPath();
+    if (currentModelsPath !== abs) {
+      console.log(`Updating /models static handler to serve from: ${abs}`);
+      currentModelsPath = abs;
+      currentModelsStaticHandler = express.static(abs);
+    }
+  } catch (e) {
+    console.warn('Failed to ensure models static handler:', e);
+    currentModelsStaticHandler = (req, res, next) => next();
+  }
+}
+
+app.use('/models', (req, res, next) => {
+  ensureModelsStaticHandler();
+  return currentModelsStaticHandler(req, res, next);
+});
 
 // Helper function to get the models directory (always from source)
 function getModelsDirectory() {
+  // Prefer server-side `data/config.json` when present (written by /api/save-config).
+  try {
+    const serverConfigPath = path.join(process.cwd(), 'data', 'config.json');
+    if (fs.existsSync(serverConfigPath)) {
+      const raw = fs.readFileSync(serverConfigPath, 'utf8');
+      const parsed = JSON.parse(raw || '{}');
+      if (parsed && parsed.settings && typeof parsed.settings.modelDirectory === 'string' && parsed.settings.modelDirectory.trim() !== '') {
+        return parsed.settings.modelDirectory;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to read server-side data/config.json:', e);
+  }
   const config = ConfigManager.loadConfig();
   return (config.settings && config.settings.modelDirectory) || './models';
 }
@@ -237,14 +267,14 @@ app.post('/api/save-model', async (req, res) => {
         console.error('Error searching for munchie by id:', e);
         return res.status(500).json({ success: false, error: 'Internal error locating model by id' });
       }
-    } else {
-      // Resolve provided filePath to absolute path
-      if (path.isAbsolute(filePath)) {
-        absoluteFilePath = filePath;
       } else {
-        absoluteFilePath = path.join(absoluteModelPath, filePath);
+        // Resolve provided filePath to absolute path
+        if (path.isAbsolute(filePath)) {
+          absoluteFilePath = filePath;
+        } else {
+          absoluteFilePath = path.join(getAbsoluteModelsPath(), filePath);
+        }
       }
-    }
 
     console.log('Resolved file path for saving:', absoluteFilePath);
 
@@ -1665,7 +1695,7 @@ app.get('/api/validate-3mf', async (req, res) => {
 
   try {
     const { parse3MF } = require('./dist-backend/utils/threeMFToJson');
-    const filePath = path.isAbsolute(file) ? file : path.join(absoluteModelPath, file);
+  const filePath = path.isAbsolute(file) ? file : path.join(getAbsoluteModelsPath(), file);
     
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found' });

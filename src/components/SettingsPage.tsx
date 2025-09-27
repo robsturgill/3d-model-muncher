@@ -27,7 +27,6 @@ const {
   Upload,
   RefreshCw,
   Save,
-  FolderOpen,
   Settings: SettingsIcon,
   AlertCircle,
   Tag,
@@ -55,7 +54,6 @@ const {
 import { toast } from 'sonner';
 import { ImageWithFallback } from './ImageWithFallback';
 import { getLabel } from '../constants/labels';
-
 import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 
 // Thumbnail resolver: prefer model object, fall back to explicit prop
@@ -183,6 +181,9 @@ export function SettingsPage({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
+  // State for editing the model directory path
+  const [isEditingModelDir, setIsEditingModelDir] = useState(false);
+  const [tempModelDir, setTempModelDir] = useState('');
   const [selectedTag, setSelectedTag] = useState<TagInfo | null>(null);
   const [viewTagModels, setViewTagModels] = useState<TagInfo | null>(null);
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
@@ -1631,15 +1632,15 @@ export function SettingsPage({
           </div>
 
           {/* Status Alert */}
-            {/* Inline status alert: only show inline for errors. Other statuses are shown as toasts. */}
-            {saveStatus === 'error' && statusMessage && (
-              <Alert className={`border-red-500 bg-red-50 dark:bg-red-950`}>
-                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                <AlertDescription className={`text-red-700 dark:text-red-300`}>
-                  {statusMessage}
-                </AlertDescription>
-              </Alert>
-            )}
+          {/* Inline status alert: only show inline for errors. Other statuses are shown as toasts. */}
+          {saveStatus === 'error' && statusMessage && (
+            <Alert className={`border-red-500 bg-red-50 dark:bg-red-950`}>
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <AlertDescription className={`text-red-700 dark:text-red-300`}>
+                {statusMessage}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Settings Tabs */}
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
@@ -1795,6 +1796,7 @@ export function SettingsPage({
                           </Select>
                         </div>
                       </div>
+                      
                       <p className="text-xs text-muted-foreground">Select which two properties (if any) are shown under the model name in the cards.</p>
                     </div>
 
@@ -1824,20 +1826,84 @@ export function SettingsPage({
                   <Separator />
 
                   <div className="space-y-4">
-                    <h3 className="font-medium">Directory Settings</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="model-dir">Model Directory</Label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
                           <Input
-                            value={localConfig.settings.modelDirectory}
-                            onChange={(e) => handleConfigFieldChange('settings.modelDirectory', e.target.value)}
+                            id="model-dir"
+                            className="flex-1"
+                            value={isEditingModelDir ? tempModelDir : localConfig.settings.modelDirectory}
+                            readOnly={!isEditingModelDir}
                             placeholder="./models"
+                            onChange={(e: any) => { if (isEditingModelDir) setTempModelDir(e.target.value); }}
                           />
-                          <Button variant="outline" size="sm" className="px-3">
-                            <FolderOpen className="h-4 w-4" />
-                          </Button>
+                          {!isEditingModelDir ? (
+                            <Button
+                              onClick={() => {
+                                setTempModelDir(localConfig.settings.modelDirectory || './models');
+                                setIsEditingModelDir(true);
+                              }}
+                              title="Edit model directory"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={async () => {
+                                  try {
+                                    setSaveStatus('saving');
+                                    const newConfig = { ...localConfig, settings: { ...localConfig.settings, modelDirectory: tempModelDir } } as AppConfig;
+                                    const resp = await fetch('/api/save-config', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify(newConfig)
+                                    });
+                                    if (!resp.ok) {
+                                      const txt = await resp.text().catch(() => '');
+                                      throw new Error(`Save failed: ${resp.status} ${txt}`);
+                                    }
+                                    const body = await resp.json().catch(() => null);
+                                    if (!body || body.success === false) throw new Error(body?.error || 'Unknown error');
+                                    // Update local config with server-supplied final config when available
+                                    const updated = body.config || newConfig;
+                                    setLocalConfig(updated);
+                                    onConfigUpdate?.(updated);
+                                    setSaveStatus('saved');
+                                    toast.success('Model directory saved. The server will serve files from the new location.');
+                                    setIsEditingModelDir(false);
+                                    // ensure temp cleaned
+                                    setTempModelDir('');
+                                  } catch (err: any) {
+                                    console.error('Failed to save model directory:', err);
+                                    setSaveStatus('error');
+                                    toast.error('Failed to save model directory: ' + (err?.message || ''));
+                                  } finally {
+                                    setTimeout(() => setSaveStatus('idle'), 2500);
+                                  }
+                                }}
+                              >
+                                <Save className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                onClick={() => {
+                                  setIsEditingModelDir(false);
+                                  setTempModelDir('');
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          )}
+                          </div>
                         </div>
+                      <div className="col-span-1 md:col-span-2 text-sm text-muted-foreground">
+                        <p>
+                          Server reads model files from this directory. Enter an absolute path (e.g. <code>C:\\models</code>) or a path relative to the app (e.g. <code>./models</code>). Make sure the server process can write to the folder (network shares or external drives may need extra permissions).
+                          <br></br>(Unraid & Docker handle mappings differently and should use the default <code>./models</code>).
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -2449,6 +2515,7 @@ export function SettingsPage({
                           {isGeneratingJson ? 'Generating...' : 'Generate'}
                         </Button>
                       </div>
+                      
                     </div>
 
                     {(hashCheckResult || generateResult) && (
