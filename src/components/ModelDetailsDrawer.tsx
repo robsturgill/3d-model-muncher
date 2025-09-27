@@ -731,25 +731,26 @@ export function ModelDetailsDrawer({
       // Fallback to using the model name
       jsonFilePath = `${srcModel.name}-munchie.json`;
     }
-    // Prefer a user-provided description stored in userDefined (structured)
+    // Prefer a user-provided description stored in userDefined
     let initialDescription = (srcModel as any).description;
     try {
       const ud = (srcModel as any).userDefined;
-      // Accept a userDefined.description even if it's an empty string; that
-      // represents an explicit user value and should take precedence.
-      if (Array.isArray(ud) && ud.length > 0 && ud[0] && typeof ud[0].description === 'string') {
-        initialDescription = ud[0].description;
+      if (ud && typeof ud === 'object' && typeof ud.description === 'string') {
+        initialDescription = ud.description;
       }
     } catch (e) {
       // ignore and fallback to top-level description
     }
+
     // stash originals so the edit UI can toggle restoring the top-level description
     originalTopLevelDescriptionRef.current = typeof (srcModel as any).description === 'string' ? (srcModel as any).description : null;
     try {
       const ud = (srcModel as any).userDefined;
-      // Store the userDefined description even if empty string; use null to
-      // indicate absence of userDefined data.
-      originalUserDefinedDescriptionRef.current = Array.isArray(ud) && ud.length > 0 && ud[0] && typeof ud[0].description === 'string' ? ud[0].description : null;
+      if (ud && typeof ud === 'object' && Object.prototype.hasOwnProperty.call(ud, 'description')) {
+        originalUserDefinedDescriptionRef.current = typeof ud.description === 'string' ? ud.description : null;
+      } else {
+        originalUserDefinedDescriptionRef.current = null;
+      }
     } catch (e) {
       originalUserDefinedDescriptionRef.current = null;
     }
@@ -1097,25 +1098,36 @@ export function ModelDetailsDrawer({
       const editedUserDefined = (editedForSave as any).userDefined;
       const existingImages = Array.isArray(editedUserDefined?.images) ? editedUserDefined.images : undefined;
       if (existingImages !== undefined) {
-        // Preserve images but remove description
+        // Preserve images but indicate the description should be removed by
+        // explicitly setting description to null in the payload.
         changes.userDefined = { ...(editedUserDefined || {}), images: existingImages };
+        (changes.userDefined as any).description = null;
       } else {
         // No user images present; clear userDefined entirely (empty object)
         changes.userDefined = {};
+        // Explicitly mark description as null so the server will remove it.
+        (changes.userDefined as any).description = null;
       }
       // Ensure we don't accidentally send the top-level description
       delete changes.description;
     } else if (typeof changes.description !== 'undefined') {
       const desc = changes.description;
-      // If a userDefined change was already detected (for example user-added images),
-      // merge the description into that existing array entry rather than overwriting
-      // the whole userDefined array and losing images.
-      if (changes.userDefined && typeof changes.userDefined === 'object') {
-        // Merge description into the existing userDefined object
-        changes.userDefined = { ...(changes.userDefined as any), description: desc };
+      // If the user cleared the description (empty or whitespace only), send
+      // description: null so the server will remove the nested field.
+      const isEmpty = typeof desc === 'string' && desc.trim() === '';
+      if (isEmpty) {
+        if (changes.userDefined && typeof changes.userDefined === 'object') {
+          changes.userDefined = { ...(changes.userDefined as any), description: null };
+        } else {
+          changes.userDefined = { description: null };
+        }
       } else {
-        // ensure userDefined is an object containing description
-        changes.userDefined = { description: desc };
+        // Normal non-empty description: merge into userDefined as before
+        if (changes.userDefined && typeof changes.userDefined === 'object') {
+          changes.userDefined = { ...(changes.userDefined as any), description: desc };
+        } else {
+          changes.userDefined = { description: desc };
+        }
       }
       delete changes.description;
     }
@@ -2270,9 +2282,15 @@ export function ModelDetailsDrawer({
                               setEditedModel(prev => {
                                 if (!prev) return prev;
                                 if (next) {
-                                  // Remove any userDefined description so save will clear it
+                                  // Remove only the nested userDefined.description while
+                                  // preserving any userDefined.images so the save can
+                                  // clear the description but keep images.
                                   const copy = { ...prev } as any;
-                                  copy.userDefined = {};
+                                  const ud = copy.userDefined && typeof copy.userDefined === 'object' ? { ...copy.userDefined } : {};
+                                  // Delete the description key so save logic knows to clear it
+                                  if (Object.prototype.hasOwnProperty.call(ud, 'description')) delete ud.description;
+                                  copy.userDefined = ud;
+                                  // Show the original top-level description in the edit buffer
                                   copy.description = originalTopLevelDescriptionRef.current || '';
                                   return copy as Model;
                                 } else {
@@ -2650,19 +2668,20 @@ export function ModelDetailsDrawer({
               <div className="space-y-4">
                 <p className="text-muted-foreground text-base leading-relaxed">
                   {(() => {
-                    // Prefer userDefined.description when available (structured user data)
-                    try {
+                      // Prefer userDefined.description when available.
+                      try {
                         const ud = (currentModel as any).userDefined;
-                        // Prefer the userDefined description even if it's an empty string
-                        // because that represents an explicit user-provided value.
+                        // If userDefined.description is present and non-empty (after trim)
+                        // treat it as an override. If it's an empty string, fall back
+                        // to the top-level description.
                         if (ud && typeof ud === 'object' && typeof ud.description === 'string') {
-                          return ud.description;
+                          if (ud.description.trim() !== '') return ud.description;
                         }
                       } catch (e) {
                         // ignore and fall back
                       }
-                    return currentModel.description;
-                  })()}
+                      return currentModel.description;
+                    })()}
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

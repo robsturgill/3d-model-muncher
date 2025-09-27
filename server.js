@@ -474,6 +474,16 @@ app.post('/api/save-model', async (req, res) => {
       // Shallow merge: incoming fields override existing ones; arrays like
       // images and imageOrder will be replaced if provided by incomingUDObj.
       const mergedUDObj = { ...existingUDObj, ...incomingUDObj };
+      // Special handling: client can request clearing the nested description
+      // by sending description: null. If so, delete the property from the
+      // merged object so the saved file no longer contains it.
+      try {
+        if (Object.prototype.hasOwnProperty.call(incomingUDObj, 'description') && incomingUDObj.description === null) {
+          if (Object.prototype.hasOwnProperty.call(mergedUDObj, 'description')) delete mergedUDObj.description;
+        }
+      } catch (e) {
+        // ignore
+      }
       updated.userDefined = mergedUDObj;
     }
 
