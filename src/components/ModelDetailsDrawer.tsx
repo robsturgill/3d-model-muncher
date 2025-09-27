@@ -18,7 +18,7 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw } from "lucide-react";
 import { Download } from "lucide-react";
 import { toast } from 'sonner';
 import { triggerDownload } from "../utils/downloadUtils";
@@ -57,6 +57,7 @@ export function ModelDetailsDrawer({
   const [restoreOriginalDescription, setRestoreOriginalDescription] = useState(false);
   const originalTopLevelDescriptionRef = useRef<string | null>(null);
   const originalUserDefinedDescriptionRef = useRef<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Suggested tags for each category - now dynamically based on current categories
   const getCategoryTags = (categoryLabel: string): string[] => {
@@ -1400,6 +1401,9 @@ export function ModelDetailsDrawer({
 
   const saveChanges = async () => {
     if (editedModel) {
+      if (isSaving) return; // prevent double-submit
+      setIsSaving(true);
+      try {
       // If an inlineCombined edit ordering exists, finalize it into the
       // editedModel by splitting it into parsed top-level images and
       // userDefined images using the parsedImagesSnapshot captured at
@@ -1631,7 +1635,7 @@ export function ModelDetailsDrawer({
       }
 
       // Persist to server first. After successful save, update the app state.
-  const result = await saveModelToFile(finalModel, model!); // Only send changed fields
+      const result = await saveModelToFile(finalModel, model!); // Only send changed fields
       if (result && result.success) {
         // If the save returned a refreshedModel (e.g., user cleared userDefined.description),
         // prefer that authoritative model from the server so the UI falls back to top-level description.
@@ -1650,6 +1654,9 @@ export function ModelDetailsDrawer({
         // Save failed (network/server error). Keep editedModel so user can retry.
         // Optionally display error (saveModelToFile already logs).
         return;
+      }
+      } finally {
+        setIsSaving(false);
       }
     }
   };
@@ -1864,11 +1871,11 @@ export function ModelDetailsDrawer({
             <div className="flex items-center gap-2 shrink-0">
               {isEditing ? (
                 <>
-                  <Button onClick={saveChanges} size="sm" className="gap-2" disabled={invalidRelated.length > 0} title={invalidRelated.length > 0 ? 'Cannot save: fix invalid related files' : undefined}>
-                    <Save className="h-4 w-4" />
-                    Save
+                  <Button onClick={saveChanges} size="sm" className="gap-2" disabled={invalidRelated.length > 0 || isSaving} title={invalidRelated.length > 0 ? 'Cannot save: fix invalid related files' : undefined}>
+                    {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {isSaving ? 'Saving...' : 'Save'}
                   </Button>
-                  <Button onClick={cancelEditing} variant="outline" size="sm">
+                  <Button onClick={cancelEditing} variant="outline" size="sm" disabled={isSaving}>
                     <X className="h-4 w-4" />
                   </Button>
                 </>
@@ -2618,13 +2625,13 @@ export function ModelDetailsDrawer({
 
                 {/* Bottom Action Buttons for Editing */}
                 <div className="flex items-center justify-end gap-3 pt-6 border-t border-border bg-muted/30 -mx-6 px-6 py-4 mt-8 rounded-lg">
-                  <Button onClick={cancelEditing} variant="outline" className="gap-2">
+                  <Button onClick={cancelEditing} variant="outline" className="gap-2" disabled={isSaving}>
                     <X className="h-4 w-4" />
                     Cancel
                   </Button>
-                  <Button onClick={saveChanges} className="gap-2" disabled={invalidRelated.length > 0} title={invalidRelated.length > 0 ? 'Cannot save: fix invalid related files' : undefined}>
-                    <Save className="h-4 w-4" />
-                    Save Changes
+                  <Button onClick={saveChanges} className="gap-2" disabled={invalidRelated.length > 0 || isSaving} title={invalidRelated.length > 0 ? 'Cannot save: fix invalid related files' : undefined}>
+                    {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {isSaving ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </div>
               </div>
