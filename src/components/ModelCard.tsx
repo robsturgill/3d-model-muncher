@@ -249,11 +249,10 @@ export function ModelCard({
         </div>
       </CardContent>
       
-      {/* Only show footer actions when not in selection mode */}
-      {!isSelectionMode && (
-        // Keep footer at the bottom of the flex column
-        <CardFooter className="p-4 pt-0 mt-auto">
-          {/* Split button: primary left downloads main model file, right shows related files menu (if any) */}
+      {/* Footer area: always render to reserve space so toggling into selection/edit mode doesn't shift layout */}
+      <CardFooter className="p-4 pt-0 mt-auto min-h-[56px]">
+        {/* When not in selection mode show actions, otherwise render an invisible placeholder to reserve space */}
+        {!isSelectionMode ? (
           <div className="w-full relative">
             <div className="flex w-full">
               <Button
@@ -294,8 +293,11 @@ export function ModelCard({
               )}
             </div>
           </div>
-        </CardFooter>
-      )}
+        ) : (
+          // Invisible placeholder to keep footer height stable during selection/edit mode
+          <div aria-hidden className="w-full h-full opacity-0" />
+        )}
+      </CardFooter>
     </Card>
   );
 }
