@@ -772,7 +772,7 @@ export function BulkEditDrawer({
                 size="sm"
                 className="gap-2"
               >
-                <Save className="h-4 w-4" />
+                {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
@@ -1484,7 +1484,7 @@ export function BulkEditDrawer({
               disabled={!hasChanges || isSaving}
               className="gap-2"
             >
-              <Save className="h-4 w-4" />
+              {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
