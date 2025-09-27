@@ -1,3 +1,18 @@
+## [0.12.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.12.1...v0.12.2) (2025-09-27)
+
+
+### Bug Fixes
+
+* add clear to filter search, ctrl k to focus, escape to clear ([403b3d5](https://github.com/robsturgill/3d-model-muncher/commit/403b3d576abeb7c33bb18af35c87df7fdefb2d80)), closes [#33](https://github.com/robsturgill/3d-model-muncher/issues/33)
+* always render footer in ModelCard to maintain layout stability during selection mode ([eae96d5](https://github.com/robsturgill/3d-model-muncher/commit/eae96d523fa620ca5d97514936a3fce5a3501f29)), closes [#31](https://github.com/robsturgill/3d-model-muncher/issues/31)
+* enhance model directory handling in settings to load from other paths w/o server restart ([abf5552](https://github.com/robsturgill/3d-model-muncher/commit/abf5552023444608b3d5bfcb46dcc250936b9a35))
+* improve file & path text overflow display, truncation, scrolling in model detail drawer ([d640c5d](https://github.com/robsturgill/3d-model-muncher/commit/d640c5d90863231dc9a959e0fa55161037bc64c6))
+* prevent double-submit on save and update button state during saving ([2086e78](https://github.com/robsturgill/3d-model-muncher/commit/2086e78ce8cbe722cd97ef497c1301825be9807e)), closes [#27](https://github.com/robsturgill/3d-model-muncher/issues/27)
+* reduce gap in Card componen ([71e9cde](https://github.com/robsturgill/3d-model-muncher/commit/71e9cdef04f46a18d561d454298b53236d1b6d1e))
+* restoring description, handle clearing user-defined description in model save process ([de6c923](https://github.com/robsturgill/3d-model-muncher/commit/de6c9237cbe9590f48d6a5ebbf97b51ee45f734d)), closes [#35](https://github.com/robsturgill/3d-model-muncher/issues/35)
+* update bulk edit save buttons to show loading spinner ([11b72c3](https://github.com/robsturgill/3d-model-muncher/commit/11b72c3ceba200ce48ac562bbb3260b64a3c7076))
+* use scrollarea to remove native scrollbars in settings tag listing and dialog ([0da6810](https://github.com/robsturgill/3d-model-muncher/commit/0da6810b4c20fbaefede2255475aa634acd6c72a)), closes [#32](https://github.com/robsturgill/3d-model-muncher/issues/32)
+
 ## [0.12.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.12.0...v0.12.1) (2025-09-26)
 
 
