@@ -1,8 +1,12 @@
 // Centralized list of license display strings used across the app
 export const LICENSES = [
-  'Creative Commons - Attribution',
-  'Creative Commons - Attribution-ShareAlike',
-  'Creative Commons - Attribution-NonCommercial',
+  'BY',
+  'BY-SA',
+  'BY-NC',
+  'BY-NC-ND',
+  'BY-NC-SA',
+  'BY-ND',
+  'CC0',
   'MIT License',
   'GNU GPL v3',
   'Apache License 2.0',
