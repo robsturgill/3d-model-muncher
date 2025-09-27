@@ -2098,6 +2098,7 @@ export function SettingsPage({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+
                   {/* Search */}
                   <div className="flex gap-2">
                     <div className="relative flex-1">
@@ -2123,8 +2124,9 @@ export function SettingsPage({
                   </div>
 
                   {/* Tags List */}
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {filteredTags.map((tag) => (
+                  <ScrollArea className="max-h-96 w-full">
+                    <div className="space-y-2 p-2 max-h-80">
+                      {filteredTags.map((tag) => (
                       <div key={tag.name} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                           <Badge variant="secondary" className="font-medium">
@@ -2168,7 +2170,8 @@ export function SettingsPage({
                         </div>
                       </div>
                     ))}
-                  </div>
+                    </div>
+                  </ScrollArea>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -3119,9 +3122,10 @@ export function SettingsPage({
                   {viewTagModels?.count} model{viewTagModels?.count !== 1 ? 's' : ''} found
                 </DialogDescription>
               </DialogHeader>
-              <div className="max-h-96 overflow-y-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {viewTagModels?.models.map((model) => (
+              <ScrollArea className="max-h-96 w-full">
+                <div className="p-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {viewTagModels?.models.map((model) => (
                     <div
                       key={model.id}
                       className="flex items-center gap-3 p-3 border rounded-lg hover:bg-accent/50 cursor-pointer"
@@ -3154,6 +3158,7 @@ export function SettingsPage({
                   ))}
                 </div>
               </div>
+              </ScrollArea>
             </DialogContent>
           </Dialog>
         </div>
