@@ -1229,13 +1229,13 @@ export function ModelDetailsDrawer({
       const origThumbStr = typeof origThumb === 'undefined' ? undefined : JSON.stringify(origThumb);
       if (editedThumbStr !== origThumbStr) {
         if (!changes.userDefined || typeof changes.userDefined !== 'object') changes.userDefined = {};
-  // Normalize outgoing thumbnail so we never send raw base64/data URLs
-  // as userDefined.thumbnail. Prefer descriptor forms. If we cannot
-  // safely convert the value to a descriptor, omit it so the server
-  // preserves the original parsed thumbnail.
-  const editedThumbAny = (editedUD as any).thumbnail;
+        // Normalize outgoing thumbnail so we never send raw base64/data URLs
+        // as userDefined.thumbnail. Prefer descriptor forms. If we cannot
+        // safely convert the value to a descriptor, omit it so the server
+        // preserves the original parsed thumbnail.
+        const editedThumbAny = (editedUD as any).thumbnail;
         let safeThumb: string | undefined = undefined;
-  const changeUDImgs = Array.isArray(changes.userDefined?.images) ? changes.userDefined.images : (Array.isArray(editedUD?.images) ? editedUD.images : []);
+        const changeUDImgs = Array.isArray(changes.userDefined?.images) ? changes.userDefined.images : (Array.isArray(editedUD?.images) ? editedUD.images : []);
         const originalParsed = Array.isArray((original as any).images) ? (original as any).images : [];
         const originalTop = (original as any).thumbnail || '';
 
@@ -1853,8 +1853,8 @@ export function ModelDetailsDrawer({
         <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}> 
           <div className="flex items-start justify-between">
             <div className="space-y-2 flex-1 min-w-0">
-              <SheetTitle className="text-2xl font-semibold text-card-foreground pr-4">
-                {currentModel.name}
+              <SheetTitle className="text-xl font-semibold text-card-foreground pr-2 truncate block">
+                <span className="block w-full truncate">{currentModel.name}</span>
               </SheetTitle>
               <SheetDescription className="text-muted-foreground">
                 {currentModel.category} • {currentModel.isPrinted ? 'Printed' : 'Not Printed'}
@@ -1880,7 +1880,7 @@ export function ModelDetailsDrawer({
                   </Button>
                 </>
               ) : (
-                <Button onClick={startEditing} variant="outline" size="sm" className="gap-2">
+                <Button onClick={startEditing} variant="outline" size="sm" className="gap-2 mr-2">
                   <Edit3 className="h-4 w-4" />
                   Edit
                 </Button>
@@ -1889,19 +1889,30 @@ export function ModelDetailsDrawer({
           </div>
         </SheetHeader>
 
-  <ScrollArea className="flex-1 min-h-0" viewportRef={detailsViewportRef}>
+        <ScrollArea className="flex-1 min-h-0" viewportRef={detailsViewportRef}>
           <div className="p-4 space-y-8">
           {/* Model file path / URL (readonly, download) - moved above preview */}
           <div className="mb-4">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <Label className="whitespace-nowrap text-muted-foreground">Path</Label>
-              <div className="flex-1 flex items-center gap-2">
-                <Input readOnly value={displayModelPath} className="text-sm truncate" />
-                {/* Use the existing download handler here instead of a separate copy button */}
-                <Button onClick={handleDownloadClick} size="sm" variant="default" className="gap-2" title="Download model file">
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
+              <div className="flex-1 min-w-0 grid grid-cols-[1fr_auto] items-center gap-2">
+                {/* Scrollable path in the first column (flexible) */}
+                <div className="min-w-0 relative">
+                  <ScrollArea className="h-8 w-full min-w-0" showHorizontalScrollbar={true} showVerticalScrollbar={false}>
+                    <div className="px-2 py-1 text-sm whitespace-nowrap select-text inline-block min-w-max">
+                      {displayModelPath}
+                    </div>
+                  </ScrollArea>
+                  {/* Subtle fade at right edge to indicate more content */}
+                  <div className="absolute top-0 right-0 h-8 w-8 pointer-events-none bg-gradient-to-l from-background/80 to-transparent" aria-hidden />
+                </div>
+                {/* Button in the auto-width column so it never gets pushed offscreen */}
+                <div className="shrink-0">
+                  <Button onClick={handleDownloadClick} size="sm" variant="default" className="gap-2" title="Download model file">
+                    <Download className="h-4 w-4" />
+                    Download
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
