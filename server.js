@@ -103,13 +103,16 @@ function serverDebug(...args) {
 }
 
 // Configure multer for backup file uploads
+// Increase fileSize limit to support larger model files (1GB by default)
+// This can be overridden with the environment variable MAX_UPLOAD_BYTES (bytes)
+const MAX_UPLOAD_BYTES = process.env.MAX_UPLOAD_BYTES ? parseInt(process.env.MAX_UPLOAD_BYTES, 10) : (1 * 1024 * 1024 * 1024);
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+  limits: { fileSize: MAX_UPLOAD_BYTES } // configurable via env MAX_UPLOAD_BYTES
 });
 
 app.use(cors());
-app.use(express.json({ limit: '25mb' })); // Increased limit for large model payloads
+app.use(express.json({ limit: '100mb' })); // Increased limit for large model payloads
 
 // Health check endpoint for Docker/Unraid
 app.get('/api/health', (req, res) => {
@@ -2497,6 +2500,29 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
 
 // Serve static files from the build directory
 app.use(express.static(path.join(__dirname, 'build')));
+
+// Error handler for multipart/form-data upload errors (Multer)
+// This ensures clients receive JSON errors (e.g., file too large) instead of an HTML error page.
+app.use(function (err, req, res, next) {
+  try {
+    if (err) {
+      // Multer exposes a MulterError type with code property
+      if (err.name === 'MulterError' || err.code === 'LIMIT_FILE_SIZE' || err.code === 'LIMIT_PART_COUNT' || err.code === 'LIMIT_FILE_COUNT') {
+        const message = err.message || 'File upload error';
+        console.warn('Multer error during upload:', err.code || err.name, err.message);
+        return res.status(413).json({ success: false, error: message, code: err.code || err.name });
+      }
+
+      // For other errors, pass through to default handler
+      console.error('Unhandled error in middleware:', err && err.message ? err.message : err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  } catch (handlerErr) {
+    console.error('Error handler failed:', handlerErr);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+  return next();
+});
 
 // Handle React Router - catch all GET requests that aren't API or model routes
 app.get(/^(?!\/api|\/models).*$/, (req, res) => {

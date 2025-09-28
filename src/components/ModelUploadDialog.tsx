@@ -5,8 +5,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ScrollArea } from './ui/scroll-area';
 import { Input } from './ui/input';
 import { FolderPlus, Trash } from 'lucide-react';
+import { Checkbox } from './ui/checkbox';
+import { Label } from './ui/label';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { toast } from 'sonner';
+import { RendererPool } from '../utils/rendererPool';
 
 interface ModelUploadDialogProps {
   isOpen: boolean;
@@ -22,6 +25,9 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
   const [singleDestination, setSingleDestination] = useState<string>('uploads');
   const [showCreateFolderInput, setShowCreateFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [generatePreviews, setGeneratePreviews] = useState<boolean>(true);
+  const [previewGenerating, setPreviewGenerating] = useState<boolean>(false);
+  const [previewProgress, setPreviewProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -80,7 +86,96 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
         throw new Error(txt || 'Upload failed');
       }
       const data = await resp.json();
-      toast.success(`Uploaded ${data.saved || files.length} files`);
+  toast.success(`Uploaded ${data.saved || files.length} files`);
+  // Attempt to generate preview images for newly uploaded models that lack images
+      if (generatePreviews) {
+        // `data.saved` is an array of relative paths (e.g. "uploads/foo.3mf")
+        const savedPaths: string[] = Array.isArray(data.saved) ? data.saved : [];
+        if (savedPaths.length > 0) {
+          setPreviewGenerating(true);
+          setPreviewProgress({ current: 0, total: savedPaths.length });
+          try {
+            // Fetch the latest model list from server to find the saved munchie entries
+            const modelsResp = await fetch('/api/models');
+            const allModels = modelsResp.ok ? await modelsResp.json() : [];
+
+            for (let i = 0; i < savedPaths.length; i++) {
+              const rel = savedPaths[i];
+              try {
+                // Find candidate model entry
+                const candidate = allModels.find((m: any) => {
+                  if (!m) return false;
+                  if (m.filePath && m.filePath.replace(/\\/g, '/') === rel.replace(/\\/g, '/')) return true;
+                  if (m.modelUrl && m.modelUrl.endsWith(rel.replace(/\\/g, '/'))) return true;
+                  return false;
+                });
+                if (!candidate) {
+                  setPreviewProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                  continue;
+                }
+
+                // Skip if model already has parsedImages or userDefined.images
+                const hasParsed = Array.isArray(candidate.parsedImages) && candidate.parsedImages.length > 0;
+                const hasUser = candidate.userDefined && Array.isArray(candidate.userDefined.images) && candidate.userDefined.images.length > 0;
+                if (hasParsed || hasUser) {
+                  setPreviewProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                  continue;
+                }
+
+                const modelUrl = candidate.modelUrl;
+                if (!modelUrl) {
+                  setPreviewProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                  continue;
+                }
+
+                // Capture an image using the offscreen renderer
+                let dataUrl: string | null = null;
+                try {
+                  dataUrl = await RendererPool.captureModel(modelUrl);
+                } catch (e) {
+                  console.warn('Capture failed for', modelUrl, e);
+                }
+                if (!dataUrl) {
+                  setPreviewProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                  continue;
+                }
+
+                // Compute the munchie JSON file path for saving
+                let jsonPath = '';
+                if (rel.toLowerCase().endsWith('.3mf')) jsonPath = rel.replace(/\.3mf$/i, '-munchie.json');
+                else if (rel.toLowerCase().endsWith('.stl')) jsonPath = rel.replace(/\.stl$/i, '-stl-munchie.json');
+                else jsonPath = `${rel}-munchie.json`;
+
+                // Prepare save payload
+                const payload: any = { filePath: jsonPath, userDefined: { images: [dataUrl], imageOrder: ['user:0'], thumbnail: 'user:0' } };
+                try {
+                  const saveResp = await fetch('/api/save-model', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                  });
+                  if (!saveResp.ok) {
+                    const txt = await saveResp.text();
+                    console.warn('Failed to save captured image for', jsonPath, txt);
+                  }
+                } catch (e) {
+                  console.warn('Failed to save captured image for', jsonPath, e);
+                }
+
+                setPreviewProgress(prev => ({ ...prev, current: prev.current + 1 }));
+              } catch (e) {
+                console.warn('Per-file preview generation error', e);
+                setPreviewProgress(prev => ({ ...prev, current: prev.current + 1 }));
+              }
+            }
+          } catch (e) {
+            console.warn('Preview generation after upload failed:', e);
+          } finally {
+            setPreviewGenerating(false);
+            // small delay so user sees 100% before closing
+            await new Promise(res => setTimeout(res, 300));
+          }
+        }
+      }
+
       setFiles([]);
       onUploaded?.();
       onClose();
@@ -161,6 +256,10 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
           </div>
 
           <div className="mt-4">
+            <div className="flex items-center gap-3 mb-3">
+              <Checkbox id="gen-previews" checked={generatePreviews} onCheckedChange={(v) => setGeneratePreviews(Boolean(v))} />
+              <Label htmlFor="gen-previews" className="text-sm text-foreground">Generate preview images after upload</Label>
+            </div>
             {/* Destination selector + create-folder icon */}
             <div className="mb-3">
               <div className="text-sm text-foreground mb-1">Destination</div>
@@ -229,9 +328,18 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
           </div>
         </div>
 
+        {previewGenerating && (
+          <div className="px-6 pb-4">
+            <div className="text-sm text-foreground mb-1">Generating previews: {previewProgress.current}/{previewProgress.total}</div>
+            <div className="w-full bg-muted h-2 rounded overflow-hidden">
+              <div style={{ width: `${Math.min(100, Math.round((previewProgress.current / Math.max(1, previewProgress.total)) * 100))}%` }} className="h-2 bg-accent" />
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
           <div className="flex gap-2 justify-end w-full">
-            <Button variant="outline" onClick={onClose} disabled={isUploading}>Cancel</Button>
+            <Button variant="outline" onClick={onClose} disabled={isUploading || previewGenerating}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={isUploading || files.length === 0}>{isUploading ? 'Uploading...' : 'Upload & Process'}</Button>
           </div>
         </DialogFooter>
