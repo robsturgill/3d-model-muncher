@@ -170,6 +170,32 @@ function getAbsoluteModelsPath() {
   return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
 }
 
+// Helper to ensure we never write directly to .3mf or .stl files. If a caller
+// provides a target path that points at a model file, map it to the
+// corresponding munchie JSON filename instead and return that path. This
+// centralizes the protection so restore/upload code won't accidentally
+// overwrite raw model files.
+function protectModelFileWrite(targetPath) {
+  try {
+    if (!targetPath || typeof targetPath !== 'string') return targetPath;
+    if (/\.3mf$/i.test(targetPath)) {
+      const mapped = targetPath.replace(/\.3mf$/i, '-munchie.json');
+      console.warn('Attempted write to .3mf detected; remapping to munchie JSON:', targetPath, '->', mapped);
+      return mapped;
+    }
+    if (/\.stl$/i.test(targetPath)) {
+      const mapped = targetPath.replace(/\.stl$/i, '-stl-munchie.json');
+      console.warn('Attempted write to .stl detected; remapping to -stl-munchie JSON:', targetPath, '->', mapped);
+      return mapped;
+    }
+  } catch (e) {
+    // If anything goes wrong, fall back to returning original so caller can
+    // make a final decision; avoid throwing here to not break restore flows.
+    console.warn('protectModelFileWrite error:', e && e.message ? e.message : e);
+  }
+  return targetPath;
+}
+
   // Helper: ensure munchie JSON has userDefined.thumbnail and imageOrder when appropriate
 async function postProcessMunchieFile(absoluteFilePath) {
   try {
@@ -234,10 +260,12 @@ async function postProcessMunchieFile(absoluteFilePath) {
     }
 
     if (changed) {
-      const tmpPath = absoluteFilePath + '.tmp';
+      // Protect against accidental writes to raw model files
+      const safeTarget = protectModelFileWrite(absoluteFilePath);
+      const tmpPath = safeTarget + '.tmp';
       fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
-      fs.renameSync(tmpPath, absoluteFilePath);
-      console.log('Post-processed munchie file to include userDefined.thumbnail/imageOrder:', absoluteFilePath);
+      fs.renameSync(tmpPath, safeTarget);
+      console.log('Post-processed munchie file to include userDefined.thumbnail/imageOrder:', safeTarget);
     }
   } catch (e) {
     console.warn('postProcessMunchieFile error for', absoluteFilePath, e);
@@ -600,20 +628,22 @@ app.post('/api/save-model', async (req, res) => {
 
     // Write atomically: write to a temp file then rename it into place to avoid
     // readers seeing a truncated/partial file during concurrent writes.
-    const tmpPath = absoluteFilePath + '.tmp';
+    // Protect against accidental writes to raw model files
+    const safeTargetPath = protectModelFileWrite(absoluteFilePath);
+    const tmpPath = safeTargetPath + '.tmp';
     fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf8');
-    fs.renameSync(tmpPath, absoluteFilePath);
-    console.log('Model updated and saved to:', absoluteFilePath);
+    fs.renameSync(tmpPath, safeTargetPath);
+    console.log('Model updated and saved to:', safeTargetPath);
     // Ensure newly saved munchie is post-processed to have canonical userDefined
     try {
-      await postProcessMunchieFile(absoluteFilePath);
+      await postProcessMunchieFile(safeTargetPath);
     } catch (e) {
-      console.warn('postProcessMunchieFile failed after save for', absoluteFilePath, e);
+      console.warn('postProcessMunchieFile failed after save for', safeTargetPath, e);
     }
     // Read back the saved file and return it as the authoritative refreshed model
     let refreshedModel = undefined;
     try {
-      const rawAfter = fs.readFileSync(absoluteFilePath, 'utf8');
+      const rawAfter = fs.readFileSync(safeTargetPath, 'utf8');
       refreshedModel = rawAfter ? JSON.parse(rawAfter) : undefined;
     } catch (e) {
       console.warn('Failed to read back refreshed model after save:', e);
@@ -1255,7 +1285,24 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
           targetPath = path.join(destDir, base);
         }
 
-        fs.writeFileSync(targetPath, buffer);
+        // Write uploaded file atomically: write to tmp then rename. Protect
+        // against a race where another process creates the same filename
+        // between our exists-check and the rename. If the target exists at
+        // rename-time, pick a new unique name and rename there instead.
+        const tmpUploadPath = targetPath + '.tmp';
+        fs.writeFileSync(tmpUploadPath, buffer);
+
+        // If targetPath was created between our earlier exists check and now,
+        // avoid overwriting: choose a new name with a timestamp/random suffix.
+        if (fs.existsSync(targetPath)) {
+          const name = base.replace(/(\.[^.]+)$/, '');
+          const ext = path.extname(base);
+          const ts = Date.now();
+          const rnd = Math.floor(Math.random() * 10000);
+          base = `${name}-${ts}-${rnd}${ext}`;
+          targetPath = path.join(destDir, base);
+        }
+        fs.renameSync(tmpUploadPath, targetPath);
         saved.push(path.relative(modelsDir, targetPath).replace(/\\/g, '/'));
 
         // Now generate munchie.json for the saved file (reuse regeneration logic)
@@ -2226,13 +2273,19 @@ app.post('/api/restore-munchie-files', async (req, res) => {
         }
 
         if (shouldRestore) {
-          // Write the restored file
+          // Protect against accidentally writing to .3mf/.stl files by remapping
+          // any model file path to its corresponding munchie JSON file.
+          const safeTarget = protectModelFileWrite(targetPath);
+
+          // Write the restored file (atomic via .tmp -> rename)
           const restoredContent = JSON.stringify(backupFile.content, null, 2);
-          fs.writeFileSync(targetPath, restoredContent, 'utf8');
-          
+          const tmp = safeTarget + '.tmp';
+          fs.writeFileSync(tmp, restoredContent, 'utf8');
+          fs.renameSync(tmp, safeTarget);
+
           results.restored.push({
             originalPath: backupFile.originalPath,
-            restoredPath: path.relative(modelsDir, targetPath).replace(/\\/g, '/'),
+            restoredPath: path.relative(modelsDir, safeTarget).replace(/\\/g, '/'),
             reason: reason,
             size: backupFile.size
           });
@@ -2401,13 +2454,19 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
         }
 
         if (shouldRestore) {
-          // Write the restored file
+          // Protect against accidentally writing to .3mf/.stl files by remapping
+          // any model file path to its corresponding munchie JSON file.
+          const safeTarget = protectModelFileWrite(targetPath);
+
+          // Write the restored file atomically
           const restoredContent = JSON.stringify(backupFile.content, null, 2);
-          fs.writeFileSync(targetPath, restoredContent, 'utf8');
-          
+          const tmp = safeTarget + '.tmp';
+          fs.writeFileSync(tmp, restoredContent, 'utf8');
+          fs.renameSync(tmp, safeTarget);
+
           results.restored.push({
             originalPath: backupFile.originalPath,
-            restoredPath: path.relative(modelsDir, targetPath).replace(/\\/g, '/'),
+            restoredPath: path.relative(modelsDir, safeTarget).replace(/\\/g, '/'),
             reason: reason,
             size: backupFile.size
           });
