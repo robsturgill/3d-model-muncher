@@ -269,6 +269,10 @@ export function BulkEditDrawer({
       });
       setNewTag("");
       setRelatedIncludedIds(models.map((m) => uniqueKeyForModel(m)));
+      // Clear any leftover image-generation state so alerts don't persist
+      setIsGeneratingImages(false);
+      setCloseRequestedWhileGenerating(false);
+      setGenerateProgress({ current: 0, total: 0 });
     }
   }, [isOpen, models]);
 
