@@ -885,7 +885,7 @@ export function BulkEditDrawer({
   return (
     <Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
     <SheetContent className="w-full sm:max-w-2xl">
-        <SheetHeader className="space-y-4 pb-6 border-b border-border">
+        <SheetHeader className="space-y-4 pb-4 border-b border-border">
           <div className="flex items-start justify-between">
             <div className="space-y-2 flex-1 min-w-0">
               <SheetTitle className="text-2xl font-semibold text-card-foreground flex items-center gap-2">
@@ -915,749 +915,751 @@ export function BulkEditDrawer({
         </SheetHeader>
 
         <ScrollArea className="flex-1 min-h-0">
-          <div className="p-6 space-y-8">
-          {/* Selected Models Preview */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-lg text-card-foreground">
-              Selected Models
-            </h3>
-            <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
-              {models.slice(0, 10).map((model) => (
-                <Badge
-                  key={model.id}
-                  variant="secondary"
-                  className="text-xs"
+          <div className="p-6 space-y-6">
+            {/* Selected Models Preview */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg text-card-foreground">
+                Selected Models
+              </h3>
+              <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                {models.slice(0, 10).map((model) => (
+                  <Badge
+                    key={model.id}
+                    variant="secondary"
+                    className="text-xs"
+                  >
+                    {model.name}
+                  </Badge>
+                ))}
+                {models.length > 10 && (
+                  <Badge variant="secondary" className="text-xs">
+                    +{models.length - 10} more
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Generate Images button */}
+            <div className="space-y-4">
+              <div className="flex items-start">
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={async () => {
+                      const saved = await handleGenerateImages();
+                      // After bulk image generation, refresh model cards using the authoritative saved models
+                      if (onBulkSaved) {
+                        await onBulkSaved(saved);
+                      } else if (onRefresh) {
+                        await onRefresh();
+                      }
+                    }}
+                    // Disabled while generating or when any bulk-edit field is selected
+                    disabled={isGeneratingImages || Object.values(fieldSelection).some(Boolean)}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                    {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : 'Generate Images'}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-sm text-foreground">
+                Only models without existing images will be processed; models that already have images are skipped. This can take some time for large selections and will block other edits — please wait until it completes.
+              </p>
+              {(isGeneratingImages || closeRequestedWhileGenerating) && (
+                <Alert variant="destructive" className="border-red-500 text-red-700 dark:text-red-400">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Image generation in progress</AlertTitle>
+                  <AlertDescription>Images are being generated; the drawer cannot be closed until the operation finishes.</AlertDescription>
+                </Alert>
+              )}
+              <Separator />
+            </div>
+
+            {/* Category Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="category-field"
+                  checked={fieldSelection.category}
+                  onCheckedChange={() =>
+                    handleFieldToggle("category")
+                  }
+                />
+                <Label
+                  htmlFor="category-field"
+                  className="font-medium"
                 >
-                  {model.name}
-                </Badge>
-              ))}
-              {models.length > 10 && (
-                <Badge variant="secondary" className="text-xs">
-                  +{models.length - 10} more
-                </Badge>
+                  <Layers className="h-4 w-4 text-foreground" />
+                  Category
+                </Label>
+              </div>
+
+              {fieldSelection.category && (
+                <div className="ml-6 space-y-2">
+                  <Select
+                    value={editState.category || ""}
+                    onValueChange={handleCategoryChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select new category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* Render available categories passed in via props. Use category.id as the
+                          value but show the human-friendly label. Include an empty item for
+                          clearing the selection. */}
+                      {Array.isArray(categories) && categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {commonValues.category && (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {commonValues.category}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
-          </div>
 
-          <Separator />
-
-          {/* Generate Images button (moved above Category) */}
-          <div className="space-y-4">
-            <div className="flex items-start">
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={async () => {
-                    const saved = await handleGenerateImages();
-                    // After bulk image generation, refresh model cards using the authoritative saved models
-                    if (onBulkSaved) {
-                      await onBulkSaved(saved);
-                    } else if (onRefresh) {
-                      await onRefresh();
-                    }
-                  }}
-                  disabled={isGeneratingImages}
-                  size="sm"
-                  className="gap-2"
-                >
-                  {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                  {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : 'Generate Images'}
-                </Button>
-              </div>
-            </div>
-            <p className="text-sm text-foreground">
-              Only models without existing images will be processed; models that already have images are skipped. This can take some time for large selections and will block other edits — please wait until it completes.
-            </p>
-            {(isGeneratingImages || closeRequestedWhileGenerating) && (
-              <Alert variant="destructive" className="border-red-500 text-red-700 dark:text-red-400">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Image generation in progress</AlertTitle>
-                <AlertDescription>Images are being generated; the drawer cannot be closed until the operation finishes.</AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          {/* Category Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="category-field"
-                checked={fieldSelection.category}
-                onCheckedChange={() =>
-                  handleFieldToggle("category")
-                }
-              />
-              <Label
-                htmlFor="category-field"
-                className="font-medium"
-              >
-                <Layers className="h-4 w-4 text-foreground" />
-                Category
-              </Label>
-            </div>
-
-            {fieldSelection.category && (
-              <div className="ml-6 space-y-2">
-                <Select
-                  value={editState.category || ""}
-                  onValueChange={handleCategoryChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select new category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* Render available categories passed in via props. Use category.id as the
-                        value but show the human-friendly label. Include an empty item for
-                        clearing the selection. */}
-                    {Array.isArray(categories) && categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {commonValues.category && (
-                  <p className="text-xs text-muted-foreground">
-                    Current: {commonValues.category}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* License Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="license-field"
-                checked={fieldSelection.license}
-                onCheckedChange={() =>
-                  handleFieldToggle("license")
-                }
-              />
-              <Label
-                htmlFor="license-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <FileText className="h-4 w-4" />
-                License
-              </Label>
-            </div>
-
-            {fieldSelection.license && (
-              <div className="ml-6 space-y-2">
-                <Select
-                  value={editState.license || ""}
-                  onValueChange={handleLicenseChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select new license" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableLicenses.map((license) => (
-                      <SelectItem key={license} value={license}>
-                        {license}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {commonValues.license && (
-                  <p className="text-xs text-muted-foreground">
-                    Current: {commonValues.license}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Designer Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="designer-field"
-                checked={fieldSelection.designer}
-                onCheckedChange={() =>
-                  handleFieldToggle("designer")
-                }
-              />
-              <Label
-                htmlFor="designer-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <Users className="h-4 w-4" />
-                Designer
-              </Label>
-            </div>
-
-            {fieldSelection.designer && (
-              <div className="ml-6 space-y-2">
-                <Input
-                  placeholder="Designer name"
-                  value={editState.designer || ""}
-                  onChange={(e) => handleDesignerChange(e.target.value)}
+            {/* License Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="license-field"
+                  checked={fieldSelection.license}
+                  onCheckedChange={() =>
+                    handleFieldToggle("license")
+                  }
                 />
-                {commonValues.designer && (
-                  <p className="text-xs text-muted-foreground">
-                    Current: {commonValues.designer}
-                  </p>
-                )}
+                <Label
+                  htmlFor="license-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  License
+                </Label>
               </div>
-            )}
-          </div>
 
-
-          {/* Print Status Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="print-status-field"
-                checked={fieldSelection.isPrinted}
-                onCheckedChange={() =>
-                  handleFieldToggle("isPrinted")
-                }
-              />
-              <Label
-                htmlFor="print-status-field"
-                className="font-medium"
-              >
-                <CircleCheckBig className="h-4 w-4" />
-                Print Status
-              </Label>
-            </div>
-
-            {fieldSelection.isPrinted && (
-              <div className="ml-6 space-y-2">
-                <div className="flex items-center space-x-3">
-                  <Switch
-                    checked={editState.isPrinted || false}
-                    onCheckedChange={handlePrintStatusChange}
-                    id="bulk-printed"
-                  />
-                  <Label
-                    htmlFor="bulk-printed"
-                    className="flex items-center gap-2"
+              {fieldSelection.license && (
+                <div className="ml-6 space-y-2">
+                  <Select
+                    value={editState.license || ""}
+                    onValueChange={handleLicenseChange}
                   >
-                    {editState.isPrinted ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    Mark as{" "}
-                    {editState.isPrinted
-                      ? "Printed"
-                      : "Not Printed"}
-                  </Label>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select new license" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableLicenses.map((license) => (
+                        <SelectItem key={license} value={license}>
+                          {license}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {commonValues.license && (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {commonValues.license}
+                    </p>
+                  )}
                 </div>
-                {commonValues.isPrinted !== undefined && (
-                  <p className="text-xs text-muted-foreground">
-                    Currently:{" "}
-                    {commonValues.isPrinted
-                      ? "Printed"
-                      : "Not Printed"}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Hidden Status Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="hidden-status-field"
-                checked={fieldSelection.hidden}
-                onCheckedChange={() =>
-                  handleFieldToggle("hidden")
-                }
-              />
-              <Label
-                htmlFor="hidden-status-field"
-                className="font-medium"
-              >
-                <Eye className="h-4 w-4" />
-                Hidden Status
-              </Label>
+              )}
             </div>
 
-            {fieldSelection.hidden && (
-              <div className="ml-6 space-y-2">
-                <div className="flex items-center space-x-3">
-                  <Switch
-                    checked={editState.hidden || false}
-                    onCheckedChange={handleHiddenChange}
-                    id="bulk-hidden"
+            {/* Designer Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="designer-field"
+                  checked={fieldSelection.designer}
+                  onCheckedChange={() =>
+                    handleFieldToggle("designer")
+                  }
+                />
+                <Label
+                  htmlFor="designer-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <Users className="h-4 w-4" />
+                  Designer
+                </Label>
+              </div>
+
+              {fieldSelection.designer && (
+                <div className="ml-6 space-y-2">
+                  <Input
+                    placeholder="Designer name"
+                    value={editState.designer || ""}
+                    onChange={(e) => handleDesignerChange(e.target.value)}
                   />
-                  <Label
-                    htmlFor="bulk-hidden"
-                    className="flex items-center gap-2"
-                  >
-                    {editState.hidden ? (
-                      <EyeOff className="h-4 w-4 text-orange-600" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    {editState.hidden
-                      ? "Hide from view"
-                      : "Show in view"}
-                  </Label>
+                  {commonValues.designer && (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {commonValues.designer}
+                    </p>
+                  )}
                 </div>
-                {commonValues.hidden !== undefined && (
-                  <p className="text-xs text-muted-foreground">
-                    Currently:{" "}
-                    {commonValues.hidden
-                      ? "Hidden"
-                      : "Visible"}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Tags Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="tags-field"
-                checked={fieldSelection.tags}
-                onCheckedChange={() =>
-                  handleFieldToggle("tags")
-                }
-              />
-              <Label
-                htmlFor="tags-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <Tag className="h-4 w-4" />
-                Tags
-              </Label>
+              )}
             </div>
 
-            {fieldSelection.tags && (
-              <div className="ml-6 space-y-4">
-                {/* Add New Tags */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Add Tags
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Add a tag..."
-                      value={newTag}
-                      onChange={(e) =>
-                        setNewTag(e.target.value)
-                      }
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddTag();
-                        }
-                      }}
-                      className="flex-1"
+
+            {/* Print Status Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="print-status-field"
+                  checked={fieldSelection.isPrinted}
+                  onCheckedChange={() =>
+                    handleFieldToggle("isPrinted")
+                  }
+                />
+                <Label
+                  htmlFor="print-status-field"
+                  className="font-medium"
+                >
+                  <CircleCheckBig className="h-4 w-4" />
+                  Print Status
+                </Label>
+              </div>
+
+              {fieldSelection.isPrinted && (
+                <div className="ml-6 space-y-2">
+                  <div className="flex items-center space-x-3">
+                    <Switch
+                      checked={editState.isPrinted || false}
+                      onCheckedChange={handlePrintStatusChange}
+                      id="bulk-printed"
                     />
-                    <Button
-                      type="button"
-                      onClick={handleAddTag}
-                      disabled={!newTag.trim()}
-                      size="sm"
+                    <Label
+                      htmlFor="bulk-printed"
+                      className="flex items-center gap-2"
                     >
-                      Add
-                    </Button>
+                      {editState.isPrinted ? (
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      Mark as{" "}
+                      {editState.isPrinted
+                        ? "Printed"
+                        : "Not Printed"}
+                    </Label>
+                  </div>
+                  {commonValues.isPrinted !== undefined && (
+                    <p className="text-xs text-muted-foreground">
+                      Currently:{" "}
+                      {commonValues.isPrinted
+                        ? "Printed"
+                        : "Not Printed"}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Hidden Status Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="hidden-status-field"
+                  checked={fieldSelection.hidden}
+                  onCheckedChange={() =>
+                    handleFieldToggle("hidden")
+                  }
+                />
+                <Label
+                  htmlFor="hidden-status-field"
+                  className="font-medium"
+                >
+                  <Eye className="h-4 w-4" />
+                  Hidden Status
+                </Label>
+              </div>
+
+              {fieldSelection.hidden && (
+                <div className="ml-6 space-y-2">
+                  <div className="flex items-center space-x-3">
+                    <Switch
+                      checked={editState.hidden || false}
+                      onCheckedChange={handleHiddenChange}
+                      id="bulk-hidden"
+                    />
+                    <Label
+                      htmlFor="bulk-hidden"
+                      className="flex items-center gap-2"
+                    >
+                      {editState.hidden ? (
+                        <EyeOff className="h-4 w-4 text-orange-600" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      {editState.hidden
+                        ? "Hide from view"
+                        : "Show in view"}
+                    </Label>
+                  </div>
+                  {commonValues.hidden !== undefined && (
+                    <p className="text-xs text-muted-foreground">
+                      Currently:{" "}
+                      {commonValues.hidden
+                        ? "Hidden"
+                        : "Visible"}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Tags Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="tags-field"
+                  checked={fieldSelection.tags}
+                  onCheckedChange={() =>
+                    handleFieldToggle("tags")
+                  }
+                />
+                <Label
+                  htmlFor="tags-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <Tag className="h-4 w-4" />
+                  Tags
+                </Label>
+              </div>
+
+              {fieldSelection.tags && (
+                <div className="ml-6 space-y-4">
+                  {/* Add New Tags */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Add Tags
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Add a tag..."
+                        value={newTag}
+                        onChange={(e) =>
+                          setNewTag(e.target.value)
+                        }
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddTag();
+                          }
+                        }}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleAddTag}
+                        disabled={!newTag.trim()}
+                        size="sm"
+                      >
+                        Add
+                      </Button>
+                    </div>
+
+                    {/* Tags to Add */}
+                    {editState.tags?.add &&
+                      editState.tags.add.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">
+                            Tags to add:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {editState.tags.add.map((tag) => (
+                              <Badge
+                                key={tag}
+                                variant="default"
+                                className="text-sm gap-1 cursor-pointer hover:bg-primary/80"
+                                onClick={() =>
+                                  handleRemoveTagFromAdd(tag)
+                                }
+                              >
+                                {tag}
+                                <X className="h-3 w-3" />
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                   </div>
 
-                  {/* Tags to Add */}
-                  {editState.tags?.add &&
-                    editState.tags.add.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                          Tags to add:
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {editState.tags.add.map((tag) => (
+                  {/* Remove Existing Tags */}
+                  {allTags.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">
+                        Remove Existing Tags
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Click on tags to toggle removal across all
+                        selected models
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {allTags.map((tag) => {
+                          const isRemoving =
+                            editState.tags?.remove?.includes(tag);
+                          return (
                             <Badge
                               key={tag}
-                              variant="default"
-                              className="text-sm gap-1 cursor-pointer hover:bg-primary/80"
+                              variant={
+                                isRemoving
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-sm cursor-pointer transition-colors"
                               onClick={() =>
-                                handleRemoveTagFromAdd(tag)
+                                handleToggleTagRemoval(tag)
                               }
                             >
                               {tag}
-                              <X className="h-3 w-3" />
+                              {isRemoving && (
+                                <X className="h-3 w-3 ml-1" />
+                              )}
                             </Badge>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
-                    )}
+                    </div>
+                  )}
                 </div>
+              )}
+            </div>
 
-                {/* Remove Existing Tags */}
-                {allTags.length > 0 && (
+            {/* Notes Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="notes-field"
+                  checked={fieldSelection.notes}
+                  onCheckedChange={() =>
+                    handleFieldToggle("notes")
+                  }
+                />
+                <Label
+                  htmlFor="notes-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <StickyNote className="h-4 w-4" />
+                  Notes
+                </Label>
+              </div>
+
+              {fieldSelection.notes && (
+                <div className="ml-6 space-y-2">
+                  <Textarea
+                    placeholder="Add notes for all selected models..."
+                    value={editState.notes || ""}
+                    onChange={(e) =>
+                      handleNotesChange(e.target.value)
+                    }
+                    rows={3}
+                    className="resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    These notes will replace existing notes for
+                    all selected models
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Related Files Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="related-files-field"
+                  checked={fieldSelection.relatedFiles}
+                  onCheckedChange={() => handleFieldToggle("relatedFiles")}
+                />
+                <Label htmlFor="related-files-field" className="font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Related Files
+                </Label>
+              </div>
+
+              {fieldSelection.relatedFiles && (
+                <div className="ml-6 space-y-3">
+                  <p className="text-sm">Select which of the selected models should be included as related files for each model, choose the primary, and optionally hide the others.</p>
+
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Remove Existing Tags
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Click on tags to toggle removal across all
-                      selected models
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {allTags.map((tag) => {
-                        const isRemoving =
-                          editState.tags?.remove?.includes(tag);
+                    <Label className="text-sm font-medium">Included Models</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {models.map((m) => {
+                        const key = uniqueKeyForModel(m);
+                        const included = (editState.relatedIncluded || relatedIncludedIds || []).includes(key);
                         return (
-                          <Badge
-                            key={tag}
-                            variant={
-                              isRemoving
-                                ? "destructive"
-                                : "secondary"
-                            }
-                            className="text-sm cursor-pointer transition-colors"
-                            onClick={() =>
-                              handleToggleTagRemoval(tag)
-                            }
-                          >
-                            {tag}
-                            {isRemoving && (
-                              <X className="h-3 w-3 ml-1" />
-                            )}
-                          </Badge>
+                          <div key={key} className="flex items-center gap-2">
+                            <Checkbox
+                              checked={included}
+                              onCheckedChange={() => {
+                                // toggle include using stable unique keys
+                                const current = new Set(editState.relatedIncluded || relatedIncludedIds || models.map(x => uniqueKeyForModel(x)));
+                                if (current.has(key)) current.delete(key);
+                                else current.add(key);
+                                const arr = Array.from(current);
+                                setEditState(prev => ({ ...prev, relatedIncluded: arr }));
+                                setRelatedIncludedIds(arr);
+                              }}
+                            />
+                            <span className="text-sm">{m.name}</span>
+                          </div>
                         );
                       })}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
 
-          {/* Notes Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="notes-field"
-                checked={fieldSelection.notes}
-                onCheckedChange={() =>
-                  handleFieldToggle("notes")
-                }
-              />
-              <Label
-                htmlFor="notes-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <StickyNote className="h-4 w-4" />
-                Notes
-              </Label>
-            </div>
+                  <div className="pt-2">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setEditState(prev => ({ ...prev, relatedClearAll: true }))}
+                    >
+                      Remove related files from selected models
+                    </Button>
+                    {editState.relatedClearAll && (
+                      <p className="text-sm text-destructive mt-2">All selected models will have their related files cleared when you save.</p>
+                    )}
+                  </div>
 
-            {fieldSelection.notes && (
-              <div className="ml-6 space-y-2">
-                <Textarea
-                  placeholder="Add notes for all selected models..."
-                  value={editState.notes || ""}
-                  onChange={(e) =>
-                    handleNotesChange(e.target.value)
-                  }
-                  rows={3}
-                  className="resize-none"
-                />
-                <p className="text-xs text-muted-foreground">
-                  These notes will replace existing notes for
-                  all selected models
-                </p>
-              </div>
-            )}
-          </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Primary File</Label>
+                    <p className="text-xs text-muted-foreground">Choose which included model should be considered the primary.</p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {(editState.relatedIncluded || relatedIncludedIds || models.map(m=>uniqueKeyForModel(m))).map((id) => {
+                        const m = models.find(x => uniqueKeyForModel(x) === id);
+                        if (!m) return null;
+                        const isPrimary = editState.relatedPrimary === id;
+                        return (
+                          <Button
+                            key={id}
+                            size="sm"
+                            variant={isPrimary ? 'secondary' : 'outline'}
+                            onClick={() => setEditState(prev => ({ ...prev, relatedPrimary: id }))}
+                          >
+                            {m.name}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-          {/* Related Files Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="related-files-field"
-                checked={fieldSelection.relatedFiles}
-                onCheckedChange={() => handleFieldToggle("relatedFiles")}
-              />
-              <Label htmlFor="related-files-field" className="font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Related Files
-              </Label>
-            </div>
-
-            {fieldSelection.relatedFiles && (
-              <div className="ml-6 space-y-3">
-                <p className="text-sm">Select which of the selected models should be included as related files for each model, choose the primary, and optionally hide the others.</p>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Included Models</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {models.map((m) => {
-                      const key = uniqueKeyForModel(m);
-                      const included = (editState.relatedIncluded || relatedIncludedIds || []).includes(key);
-                      return (
-                        <div key={key} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={included}
-                            onCheckedChange={() => {
-                              // toggle include using stable unique keys
-                              const current = new Set(editState.relatedIncluded || relatedIncludedIds || models.map(x => uniqueKeyForModel(x)));
-                              if (current.has(key)) current.delete(key);
-                              else current.add(key);
-                              const arr = Array.from(current);
-                              setEditState(prev => ({ ...prev, relatedIncluded: arr }));
-                              setRelatedIncludedIds(arr);
-                            }}
-                          />
-                          <span className="text-sm">{m.name}</span>
-                        </div>
-                      );
-                    })}
+                  <div className="flex items-center space-x-3">
+                    <Switch
+                      checked={editState.relatedHideOthers || false}
+                      onCheckedChange={(v) => setEditState(prev => ({ ...prev, relatedHideOthers: v }))}
+                      id="related-hide-others"
+                    />
+                    <Label htmlFor="related-hide-others" className="flex items-center gap-2">
+                      Hide all other models (only primary remains visible)
+                    </Label>
                   </div>
                 </div>
+              )}
+            </div>
 
-                <div className="pt-2">
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setEditState(prev => ({ ...prev, relatedClearAll: true }))}
-                  >
-                    Remove related files from selected models
-                  </Button>
-                  {editState.relatedClearAll && (
-                    <p className="text-sm text-destructive mt-2">All selected models will have their related files cleared when you save.</p>
+            {/* Source Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="source-field"
+                  checked={fieldSelection.source}
+                  onCheckedChange={() =>
+                    handleFieldToggle("source")
+                  }
+                />
+                <Label
+                  htmlFor="source-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <Globe className="h-4 w-4" />
+                  Source URL
+                </Label>
+              </div>
+
+              {fieldSelection.source && (
+                <div className="ml-6 space-y-2">
+                  <Input
+                    type="url"
+                    placeholder="https://www.thingiverse.com/thing/123456"
+                    value={editState.source || ""}
+                    onChange={(e) =>
+                      handleSourceChange(e.target.value)
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This URL will be set for all selected models
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Price Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="price-field"
+                  checked={fieldSelection.price}
+                  onCheckedChange={() =>
+                    handleFieldToggle("price")
+                  }
+                />
+                <Label
+                  htmlFor="price-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Selling Price
+                </Label>
+              </div>
+
+              {fieldSelection.price && (
+                <div className="ml-6 space-y-2">
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={editState.price || ""}
+                      onChange={(e) =>
+                        handlePriceChange(e.target.value)
+                      }
+                      className="pl-9"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This price will be set for all selected models
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Action Bar */}
+            {/* Print Time Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="print-time-field"
+                  checked={fieldSelection.printTime}
+                  onCheckedChange={() =>
+                    handleFieldToggle("printTime")
+                  }
+                />
+                <Label
+                  htmlFor="print-time-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <Clock className="h-4 w-4" />
+                  Print Time
+                </Label>
+              </div>
+
+              {fieldSelection.printTime && (
+                <div className="ml-6 space-y-2">
+                  <Input
+                    placeholder="e.g. 1h 30m"
+                    value={editState.printTime || ""}
+                    onChange={(e) => handlePrintTimeChange(e.target.value)}
+                  />
+                  {commonValues.printTime && (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {commonValues.printTime}
+                    </p>
                   )}
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Primary File</Label>
-                  <p className="text-xs text-muted-foreground">Choose which included model should be considered the primary.</p>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {(editState.relatedIncluded || relatedIncludedIds || models.map(m=>uniqueKeyForModel(m))).map((id) => {
-                      const m = models.find(x => uniqueKeyForModel(x) === id);
-                      if (!m) return null;
-                      const isPrimary = editState.relatedPrimary === id;
-                      return (
-                        <Button
-                          key={id}
-                          size="sm"
-                          variant={isPrimary ? 'secondary' : 'outline'}
-                          onClick={() => setEditState(prev => ({ ...prev, relatedPrimary: id }))}
-                        >
-                          {m.name}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                  <Switch
-                    checked={editState.relatedHideOthers || false}
-                    onCheckedChange={(v) => setEditState(prev => ({ ...prev, relatedHideOthers: v }))}
-                    id="related-hide-others"
-                  />
-                  <Label htmlFor="related-hide-others" className="flex items-center gap-2">
-                    Hide all other models (only primary remains visible)
-                  </Label>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Source Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="source-field"
-                checked={fieldSelection.source}
-                onCheckedChange={() =>
-                  handleFieldToggle("source")
-                }
-              />
-              <Label
-                htmlFor="source-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <Globe className="h-4 w-4" />
-                Source URL
-              </Label>
+              )}
             </div>
 
-            {fieldSelection.source && (
-              <div className="ml-6 space-y-2">
-                <Input
-                  type="url"
-                  placeholder="https://www.thingiverse.com/thing/123456"
-                  value={editState.source || ""}
-                  onChange={(e) =>
-                    handleSourceChange(e.target.value)
+            {/* Filament Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="filament-field"
+                  checked={fieldSelection.filamentUsed}
+                  onCheckedChange={() =>
+                    handleFieldToggle("filamentUsed")
                   }
                 />
-                <p className="text-xs text-muted-foreground">
-                  This URL will be set for all selected models
-                </p>
+                <Label
+                  htmlFor="filament-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <Weight className="h-4 w-4" />
+                  Filament
+                </Label>
               </div>
-            )}
-          </div>
 
-          {/* Price Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="price-field"
-                checked={fieldSelection.price}
-                onCheckedChange={() =>
-                  handleFieldToggle("price")
-                }
-              />
-              <Label
-                htmlFor="price-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <DollarSign className="h-4 w-4" />
-                Selling Price
-              </Label>
-            </div>
-
-            {fieldSelection.price && (
-              <div className="ml-6 space-y-2">
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              {fieldSelection.filamentUsed && (
+                <div className="ml-6 space-y-2">
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={editState.price || ""}
-                    onChange={(e) =>
-                      handlePriceChange(e.target.value)
-                    }
-                    className="pl-9"
+                    placeholder="e.g. 12g PLA"
+                    value={editState.filamentUsed || ""}
+                    onChange={(e) => handleFilamentChange(e.target.value)}
                   />
+                  {commonValues.filamentUsed && (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {commonValues.filamentUsed}
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  This price will be set for all selected models
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Action Bar */}
-          {/* Print Time Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="print-time-field"
-                checked={fieldSelection.printTime}
-                onCheckedChange={() =>
-                  handleFieldToggle("printTime")
-                }
-              />
-              <Label
-                htmlFor="print-time-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <Clock className="h-4 w-4" />
-                Print Time
-              </Label>
+              )}
             </div>
 
-            {fieldSelection.printTime && (
-              <div className="ml-6 space-y-2">
-                <Input
-                  placeholder="e.g. 1h 30m"
-                  value={editState.printTime || ""}
-                  onChange={(e) => handlePrintTimeChange(e.target.value)}
+            {/* Regenerate Munchie Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="regenerate-munchie-field"
+                  checked={fieldSelection.regenerateMunchie}
+                  onCheckedChange={() =>
+                    handleFieldToggle("regenerateMunchie")
+                  }
                 />
-                {commonValues.printTime && (
-                  <p className="text-xs text-muted-foreground">
-                    Current: {commonValues.printTime}
-                  </p>
-                )}
+                <Label
+                  htmlFor="regenerate-munchie-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Regenerate Munchie Files
+                </Label>
               </div>
-            )}
-          </div>
 
-          {/* Filament Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="filament-field"
-                checked={fieldSelection.filamentUsed}
-                onCheckedChange={() =>
-                  handleFieldToggle("filamentUsed")
-                }
-              />
-              <Label
-                htmlFor="filament-field"
-                className="font-medium flex items-center gap-2"
-              >
-                <Weight className="h-4 w-4" />
-                Filament
-              </Label>
+              {fieldSelection.regenerateMunchie && (
+                <div className="ml-6 space-y-2">
+                  <Alert className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Warning</AlertTitle>
+                    <AlertDescription>
+                      This will re-parse the 3MF/STL files and regenerate metadata. Your custom notes, tags, category, and other user data will be preserved.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
             </div>
-
-            {fieldSelection.filamentUsed && (
-              <div className="ml-6 space-y-2">
-                <Input
-                  placeholder="e.g. 12g PLA"
-                  value={editState.filamentUsed || ""}
-                  onChange={(e) => handleFilamentChange(e.target.value)}
-                />
-                {commonValues.filamentUsed && (
-                  <p className="text-xs text-muted-foreground">
-                    Current: {commonValues.filamentUsed}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Regenerate Munchie Field */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="regenerate-munchie-field"
-                checked={fieldSelection.regenerateMunchie}
-                onCheckedChange={() =>
-                  handleFieldToggle("regenerateMunchie")
-                }
-              />
-              <Label
-                htmlFor="regenerate-munchie-field"
-                className="font-medium flex items-center gap-2"
+            <div className="flex items-center justify-between pt-6 border-t border-border bg-muted/30 -mx-6 px-6 py-4 mt-8">
+              <p className="text-sm text-muted-foreground">
+                {hasChanges
+                  ? "Ready to update"
+                  : "Select fields to update"}{" "}
+                {models.length} models
+              </p>
+              <Button
+                onClick={handleSave}
+                disabled={!hasChanges || isSaving}
+                className="gap-2"
               >
-                <RefreshCw className="h-4 w-4" />
-                Regenerate Munchie Files
-              </Label>
+                {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
-
-            {fieldSelection.regenerateMunchie && (
-              <div className="ml-6 space-y-2">
-                <Alert className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Warning</AlertTitle>
-                  <AlertDescription>
-                    This will re-parse the 3MF/STL files and regenerate metadata. Your custom notes, tags, category, and other user data will be preserved.
-                  </AlertDescription>
-                </Alert>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between pt-6 border-t border-border bg-muted/30 -mx-6 px-6 py-4 mt-8 rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              {hasChanges
-                ? "Ready to update"
-                : "Select fields to update"}{" "}
-              {models.length} models
-            </p>
-            <Button
-              onClick={handleSave}
-              disabled={!hasChanges || isSaving}
-              className="gap-2"
-            >
-              {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
           </div>
         </ScrollArea>
         {/* Offscreen viewer removed; captures use RendererPool */}
