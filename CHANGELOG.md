@@ -1,3 +1,19 @@
+# [0.13.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.12.2...v0.13.0) (2025-09-28)
+
+
+### Bug Fixes
+
+* change default 3d model color in settings and update related components ([49b676b](https://github.com/robsturgill/3d-model-muncher/commit/49b676b2e3670177ab1a76b457c2008b47801456)), closes [#29](https://github.com/robsturgill/3d-model-muncher/issues/29)
+* enhance image generation handling and UI feedback in BulkEditDrawer ([b076b84](https://github.com/robsturgill/3d-model-muncher/commit/b076b849065d6725a2396cba7ad68721a731d3a6))
+* improve duplicate file removal dialog layout with overflow handling ([61c5790](https://github.com/robsturgill/3d-model-muncher/commit/61c5790ac6be90287b35beb187783f88567c3a14)), closes [#39](https://github.com/robsturgill/3d-model-muncher/issues/39)
+* remove duplicate group in UI after selecting a file to keep, without having to rescan ([c37657f](https://github.com/robsturgill/3d-model-muncher/commit/c37657f6e9ab79f25ff10e8301640962e0ec2fcf)), closes [#40](https://github.com/robsturgill/3d-model-muncher/issues/40)
+* update license display strings to use standardized abbreviations found across models ([599bdb9](https://github.com/robsturgill/3d-model-muncher/commit/599bdb9df7a4619ef5b26bcfe4d1ae47b01e647a)), closes [#34](https://github.com/robsturgill/3d-model-muncher/issues/34)
+
+
+### Features
+
+* bulk create thumbnails for models with no images, simpler logging, verbose switch in settings ([b8fe4fd](https://github.com/robsturgill/3d-model-muncher/commit/b8fe4fdece83b2469fcd50a6aea8394465fc1fe8)), closes [#30](https://github.com/robsturgill/3d-model-muncher/issues/30)
+
 ## [0.12.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.12.1...v0.12.2) (2025-09-27)
 
 
