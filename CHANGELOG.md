@@ -1,3 +1,11 @@
+## [0.13.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.1...v0.13.2) (2025-09-28)
+
+
+### Bug Fixes
+
+* download functionality by preserving subdirectory structure and improving filename handling ([3b713a3](https://github.com/robsturgill/3d-model-muncher/commit/3b713a3a3342ffd009c85415f1256d4765894161))
+* show release notes dialog only for major.minor version changes and persist user preference ([49e24c4](https://github.com/robsturgill/3d-model-muncher/commit/49e24c49efde279fa443c3eb25caea9f9bf32a3c))
+
 ## [0.13.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.0...v0.13.1) (2025-09-28)
 
 
