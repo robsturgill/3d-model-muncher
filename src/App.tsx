@@ -169,13 +169,21 @@ function AppContent() {
   }, []);
 
   // Show release notes dialog once after appConfig is available unless the user opted out for this version
+  // Only show release notes dialog when the major.minor version changes (ignore patch)
   useEffect(() => {
     if (!appConfig) return;
 
     try {
-  // Use the previous release number from package.json (the last published version)
-  // package.json is imported at build time and represents the distributor's last release.
-  const previousVersion = (pkg && pkg.version) ? String(pkg.version) : ConfigManager.getDefaultConfig().version || '0.0.0';
+      // Helper to extract major.minor from a semver string
+      const getMajorMinor = (v: string) => {
+        const parts = (v || '').split('.');
+        return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : v;
+      };
+
+      // Use the previous release number from package.json (the last published version)
+      // package.json is imported at build time and represents the distributor's last release.
+      const rawVersion = (pkg && pkg.version) ? String(pkg.version) : ConfigManager.getDefaultConfig().version || '0.0.0';
+      const previousVersion = getMajorMinor(rawVersion);
       const key = `release-notes:${previousVersion}`;
       const stored = localStorage.getItem(key);
 
@@ -193,7 +201,13 @@ function AppContent() {
   }, [appConfig]);
 
   const closeReleaseNotes = (dontShow: boolean) => {
-  const previousVersion = (pkg && pkg.version) ? String(pkg.version) : ConfigManager.getDefaultConfig().version || '0.0.0';
+  // Persist preference per major.minor only
+  const getMajorMinor = (v: string) => {
+    const parts = (v || '').split('.');
+    return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : v;
+  };
+  const rawVersion = (pkg && pkg.version) ? String(pkg.version) : ConfigManager.getDefaultConfig().version || '0.0.0';
+  const previousVersion = getMajorMinor(rawVersion);
     const key = `release-notes:${previousVersion}`;
     try {
       if (dontShow) {
