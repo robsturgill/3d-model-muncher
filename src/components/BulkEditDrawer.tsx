@@ -120,6 +120,8 @@ export function BulkEditDrawer({
 }: BulkEditDrawerProps) {
   // keep categories referenced to avoid TypeScript unused prop error (it's passed from parent)
   void categories;
+  // keep onModelUpdate referenced to avoid unused prop linting when it's not needed here
+  void onModelUpdate;
   const [editState, setEditState] = useState<BulkEditState>({});
   const [fieldSelection, setFieldSelection] =
     useState<FieldSelection>({
@@ -140,6 +142,7 @@ export function BulkEditDrawer({
   const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [closeRequestedWhileGenerating, setCloseRequestedWhileGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   // renderer pool is used for offscreen captures; keep lightweight state for progress
 
@@ -516,29 +519,26 @@ export function BulkEditDrawer({
 
       console.debug(`[BulkEdit] Saving image for model: ${updatedModel.name}, filePath: ${updatedModel.filePath}, imagesCount:`, (updatedModel.userDefined as any).images?.length || 0);
 
-      // Save and update parent immediately for each model. Prefer server's refreshed model when available.
+      // Save the model and collect the authoritative saved model for caller to consume
       const saveResult: any = await saveModelToFile(updatedModel, model);
       let modelForParent: Model = updatedModel;
       if (saveResult && saveResult.success && saveResult.refreshedModel) {
         modelForParent = saveResult.refreshedModel as Model;
       }
-      if (onBulkSaved) {
-        try { onBulkSaved([modelForParent]); } catch (err) { console.error('onBulkSaved error', err); }
-      }
-      // Also notify parent about this single model update so it can merge it into state
-      if (onModelUpdate) {
-        try { onModelUpdate(modelForParent); } catch (err) { console.error('onModelUpdate error', err); }
-      }
-      // Collect the saved (authoritative) model for caller to consume
       savedModels.push(modelForParent);
       setGenerateProgress({ current: i + 1, total: toProcess.length });
     }
 
     setIsGeneratingImages(false);
 
-    // If no per-model merge handler was provided, optionally refresh the whole list
-    if (!onBulkSaved && onRefresh) {
-      try { await onRefresh(); } catch (err) { console.error('refresh after image gen failed', err); }
+    // If the user requested close while generation ran, close now
+    if (closeRequestedWhileGenerating) {
+      setCloseRequestedWhileGenerating(false);
+      try {
+        onClose();
+      } catch (err) {
+        console.error('Error closing after image generation:', err);
+      }
     }
 
     return savedModels;
@@ -868,8 +868,18 @@ export function BulkEditDrawer({
 
   if (models.length === 0) return null;
 
+  const handleSheetOpenChange = (newOpen: boolean) => {
+    // Prevent closing the sheet while image generation is in progress
+    if (!newOpen && isGeneratingImages) {
+      // remember that the user requested a close so we can close afterwards
+      setCloseRequestedWhileGenerating(true);
+      return;
+    }
+    if (!newOpen) onClose();
+  };
+
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
+    <Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
     <SheetContent className="w-full sm:max-w-2xl">
         <SheetHeader className="space-y-4 pb-6 border-b border-border">
           <div className="flex items-start justify-between">
@@ -886,35 +896,16 @@ export function BulkEditDrawer({
 
             <div className="flex items-center gap-2 shrink-0">
               <div className="flex items-center gap-2">
-                <Button
-                  onClick={async () => {
-                    const saved = await handleGenerateImages();
-                    // After bulk image generation, refresh model cards using the authoritative saved models
-                    if (onBulkSaved) {
-                      await onBulkSaved(saved);
-                    } else if (onRefresh) {
-                      await onRefresh();
-                    }
-                  }}
-                  disabled={isGeneratingImages}
-                  size="sm"
-                  variant="outline"
-                  className="gap-2"
-                >
-                  {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                  {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : 'Generate Images'}
-                </Button>
-
-                <Button
-                  onClick={handleSave}
-                  disabled={!hasChanges || isSaving}
-                  size="sm"
-                  className="gap-2"
-                >
-                  {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSaving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
+                  <Button
+                    onClick={handleSave}
+                    disabled={!hasChanges || isSaving}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
             </div>
           </div>
         </SheetHeader>
@@ -945,6 +936,41 @@ export function BulkEditDrawer({
           </div>
 
           <Separator />
+
+          {/* Generate Images button (moved above Category) */}
+          <div className="space-y-4">
+            <div className="flex items-start">
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={async () => {
+                    const saved = await handleGenerateImages();
+                    // After bulk image generation, refresh model cards using the authoritative saved models
+                    if (onBulkSaved) {
+                      await onBulkSaved(saved);
+                    } else if (onRefresh) {
+                      await onRefresh();
+                    }
+                  }}
+                  disabled={isGeneratingImages}
+                  size="sm"
+                  className="gap-2"
+                >
+                  {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : 'Generate Images'}
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm text-foreground">
+              Only models without existing images will be processed; models that already have images are skipped. This can take some time for large selections and will block other edits — please wait until it completes.
+            </p>
+            {(isGeneratingImages || closeRequestedWhileGenerating) && (
+              <Alert variant="destructive" className="border-red-500 text-red-700 dark:text-red-400">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Image generation in progress</AlertTitle>
+                <AlertDescription>Images are being generated; the drawer cannot be closed until the operation finishes.</AlertDescription>
+              </Alert>
+            )}
+          </div>
 
           {/* Category Field */}
           <div className="space-y-4">
