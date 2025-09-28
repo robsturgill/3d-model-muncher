@@ -1001,7 +1001,14 @@ export function BulkEditDrawer({
                     <SelectValue placeholder="Select new category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* Offscreen/react portal usage removed — we use RendererPool for captures. */}
+                    {/* Render available categories passed in via props. Use category.id as the
+                        value but show the human-friendly label. Include an empty item for
+                        clearing the selection. */}
+                    {Array.isArray(categories) && categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {commonValues.category && (
