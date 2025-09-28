@@ -1801,19 +1801,63 @@ export function ModelDetailsDrawer({
 
 
   // Download handler for model file
-  const handleDownloadClick = (e: React.MouseEvent) => {
+  const handleDownloadClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     // Determine default extension based on modelUrl if available
-    const defaultExtension = currentModel!.modelUrl?.endsWith('.stl') ? '.stl' : '.3mf';
-    // Prefer filePath, fallback to modelUrl or name
-      let fileName = currentModel!.filePath
-        ? currentModel!.filePath.split(/[/\\]/).pop() || `${currentModel!.name}${defaultExtension}`
-        : currentModel!.modelUrl?.replace('/models/', '') || `${currentModel!.name}${defaultExtension}`;
-    let filePath = currentModel!.filePath
-      ? `/models/${fileName}`
-      : currentModel!.modelUrl || `/models/${fileName}`;
+    // Determine default extension based on modelUrl if available
+    const defaultExtension = currentModel!.modelUrl?.toLowerCase().endsWith('.stl') ? '.stl' : '.3mf';
+
+    // If a filePath (JSON path) is present, prefer using it to derive the
+    // model file location. `filePath` may include subdirectories (e.g.
+    // "subdir/model-stl-munchie.json") so derive the original model file
+    // name by replacing the -munchie.json suffix with the original extension
+    // when possible. Otherwise fall back to modelUrl which may already be a
+    // full "/models/.." URL.
+    let outFilePath: string | undefined;
+
+    if (currentModel!.filePath) {
+      // filePath is typically the JSON file on disk; try to map it back to
+      // the model file name. Preserve any subdirectory present in filePath.
+      const fp = currentModel!.filePath.replace(/^\/*/, ''); // remove leading slash
+      // If the filePath ends with -munchie.json or -stl-munchie.json, strip
+      // that suffix and try to append the likely extension.
+      let base = fp;
+      base = base.replace(/-stl-munchie\.json$/i, '');
+      base = base.replace(/-munchie\.json$/i, '');
+
+      // If the remaining base already has a known model extension, use it;
+      // otherwise default to modelUrl's extension or .3mf
+      const hasExt = /\.(stl|3mf)$/i.test(base);
+      let finalName = base;
+      if (!hasExt) {
+        // Try to infer from modelUrl
+        if (currentModel!.modelUrl && /\.stl$/i.test(currentModel!.modelUrl)) finalName = `${base}.stl`;
+        else finalName = `${base}.3mf`;
+      }
+
+      // Prepend /models/ so triggerDownload receives a path consistent with
+      // other callers that expect model files under /models/.
+      outFilePath = `/models/${finalName}`;
+    } else if (currentModel!.modelUrl) {
+      // modelUrl often already contains `/models/...` so use it as-is.
+      outFilePath = currentModel!.modelUrl;
+    } else {
+      // Fallback: construct a filename from the model name
+      const name = currentModel!.name || 'model';
+      outFilePath = `/models/${name}${defaultExtension}`;
+    }
+
     // Use shared triggerDownload to normalize and trigger the download
-    triggerDownload(filePath, e.nativeEvent);
+    // Compute a safe download filename (basename only) so the browser doesn't
+    // include any directory prefix in the saved file name.
+  const safeBaseName = outFilePath ? outFilePath.replace(/^\/+/, '').replace(/\\/g, '/').split('/').pop() || '' : '';
+
+    // Normalize backslashes in the outgoing path so HEAD and downloads are consistent
+    const normalizedOut = outFilePath ? outFilePath.replace(/\\/g, '/') : outFilePath;
+    // Trigger the download using the normalized path and explicit basename.
+    // Path normalization ensures we don't leak Windows backslashes into the
+    // suggested download filename.
+    triggerDownload(normalizedOut, e.nativeEvent as any as MouseEvent, safeBaseName);
   };
 
   // Intercept Sheet open/close changes so that if the user tries to close the
@@ -2798,10 +2842,13 @@ export function ModelDetailsDrawer({
                             View
                           </Button>
                         ) : null}
-                        <Button size="sm" onClick={(e) => {
+                        <Button size="sm" onClick={async (e) => {
                           e.stopPropagation();
                           // Use shared triggerDownload which will normalize the path and trigger the browser download
-                          triggerDownload(path, e.nativeEvent);
+                          const safeName = path ? path.replace(/^\/+/, '').split('/').pop() || '' : '';
+                          const normalizedPath = path ? path.replace(/\\/g, '/') : path;
+                          // Trigger download for related file (normalized path, explicit basename)
+                          triggerDownload(normalizedPath, e.nativeEvent as any as MouseEvent, safeName);
                         }}>
                           Download
                         </Button>

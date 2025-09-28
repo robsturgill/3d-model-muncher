@@ -69,7 +69,16 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
     category: "Uncategorized",
     description: "",
     fileSize: bytesToMB(size),
-    modelUrl: `/models/${path.basename(filePath)}`,
+    // Preserve subdirectory structure in the modelUrl so clients can
+    // download the file from the correct location (e.g. /models/subdir/file.stl)
+    modelUrl: (() => {
+      try {
+        const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        return '/' + relativePath;
+      } catch (e) {
+        return `/models/${path.basename(filePath)}`;
+      }
+    })(),
     license: "",
     notes: "",
     hash: "",

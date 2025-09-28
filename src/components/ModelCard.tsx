@@ -46,15 +46,17 @@ export function ModelCard({
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     // Use shared triggerDownload which normalizes paths and triggers the browser download
-    triggerDownload(model.modelUrl, e.nativeEvent);
+    // Compute basename only so saved filename doesn't include directory prefix
+  const safeName = model.modelUrl ? model.modelUrl.replace(/^\/+/, '').replace(/\\/g, '/').split('/').pop() || '' : '';
+  triggerDownload(model.modelUrl, e.nativeEvent as any as MouseEvent, safeName);
   };
 
   const downloadUrl = (url: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     // reuse normalization helper when building menu items' download links
-    const resolved = normalizeModelPath(url);
-    if (!resolved) return;
-    const fileName = resolved.split('/').pop() || '';
+  const resolved = normalizeModelPath(url);
+  if (!resolved) return;
+  const fileName = resolved.split(/[/\\]/).pop() || '';
     const link = document.createElement('a');
     link.href = resolved;
     link.download = fileName;
