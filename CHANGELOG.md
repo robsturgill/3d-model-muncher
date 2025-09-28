@@ -1,3 +1,14 @@
+## [0.13.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.0...v0.13.1) (2025-09-28)
+
+
+### Bug Fixes
+
+* add preview generation for uploaded models, increase file upload size limit to 1GB ([c13d713](https://github.com/robsturgill/3d-model-muncher/commit/c13d713c53f8caeba9ea01dc55b0417286e12d51)), closes [#28](https://github.com/robsturgill/3d-model-muncher/issues/28)
+* additional hardening, prevent accidental overwrites of model files by remapping to munchie JSON ([7c2c761](https://github.com/robsturgill/3d-model-muncher/commit/7c2c761d602a7aee2e52ca10a58968460a9c6e42))
+* category list disappearing from bulk edit drawer ([ad89604](https://github.com/robsturgill/3d-model-muncher/commit/ad89604e83ca099bdace03190f164876b0263d23))
+* disable generate image button when other bulk edits are attempted, styling updates to drawer ([2d7d7c7](https://github.com/robsturgill/3d-model-muncher/commit/2d7d7c765aeb4e394ea39b67b101dfe181699158))
+* reset image generation state on drawer close to prevent lingering alerts ([0da234b](https://github.com/robsturgill/3d-model-muncher/commit/0da234b93c284d34ce44974224ce0a4297b54325))
+
 # [0.13.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.12.2...v0.13.0) (2025-09-28)
 
 
