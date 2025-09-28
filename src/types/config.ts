@@ -10,6 +10,7 @@ export interface AppConfig {
     defaultModelView: "3d" | "images";
     defaultModelColor?: string;
     showPrintedBadge?: boolean;
+    verboseScanLogs?: boolean;
     modelCardPrimary: 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price';
     modelCardSecondary: 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price';
     autoSave: boolean;

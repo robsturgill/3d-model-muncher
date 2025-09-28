@@ -2068,6 +2068,18 @@ export function SettingsPage({
                         Load Configuration
                       </Button>
                     </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="verbose-scan-logs">Verbose Scan Logs</Label>
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          id="verbose-scan-logs"
+                          checked={Boolean((localConfig as any).settings.verboseScanLogs)}
+                          onCheckedChange={(v: boolean) => handleConfigFieldChange('settings.verboseScanLogs', v)}
+                        />
+                        <div className="text-sm text-muted-foreground">Enable detailed per-directory scanning logs (debug-level). Useful for troubleshooting; keep off for normal use.</div>
+                      </div>
+                    </div>                    
                   </div>
                 </CardContent>
               </Card>

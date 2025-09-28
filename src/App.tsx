@@ -958,6 +958,7 @@ function AppContent() {
           onBulkUpdate={handleBulkUpdateModels}
           onRefresh={handleRefreshModels}
           onBulkSaved={handleBulkSavedModels}
+          onModelUpdate={handleModelUpdate}
           onClearSelections={exitSelectionMode}
           categories={categories}
           modelDirectory={appConfig?.settings?.modelDirectory || './models'}

@@ -75,6 +75,33 @@ function safeLog(...args) {
   console.log.apply(console, sanitized);
 }
 
+// Helper: conditional debug logging controlled by server-side config (data/config.json)
+function isServerDebugEnabled() {
+  try {
+    const cfgPath = path.join(process.cwd(), 'data', 'config.json');
+    if (fs.existsSync(cfgPath)) {
+      const raw = fs.readFileSync(cfgPath, 'utf8');
+      const parsed = JSON.parse(raw || '{}');
+      return !!(parsed && parsed.settings && parsed.settings.verboseScanLogs);
+    }
+  } catch (e) {
+    // ignore parse/read errors and fall back
+  }
+  try {
+    const cfg = ConfigManager.loadConfig();
+    return !!(cfg && cfg.settings && cfg.settings.verboseScanLogs);
+  } catch (e) {
+    return false;
+  }
+}
+
+function serverDebug(...args) {
+  if (isServerDebugEnabled()) {
+    const sanitized = args.map(a => (typeof a === 'object' && a !== null) ? sanitizeForLog(a) : a);
+    console.debug.apply(console, sanitized);
+  }
+}
+
 // Configure multer for backup file uploads
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -219,14 +246,25 @@ async function postProcessMunchieFile(absoluteFilePath) {
 
 // API endpoint to save a model to its munchie.json file
 app.post('/api/save-model', async (req, res) => {
-  console.log('Save model endpoint hit!'); // Debug log
-  console.log('Request body:', req.body); // Debug log
   let { filePath, id, ...changes } = req.body || {};
 
   // Require at least an id or a filePath so we know where to save
   if (!filePath && !id) {
     console.log('No filePath or id provided');
     return res.status(400).json({ success: false, error: 'No filePath or id provided' });
+  }
+
+  // If filePath is a model file (.stl/.3mf), convert to munchie.json
+  if (filePath && (filePath.endsWith('.stl') || filePath.endsWith('.STL'))) {
+    filePath = filePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\.STL$/i, '-stl-munchie.json');
+  } else if (filePath && filePath.endsWith('.3mf')) {
+    filePath = filePath.replace(/\.3mf$/i, '-munchie.json');
+  }
+
+  // Refuse to write to raw model files
+  if (filePath && (filePath.endsWith('.stl') || filePath.endsWith('.3mf'))) {
+    console.error('Refusing to write to model file:', filePath);
+    return res.status(400).json({ success: false, error: 'Refusing to write to model file' });
   }
   try {
     // If an id was provided without a filePath, try to locate the munchie JSON file by scanning the models directory
@@ -344,7 +382,7 @@ app.post('/api/save-model', async (req, res) => {
         if (Array.isArray(v) && v.length > 0 && v.every(it => typeof it === 'string' && it.startsWith('data:'))) return `[${v.length} base64 images]`;
         return v;
       }));
-      console.log('[server] cleanChanges preview:', preview);
+      // console.log('[server] cleanChanges preview:', preview);
     } catch (e) {
       console.warn('[server] Failed to build cleanChanges preview', e);
     }
@@ -453,16 +491,30 @@ app.post('/api/save-model', async (req, res) => {
     }
 
     // At this point we've computed the cleaned changes. Log a concise message:
-    if (!cleanChanges || Object.keys(cleanChanges).length === 0) {
-      safeLog('Save model request: No changes to apply for', { filePath });
-      console.log('No changes to apply for', absoluteFilePath);
-      return res.json({ success: true, message: 'No changes' });
-    } else {
-      // Only log the cleaned changes (no computed props) to avoid noisy or nested payloads
-      safeLog('Save model request:', { filePath, changes: sanitizeForLog(cleanChanges) });
+    const hasUserImages = cleanChanges.userDefined && (
+      (Array.isArray(cleanChanges.userDefined.images) && cleanChanges.userDefined.images.length > 0) ||
+      (Array.isArray(cleanChanges.userDefined.imageOrder) && cleanChanges.userDefined.imageOrder.length > 0)
+    );
+
+    // Ensure userDefined.thumbnail is set if images are present and thumbnail is missing
+    if (hasUserImages && cleanChanges.userDefined && !cleanChanges.userDefined.thumbnail) {
+      cleanChanges.userDefined.thumbnail = 'user:0';
     }
 
-  // Merge changes carefully. We specially merge `userDefined` so that
+    if (!cleanChanges || Object.keys(cleanChanges).length === 0) {
+      if (hasUserImages) {
+        // safeLog('Save model request: Forcing save for userDefined.images/imageOrder', { filePath });
+      } else {
+        // safeLog('Save model request: No changes to apply for', { filePath });
+        console.log('No changes to apply for', absoluteFilePath);
+        return res.json({ success: true, message: 'No changes' });
+      }
+    } else {
+      // Only log the cleaned changes (no computed props) to avoid noisy or nested payloads
+      // safeLog('Save model request:', { filePath, changes: sanitizeForLog(cleanChanges) });
+    }
+
+    // Merge changes carefully. We specially merge `userDefined` so that
     // we don't blindly overwrite existing user data (which could strip images
     // or imageOrder). The client is expected to write descriptors into
     // `userDefined.imageOrder` (no legacy top-level imageOrder support).
@@ -521,9 +573,9 @@ app.post('/api/save-model', async (req, res) => {
     const dir = path.dirname(absoluteFilePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  // REMOVE LEGACY FIELDS: Remove top-level thumbnail and images from the final saved data
-  // These fields are deprecated in favor of parsedImages (for parsed content) 
-  // and userDefined.images (for user-added content)
+    // REMOVE LEGACY FIELDS: Remove top-level thumbnail and images from the final saved data
+    // These fields are deprecated in favor of parsedImages (for parsed content) 
+    // and userDefined.images (for user-added content)
     if (updated.hasOwnProperty('thumbnail')) {
       console.log('Removing deprecated top-level thumbnail field from saved data');
       delete updated.thumbnail;
@@ -558,8 +610,18 @@ app.post('/api/save-model', async (req, res) => {
     } catch (e) {
       console.warn('postProcessMunchieFile failed after save for', absoluteFilePath, e);
     }
-    // Return cleaned and rejected related_files for client feedback
-    res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles });
+    // Read back the saved file and return it as the authoritative refreshed model
+    let refreshedModel = undefined;
+    try {
+      const rawAfter = fs.readFileSync(absoluteFilePath, 'utf8');
+      refreshedModel = rawAfter ? JSON.parse(rawAfter) : undefined;
+    } catch (e) {
+      console.warn('Failed to read back refreshed model after save:', e);
+      refreshedModel = undefined;
+    }
+
+    // Return cleaned/rejected related_files and refreshedModel for client feedback
+    res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles, refreshedModel });
   } catch (err) {
     console.error('Error saving model:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -570,22 +632,22 @@ app.post('/api/save-model', async (req, res) => {
 app.get('/api/models', async (req, res) => {
   try {
     const absolutePath = getAbsoluteModelsPath();
-  console.log(`API /models scanning directory: ${absolutePath}`);
+    serverDebug(`API /models scanning directory: ${absolutePath}`);
     
     let models = [];
     
     // Function to recursively scan directories
     function scanForModels(directory) {
-      console.log(`Scanning directory: ${directory}`);
+  serverDebug(`Scanning directory: ${directory}`);
       const entries = fs.readdirSync(directory, { withFileTypes: true });
-      console.log(`Found ${entries.length} entries in ${directory}`);
+  serverDebug(`Found ${entries.length} entries in ${directory}`);
       
       for (const entry of entries) {
         const fullPath = path.join(directory, entry.name);
         
         if (entry.isDirectory()) {
-          // Recursively scan subdirectories
-          console.log(`Scanning subdirectory: ${fullPath}`);
+          // Recursively scan subdirectories (debug only)
+          serverDebug(`Scanning subdirectory: ${fullPath}`);
           scanForModels(fullPath);
         } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
           // Load and parse each munchie file
@@ -605,7 +667,7 @@ app.get('/api/models', async (req, res) => {
               
               // Skip files with malformed names (e.g., containing duplicate suffixes)
               if (fileName.includes('-stl-munchie.json_')) {
-                console.log(`Skipping malformed STL JSON file: ${fullPath}`);
+                serverDebug(`Skipping malformed STL JSON file: ${fullPath}`);
               } else {
                 const baseFilePath = relativePath.replace('-stl-munchie.json', '');
                 // Try both .stl and .STL extensions
@@ -628,7 +690,7 @@ app.get('/api/models', async (req, res) => {
                   // console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
                   models.push(model);
                 } else {
-                  console.log(`Skipping ${fullPath} - corresponding .stl/.STL file not found`);
+                  serverDebug(`Skipping ${fullPath} - corresponding .stl/.STL file not found`);
                 }
               }
             } else {
@@ -638,7 +700,7 @@ app.get('/api/models', async (req, res) => {
               
               // Skip files with malformed names
               if (fileName.includes('-munchie.json_')) {
-                console.log(`Skipping malformed 3MF JSON file: ${fullPath}`);
+                serverDebug(`Skipping malformed 3MF JSON file: ${fullPath}`);
               } else {
                 const threeMfFilePath = relativePath.replace('-munchie.json', '.3mf');
                 const absoluteThreeMfPath = path.join(absolutePath, threeMfFilePath);
@@ -653,7 +715,7 @@ app.get('/api/models', async (req, res) => {
                   // console.log(`Added 3MF model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
                   models.push(model);
                 } else {
-                  console.log(`Skipping ${fullPath} - corresponding .3mf file not found at ${absoluteThreeMfPath}`);
+                  serverDebug(`Skipping ${fullPath} - corresponding .3mf file not found at ${absoluteThreeMfPath}`);
                 }
               }
             }
@@ -664,10 +726,13 @@ app.get('/api/models', async (req, res) => {
       }
     }
     
-    // Start the recursive scan
-    scanForModels(absolutePath);
-    
-    res.json(models);
+  // Start the recursive scan
+  scanForModels(absolutePath);
+
+  // Summary: concise result for normal logs (debug contains per-directory details)
+  console.log(`API /models scan complete: found ${models.length} model(s)`);
+
+  res.json(models);
   } catch (error) {
     console.error('Error loading models:', error);
     res.status(500).json({ success: false, message: 'Failed to load models', error: error.message });

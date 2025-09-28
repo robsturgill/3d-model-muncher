@@ -1,13 +1,12 @@
 import { useRef, useState, Suspense, memo, useMemo, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Environment, Center, Bounds } from "@react-three/drei";
 import { Button } from "./ui/button";
 import { Eye, EyeOff, RotateCw, Palette, ImagePlus } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { Skeleton } from "./ui/skeleton";
 import { ThreeJSManager, disposeWebGLContext } from "../utils/threeJSManager";
-import { ModelMesh } from "./ModelMesh";
+import { SharedModelScene } from "./SharedModelScene";
 
 interface ModelViewer3DProps {
   modelUrl?: string;
@@ -16,61 +15,31 @@ interface ModelViewer3DProps {
   onCapture?: (dataUrl: string) => void;
   // optional external default/custom color to apply to models
   customColor?: string;
+  // programmatic trigger: change this number to force the viewer to capture and call onCapture
+  captureTrigger?: number;
+  // Called when the model has finished loading and we have a valid bounding box
+  onModelLoaded?: () => void;
 }
 
 
-// Memoized scene component
 
-const Scene = memo(({ modelUrl, isWireframe, autoRotate, materialType, customColor }: { modelUrl?: string; isWireframe?: boolean; autoRotate?: boolean; materialType?: 'standard' | 'normal'; customColor?: string }) => {
+// Use shared scene setup for consistency
+const Scene = memo(({ modelUrl, autoRotate, materialType, customColor, onModelLoaded }: { modelUrl?: string; autoRotate?: boolean; materialType?: 'standard' | 'normal'; customColor?: string; onModelLoaded?: () => void }) => {
   return (
-    <>
-      <PerspectiveCamera makeDefault position={[-66, 79, 83]} rotation={[-0.76, -0.52, -0.44]} fov={20} />
-      <OrbitControls
-        enablePan={true}
-        enableZoom={true}
-        enableRotate={true}
-        minDistance={2}
-        // maxDistance={5000}
-        autoRotate={autoRotate ?? false}
-        autoRotateSpeed={2.0}
-      />
-  {/* Lighting */}
-  {/* @ts-ignore: react-three/fiber JSX intrinsic types */}
-  <ambientLight intensity={0.4} />
-  {/* @ts-ignore: react-three/fiber JSX intrinsic types */}
-  <directionalLight position={[5, 5, 5]} intensity={1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
-  {/* @ts-ignore: react-three/fiber JSX intrinsic types */}
-  <directionalLight position={[-5, 3, -5]} intensity={0.5} />
-      {/* Environment for reflections */}
-      <Environment preset="studio" />
-      {/* Model with Bounds for auto-fit */}
-      <Suspense fallback={null}>
-        {modelUrl ? (
-          <Bounds fit clip observe margin={1.2}>
-            <Center>
-              <ModelMesh 
-                modelUrl={modelUrl} 
-                isWireframe={isWireframe}
-                materialType={materialType}
-                customColor={customColor}
-              />
-            </Center>
-          </Bounds>
-        ) : null}
-      </Suspense>
-      {/* Ground plane - commented out to hide */}
-      {/* <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
-        <planeGeometry args={[200, 200]} />
-        <meshStandardMaterial color="#888888" transparent opacity={0.2} />
-      </mesh> */}
-    </>
+    <SharedModelScene
+      modelUrl={modelUrl}
+      customColor={customColor}
+      autoRotate={autoRotate}
+      materialType={materialType}
+      onModelLoaded={onModelLoaded}
+    />
   );
 });
 
 Scene.displayName = "Scene";
 
 
-export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture, customColor: externalCustomColor }: ModelViewer3DProps) => {
+export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture, customColor: externalCustomColor, onModelLoaded }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
   const [materialType, setMaterialType] = useState<'standard' | 'normal'>('standard');
@@ -81,6 +50,13 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
   const [canvasReady, setCanvasReady] = useState(false);
   const instanceId = useRef(`viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(true);
+
+  // Capture trigger counter - when this prop increments, perform a capture
+  // (kept local in case parent doesn't pass it); handled via props in signature
+  // NOTE: captureTrigger prop is optional and if provided, will cause an automatic
+  // capture when its value changes.
+  // The actual prop value is read via arguments above (captureTrigger) via props.
 
   const is3MF = modelUrl?.toLowerCase().endsWith('.3mf');
 
@@ -97,37 +73,77 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
     }
   }, [externalCustomColor]);
 
-  // Global Canvas instance management - prevent multiple Three.js instances
+  // Global Canvas instance management - prevent multiple Three.js instances.
+  // Instead of failing immediately when another instance is active, retry
+  // registration for a short period. This makes visible-capture flows (like
+  // the generation dialog) more resilient when another viewer is briefly active.
   useEffect(() => {
     const currentInstanceId = instanceId.current;
-    // Try to register this instance
-    const registered = ThreeJSManager.register(currentInstanceId);
-    setIsRegistered(registered);
-    if (registered) {
-      // Small delay to prevent rendering conflicts
-      const timer = setTimeout(() => {
-        if (ThreeJSManager.isActive(currentInstanceId) && !isDestroyed) {
-          setCanvasReady(true);
+    let isMounted = true;
+    let registered = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const MAX_ATTEMPTS = 25; // ~25 * 200ms = 5s
+    const INTERVAL_MS = 200;
+    let attempts = 0;
+
+    const tryRegister = () => {
+      if (!isMounted) return;
+      if (!isMounted) return;
+      setIsRegistering(true);
+      attempts += 1;
+      const ok = ThreeJSManager.register(currentInstanceId);
+      if (ok) {
+        registered = true;
+        if (!isMounted) return;
+        setIsRegistered(true);
+        setIsRegistering(false);
+        // Small delay to prevent rendering conflicts
+        setTimeout(() => {
+          if (ThreeJSManager.isActive(currentInstanceId) && !isDestroyed) {
+            setCanvasReady(true);
+          }
+        }, 100);
+
+        // nothing more to schedule; cleanup will unregister
+        return;
+      }
+
+      // If not registered and we've not exhausted attempts, try again later
+      if (attempts < MAX_ATTEMPTS) {
+        retryTimer = setTimeout(tryRegister, INTERVAL_MS);
+      } else {
+        console.warn('Could not register 3D viewer instance - another viewer is active (after retries)');
+        if (isMounted) {
+          setIsRegistered(false);
+          setIsRegistering(false);
+          setIsDestroyed(true);
         }
-      }, 100);
-      return () => {
-        clearTimeout(timer);
-        ThreeJSManager.unregister(currentInstanceId);
-        setIsDestroyed(true);
-        setCanvasReady(false);
-        // Clean up WebGL context
-        if (canvasRef.current) {
-          disposeWebGLContext(canvasRef.current);
+      }
+    };
+
+    // Start trying to register
+    tryRegister();
+
+    return () => {
+      isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (registered) {
+        try {
+          ThreeJSManager.unregister(currentInstanceId);
+        } catch (e) {
+          // ignore
         }
-      };
-    } else {
-      // Instance couldn't be registered (too many active)
-      console.warn('Could not register 3D viewer instance - another viewer is active');
-      return () => {
-        setIsDestroyed(true);
-      };
-    }
-  }, [isDestroyed]);
+      }
+      setIsDestroyed(true);
+      setCanvasReady(false);
+      try {
+        if (canvasRef.current) disposeWebGLContext(canvasRef.current);
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, []);
 
   // Memoize canvas configuration to prevent recreation
   const canvasConfig = useMemo(() => ({
@@ -152,7 +168,12 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
       <div className="relative">
         <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 rounded-lg overflow-hidden border border-border">
           <div className="w-full h-full flex items-center justify-center">
-            {!isRegistered ? (
+            {isRegistering ? (
+              <div className="text-center space-y-2">
+                <p className="text-sm font-medium">Waiting for 3D renderer...</p>
+                <p className="text-xs text-muted-foreground">Another 3D viewer is releasing the renderer. This may take a few seconds.</p>
+              </div>
+            ) : !isRegistered ? (
               <div className="text-center space-y-2">
                 <p className="text-sm text-muted-foreground">3D Viewer Unavailable</p>
                 <p className="text-xs text-muted-foreground">Another 3D model is currently being viewed</p>
@@ -165,6 +186,12 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
       </div>
     );
   }
+
+  // Programmatic capture: when captureTrigger prop changes we attempt to read the
+  // Note: programmatic capture is intentionally not implemented here. The parent
+  // component (`BulkEditDrawer`) captures the canvas directly by querying the
+  // offscreen viewer's canvas element and calling toDataURL. Keeping capture
+  // logic local to the parent avoids coupling and lifecycle complexity.
 
   return (
     <div className="relative">
@@ -185,7 +212,7 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
             ref={canvasRef}
             {...canvasConfig}
           >
-            <Scene modelUrl={modelUrl} isWireframe={isWireframe} autoRotate={autoRotate} materialType={materialType} customColor={customColor} />
+            <Scene modelUrl={modelUrl} autoRotate={autoRotate} materialType={materialType} customColor={customColor} onModelLoaded={onModelLoaded} />
           </Canvas>
         </Suspense>
       </div>

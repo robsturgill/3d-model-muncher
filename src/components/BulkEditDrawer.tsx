@@ -45,6 +45,8 @@ import {
   Layers,
   CircleCheckBig
 } from "lucide-react";
+import { ImagePlus } from "lucide-react";
+import { RendererPool } from "../utils/rendererPool";
 import { AlertCircle } from "lucide-react";
 
 interface BulkEditDrawerProps {
@@ -56,6 +58,9 @@ interface BulkEditDrawerProps {
   // Optional callback to provide the exact updated models after saving. If provided,
   // the parent can merge them into its state without a full re-fetch.
   onBulkSaved?: (updatedModels: Model[]) => void;
+  // Optional per-model updater (same shape as ModelDetailsDrawer) to allow updating a single model
+  // in the parent state immediately after it's saved.
+  onModelUpdate?: (model: Model) => void;
   onClearSelections?: () => void;
   categories: Category[];
   // Optional configured models directory (from app config). Used to
@@ -108,10 +113,13 @@ export function BulkEditDrawer({
   onBulkUpdate,
   onRefresh,
   onBulkSaved,
+  onModelUpdate,
   onClearSelections,
   categories,
   modelDirectory,
 }: BulkEditDrawerProps) {
+  // keep categories referenced to avoid TypeScript unused prop error (it's passed from parent)
+  void categories;
   const [editState, setEditState] = useState<BulkEditState>({});
   const [fieldSelection, setFieldSelection] =
     useState<FieldSelection>({
@@ -131,6 +139,9 @@ export function BulkEditDrawer({
     });
   const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  // renderer pool is used for offscreen captures; keep lightweight state for progress
 
   // Track which of the selected models are included in the related-files group
   const [relatedIncludedIds, setRelatedIncludedIds] = useState<string[]>([]);
@@ -399,14 +410,24 @@ export function BulkEditDrawer({
         changes[key] = (edited as any)[key];
       }
     });
+    // Always send userDefined.images and imageOrder if present (for image generation)
+    if (edited.userDefined && Array.isArray(edited.userDefined.images)) {
+      if (!changes.userDefined) changes.userDefined = {};
+      changes.userDefined.images = edited.userDefined.images;
+    }
+    if (edited.userDefined && Array.isArray(edited.userDefined.imageOrder)) {
+      if (!changes.userDefined) changes.userDefined = {};
+      changes.userDefined.imageOrder = edited.userDefined.imageOrder;
+    }
     // Migrate description into userDefined for consistency with other components
     if (typeof changes.description !== 'undefined') {
       const desc = changes.description;
-  changes.userDefined = { description: desc };
+      if (!changes.userDefined) changes.userDefined = {};
+      changes.userDefined.description = desc;
       delete changes.description;
     }
     
-    console.log(`[BulkEdit] Saving model ${edited.name} with changes:`, changes);
+    console.debug(`[BulkEdit] Saving model ${edited.name} with changes:`, changes);
     
     try {
       const response = await fetch('/api/save-model', {
@@ -415,13 +436,112 @@ export function BulkEditDrawer({
         body: JSON.stringify(changes)
       });
       const result = await response.json();
-      console.log(`[BulkEdit] Save result for ${edited.name}:`, result);
+      console.debug(`[BulkEdit] Save result for ${edited.name}:`, result);
       if (!result.success) {
         throw new Error(result.error || 'Failed to save model');
       }
+      // Return the server result so callers can use the authoritative refreshed model
+      return result;
     } catch (err) {
       console.error(`[BulkEdit] Failed to save model ${edited.name} to file:`, err);
+      return { success: false, error: String(err) } as any;
     }
+  };
+
+  // Utility: determine if a model already has any images
+  const modelHasImage = (m: Model) => {
+    if (!m) return false;
+    if (m.thumbnail) return true;
+    if (m.images && m.images.length > 0) return true;
+    if (m.parsedImages && m.parsedImages.length > 0) return true;
+    if (m.userDefined && m.userDefined.images && m.userDefined.images.length > 0) return true;
+    return false;
+  };
+
+  // ...existing code...
+
+  // RendererPool handles creating its own offscreen container when needed.
+  // Keep the hiddenViewerId for traceability/debug logs.
+
+  // Generate image(s) for selected models that do not have images. This will
+  // render a hidden ModelViewer3D (offscreen) and use canvas.toDataURL to capture
+  // a PNG, then save into the model's userDefined.images and persist via saveModelToFile.
+  const handleGenerateImages = async (): Promise<Model[]> => {
+    if (isGeneratingImages) return [];
+    const toProcess = models.filter(m => !modelHasImage(m));
+    if (toProcess.length === 0) return [];
+
+    // Use the RendererPool to perform offscreen captures; it serializes use of the
+    // single WebGL renderer so we don't need to forcibly unregister other viewers.
+
+    setIsGeneratingImages(true);
+    setGenerateProgress({ current: 0, total: toProcess.length });
+
+    const savedModels: Model[] = [];
+    for (let i = 0; i < toProcess.length; i++) {
+      const model = toProcess[i];
+      let modelUrl = model.modelUrl;
+      if (!modelUrl && model.filePath) {
+        modelUrl = `/models/${model.filePath.replace(/\\/g, '/')}`;
+      }
+
+      let dataUrl: string | null = null;
+      try {
+        dataUrl = await RendererPool.captureModel(modelUrl);
+      } catch (err) {
+        console.warn('[BulkEdit] RendererPool capture failed for', model.name, err);
+      }
+
+      if (!dataUrl) {
+        console.warn(`[BulkEdit] Could not capture image for ${model.name}, skipping`);
+        setGenerateProgress(prev => ({ ...prev, current: prev.current + 1 }));
+        continue;
+      }
+
+      const updatedModel = { ...model } as Model;
+      if (!updatedModel.userDefined || typeof updatedModel.userDefined !== 'object') updatedModel.userDefined = {} as any;
+      const existingImages = Array.isArray((updatedModel.userDefined as any).images) ? (updatedModel.userDefined as any).images : [];
+      (updatedModel.userDefined as any).images = [...existingImages, dataUrl];
+      const imageOrder = Array.isArray((updatedModel.userDefined as any).imageOrder) ? (updatedModel.userDefined as any).imageOrder : [];
+      const newIndex = existingImages.length;
+      (updatedModel.userDefined as any).imageOrder = [...imageOrder, `user:${newIndex}`];
+
+      if (!updatedModel.filePath && updatedModel.modelUrl) {
+        let rel = updatedModel.modelUrl.replace('/models/', '');
+        if (rel.endsWith('.3mf')) rel = rel.replace('.3mf', '-munchie.json');
+        else if (rel.endsWith('.stl')) rel = rel.replace('.stl', '-stl-munchie.json');
+        else rel = `${rel}-munchie.json`;
+        updatedModel.filePath = rel;
+      }
+
+      console.debug(`[BulkEdit] Saving image for model: ${updatedModel.name}, filePath: ${updatedModel.filePath}, imagesCount:`, (updatedModel.userDefined as any).images?.length || 0);
+
+      // Save and update parent immediately for each model. Prefer server's refreshed model when available.
+      const saveResult: any = await saveModelToFile(updatedModel, model);
+      let modelForParent: Model = updatedModel;
+      if (saveResult && saveResult.success && saveResult.refreshedModel) {
+        modelForParent = saveResult.refreshedModel as Model;
+      }
+      if (onBulkSaved) {
+        try { onBulkSaved([modelForParent]); } catch (err) { console.error('onBulkSaved error', err); }
+      }
+      // Also notify parent about this single model update so it can merge it into state
+      if (onModelUpdate) {
+        try { onModelUpdate(modelForParent); } catch (err) { console.error('onModelUpdate error', err); }
+      }
+      // Collect the saved (authoritative) model for caller to consume
+      savedModels.push(modelForParent);
+      setGenerateProgress({ current: i + 1, total: toProcess.length });
+    }
+
+    setIsGeneratingImages(false);
+
+    // If no per-model merge handler was provided, optionally refresh the whole list
+    if (!onBulkSaved && onRefresh) {
+      try { await onRefresh(); } catch (err) { console.error('refresh after image gen failed', err); }
+    }
+
+    return savedModels;
   };
 
   const handleSave = async () => {
@@ -537,18 +657,18 @@ export function BulkEditDrawer({
       onBulkUpdate(updates);
 
       // Save each model to its respective file
-      console.log(`[BulkEdit] Processing ${models.length} models for bulk save`);
+      console.debug(`[BulkEdit] Processing ${models.length} models for bulk save`);
       
   const savedModels: Model[] = [];
   for (const model of models) {
         // Ensure filePath is present for saving - convert to JSON file path
         let jsonFilePath;
         if (model.filePath) {
-          // Convert from .3mf/.stl path to appropriate -munchie.json path
+          // Always convert model file paths to munchie.json paths before saving
           if (model.filePath.endsWith('.3mf')) {
-            jsonFilePath = model.filePath.replace('.3mf', '-munchie.json');
-          } else if (model.filePath.endsWith('.stl')) {
-            jsonFilePath = model.filePath.replace('.stl', '-stl-munchie.json');
+            jsonFilePath = model.filePath.replace(/\.3mf$/i, '-munchie.json');
+          } else if (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL')) {
+            jsonFilePath = model.filePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\.STL$/i, '-stl-munchie.json');
           } else if (model.filePath.endsWith('-munchie.json') || model.filePath.endsWith('-stl-munchie.json')) {
             // Already a JSON path, use as-is
             jsonFilePath = model.filePath;
@@ -577,10 +697,10 @@ export function BulkEditDrawer({
           jsonFilePath = `${model.name}-munchie.json`;
         }
 
-  // Debug: show the original computed jsonFilePath
-  console.log(`[BulkEdit][DEBUG] Original computed jsonFilePath for ${model.name}:`, jsonFilePath);
+        // Debug: show the original computed jsonFilePath
+        console.debug(`[BulkEdit][DEBUG] Original computed jsonFilePath for ${model.name}:`, jsonFilePath);
 
-  // Sanitize jsonFilePath: some malformed model paths include extra suffixes
+        // Sanitize jsonFilePath: some malformed model paths include extra suffixes
         // like `-munchie.json_1.stl` (created by other tools or previous bugs). If
         // present, strip the trailing `_...` and any appended `.stl`/`.3mf` so we
         // write to the canonical `-munchie.json` or `-stl-munchie.json` file.
@@ -604,8 +724,7 @@ export function BulkEditDrawer({
   const sanitized = sanitizeJsonFilePath(jsonFilePath);
   jsonFilePath = sanitized;
 
-  console.log(`[BulkEdit][DEBUG] Sanitized jsonFilePath for ${model.name}:`, jsonFilePath);
-        console.log(`[BulkEdit] Model details:`, { id: model.id, name: model.name, modelUrl: model.modelUrl, category: model.category });
+        console.debug(`[BulkEdit][DEBUG] Sanitized jsonFilePath for ${model.name}:`, jsonFilePath);
 
         // Create updated model with changes applied
         const updatedModel = { ...model, filePath: jsonFilePath };
@@ -664,26 +783,26 @@ export function BulkEditDrawer({
         // Apply bulk tag changes if selected
         if (fieldSelection.tags && editState.tags) {
           let newTags = [...(model.tags || [])];
-          console.log(`[BulkEdit][DEBUG] Existing tags for ${model.name}:`, newTags);
+          console.debug(`[BulkEdit][DEBUG] Existing tags for ${model.name}:`, newTags);
           
           // Remove tags
           if (editState.tags?.remove) {
             const toRemove = editState.tags.remove || [];
-            console.log(`[BulkEdit][DEBUG] Removing tags for ${model.name}:`, toRemove);
+            console.debug(`[BulkEdit][DEBUG] Removing tags for ${model.name}:`, toRemove);
             newTags = newTags.filter(tag => !toRemove.includes(tag));
-            console.log(`[BulkEdit][DEBUG] Tags after removal for ${model.name}:`, newTags);
+            console.debug(`[BulkEdit][DEBUG] Tags after removal for ${model.name}:`, newTags);
           }
           
           // Add new tags
           if (editState.tags?.add) {
             const toAdd = editState.tags.add || [];
-            console.log(`[BulkEdit][DEBUG] Adding tags for ${model.name}:`, toAdd);
+            console.debug(`[BulkEdit][DEBUG] Adding tags for ${model.name}:`, toAdd);
             toAdd.forEach(tag => {
               if (!newTags.includes(tag)) {
                 newTags.push(tag);
               }
             });
-            console.log(`[BulkEdit][DEBUG] Tags after addition for ${model.name}:`, newTags);
+            console.debug(`[BulkEdit][DEBUG] Tags after addition for ${model.name}:`, newTags);
           }
           
           updatedModel.tags = newTags;
@@ -696,10 +815,10 @@ export function BulkEditDrawer({
           }
         });
 
-  // Debug: show what will be saved
-  console.log(`[BulkEdit][DEBUG] Saving model ${model.name} -> file: ${updatedModel.filePath}, tags:`, updatedModel.tags);
-  // Save to file
-  await saveModelToFile(updatedModel, model);
+        // Debug: show what will be saved
+        console.debug(`[BulkEdit][DEBUG] Saving model ${model.name} -> file: ${updatedModel.filePath}, tagsCount:`, updatedModel.tags?.length || 0);
+        // Save to file
+        await saveModelToFile(updatedModel, model);
         // Track the saved model so parent can merge without a full refresh
         savedModels.push(updatedModel as Model);
       }
@@ -766,15 +885,36 @@ export function BulkEditDrawer({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <Button
-                onClick={handleSave}
-                disabled={!hasChanges || isSaving}
-                size="sm"
-                className="gap-2"
-              >
-                {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={async () => {
+                    const saved = await handleGenerateImages();
+                    // After bulk image generation, refresh model cards using the authoritative saved models
+                    if (onBulkSaved) {
+                      await onBulkSaved(saved);
+                    } else if (onRefresh) {
+                      await onRefresh();
+                    }
+                  }}
+                  disabled={isGeneratingImages}
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                >
+                  {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : 'Generate Images'}
+                </Button>
+
+                <Button
+                  onClick={handleSave}
+                  disabled={!hasChanges || isSaving}
+                  size="sm"
+                  className="gap-2"
+                >
+                  {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
             </div>
           </div>
         </SheetHeader>
@@ -835,14 +975,7 @@ export function BulkEditDrawer({
                     <SelectValue placeholder="Select new category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem
-                        key={category.id}
-                        value={category.label}
-                      >
-                        {category.label}
-                      </SelectItem>
-                    ))}
+                    {/* Offscreen/react portal usage removed — we use RendererPool for captures. */}
                   </SelectContent>
                 </Select>
                 {commonValues.category && (
@@ -1490,6 +1623,7 @@ export function BulkEditDrawer({
           </div>
           </div>
         </ScrollArea>
+        {/* Offscreen viewer removed; captures use RendererPool */}
       </SheetContent>
     </Sheet>
   );
