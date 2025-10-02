@@ -1,3 +1,11 @@
+## [0.13.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.2...v0.13.3) (2025-10-02)
+
+
+### Bug Fixes
+
+* enhance model selection with shift-click range support and update event handling ([c0d87d5](https://github.com/robsturgill/3d-model-muncher/commit/c0d87d5d327ac5e4a9c6339ab0a8ded71135d173)), closes [#45](https://github.com/robsturgill/3d-model-muncher/issues/45)
+* implement category selection navigation from settings to models view ([2358b1b](https://github.com/robsturgill/3d-model-muncher/commit/2358b1b5e9109f3bef73457cbaf348382e0bf688))
+
 ## [0.13.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.1...v0.13.2) (2025-09-28)
 
 
