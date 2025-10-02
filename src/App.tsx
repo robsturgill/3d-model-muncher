@@ -56,6 +56,8 @@ function AppContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Loading state for initial models fetch (separate from manual refresh)
   const [isModelsLoading, setIsModelsLoading] = useState(false);
+  // Track last applied category from the sidebar to detect user-driven category changes
+  const [lastCategoryFilter, setLastCategoryFilter] = useState<string>('all');
 
   // Dialog states
   const [isDonationDialogOpen, setIsDonationDialogOpen] = useState(false);
@@ -532,6 +534,16 @@ function AppContent() {
     showHidden: boolean;
     sortBy?: string;
   }) => {
+    // If the user is viewing Settings and selects a category in the sidebar,
+    // automatically switch to the Models view with that category applied.
+    const incomingCategory = (filters.category || 'all');
+    if (
+      currentView === 'settings' &&
+      incomingCategory.toLowerCase() !== (lastCategoryFilter || 'all').toLowerCase()
+    ) {
+      setCurrentView('models');
+    }
+
     let filtered = models;
 
     // Hidden filter - exclude hidden models unless showHidden is true
@@ -591,6 +603,8 @@ function AppContent() {
     // Apply sorting via utility
     const sorted = sortModels(filtered as any[], (filters.sortBy || 'none') as any);
     setFilteredModels(sorted);
+    // Update last seen category for future comparisons
+    setLastCategoryFilter(incomingCategory);
     
     // Clear selections if filtered models change
     if (isSelectionMode) {
@@ -775,6 +789,14 @@ function AppContent() {
       >
         <FilterSidebar 
           onFilterChange={handleFilterChange}
+          onCategoryChosen={(label) => {
+            // Switch to models view if currently in settings and the user explicitly chose a category
+            if (currentView === 'settings') {
+              setCurrentView('models');
+            }
+            // Also remember the category so the filter stays consistent
+            setLastCategoryFilter(label || 'all');
+          }}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           onSettingsClick={handleSettingsClick}

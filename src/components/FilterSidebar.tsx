@@ -23,6 +23,9 @@ interface FilterSidebarProps {
     showHidden: boolean;
     sortBy?: string;
   }) => void;
+  // Called specifically when a category button is clicked (user intent),
+  // so parent can perform navigation (e.g., switch from Settings to Models view).
+  onCategoryChosen?: (categoryLabel: string) => void;
   isOpen: boolean;
   onClose: () => void;
   onSettingsClick: () => void;
@@ -51,6 +54,7 @@ const normalizeIconName = (input?: string) => {
 
 export function FilterSidebar({
   onFilterChange,
+  onCategoryChosen,
   isOpen,
   onClose,
   onSettingsClick,
@@ -158,6 +162,8 @@ export function FilterSidebar({
       showHidden: showHidden,
       sortBy: selectedSort,
     });
+    // Notify parent explicitly that a category was chosen by user click
+    onCategoryChosen?.(labelToUse);
   };
 
   const handlePrintStatusChange = (value: string) => {
