@@ -19,10 +19,10 @@ import { triggerDownload, normalizeModelPath } from "../utils/downloadUtils";
 
 interface ModelCardProps {
   model: Model;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
   isSelectionMode?: boolean;
   isSelected?: boolean;
-  onSelectionChange?: (modelId: string) => void;
+  onSelectionChange?: (modelId: string, shiftKey?: boolean) => void;
   // Optional config passed from parent for live updates
   config?: AppConfig;
 }
@@ -39,7 +39,7 @@ export function ModelCard({
   const handleSelectionClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onSelectionChange) {
-      onSelectionChange(model.id);
+      onSelectionChange(model.id, e.shiftKey);
     }
   };
 
@@ -111,9 +111,18 @@ export function ModelCard({
   const thumbnailSrc = resolveThumbnail();
 
   return (
-    <Card className={`flex flex-col cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 ${
-      isSelectionMode && isSelected ? 'ring-2 ring-primary bg-primary/5' : ''
-    }`} onClick={onClick}>
+    <Card
+      className={`flex flex-col cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 ${
+        isSelectionMode && isSelected ? 'ring-2 ring-primary bg-primary/5' : ''
+      }`}
+      onClick={onClick}
+      onMouseDown={(e: React.MouseEvent) => {
+        // Prevent native text selection when Shift-clicking in selection mode
+        if (isSelectionMode && e.shiftKey) {
+          e.preventDefault();
+        }
+      }}
+    >
       <CardHeader className="p-0">
         <div className="relative aspect-[4/3] overflow-hidden rounded-t-lg">
           <ImageWithFallback
@@ -128,8 +137,13 @@ export function ModelCard({
               <div className="flex items-center justify-center w-8 h-8 bg-background/90 backdrop-blur-sm rounded-lg border shadow-sm">
                 <Checkbox
                   checked={isSelected}
-                  onCheckedChange={() => onSelectionChange?.(model.id)}
+                  // rely on click to toggle so shiftKey is captured; avoid double toggle
+                  onCheckedChange={() => { /* handled in onClick to capture shiftKey */ }}
                   onClick={handleSelectionClick}
+                  onMouseDown={(e: React.MouseEvent) => {
+                    // Prevent native text selection when Shift-clicking the checkbox in selection mode
+                    if (isSelectionMode && e.shiftKey) e.preventDefault();
+                  }}
                   className="w-5 h-5 shrink-0"
                 />
               </div>

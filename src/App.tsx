@@ -68,6 +68,8 @@ function AppContent() {
   // Bulk selection state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  // Anchor index for shift-click range selection within the current filteredModels ordering
+  const [selectionAnchorIndex, setSelectionAnchorIndex] = useState<number | null>(null);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
@@ -266,29 +268,56 @@ function AppContent() {
     if (isSelectionMode) {
       // Clear selections when exiting selection mode
       setSelectedModelIds([]);
+      setSelectionAnchorIndex(null);
     }
   };
 
-  const handleModelSelection = (modelId: string) => {
-    setSelectedModelIds(prev => 
-      prev.includes(modelId) 
+  const handleModelSelection = (modelId: string, opts?: { shiftKey?: boolean; index?: number }) => {
+    const currentIndex = typeof opts?.index === 'number' ? opts!.index as number : filteredModels.findIndex(m => m.id === modelId);
+
+    if (opts?.shiftKey && selectionAnchorIndex !== null && currentIndex !== -1) {
+      // Select range between anchor and current index (inclusive)
+      const start = Math.min(selectionAnchorIndex, currentIndex);
+      const end = Math.max(selectionAnchorIndex, currentIndex);
+      const rangeIds = filteredModels.slice(start, end + 1).map(m => m.id);
+      setSelectedModelIds(prev => {
+        const set = new Set(prev);
+        // If entire range already selected, then unselect the range; otherwise add it.
+        const allSelected = rangeIds.every(id => set.has(id));
+        if (allSelected) {
+          rangeIds.forEach(id => set.delete(id));
+        } else {
+          rangeIds.forEach(id => set.add(id));
+        }
+        return Array.from(set);
+      });
+      return;
+    }
+
+    // Toggle single selection and set new anchor
+    setSelectedModelIds(prev =>
+      prev.includes(modelId)
         ? prev.filter(id => id !== modelId)
         : [...prev, modelId]
     );
+    if (currentIndex !== -1) setSelectionAnchorIndex(currentIndex);
   };
 
   const selectAllModels = () => {
     const allVisibleIds = filteredModels.map(model => model.id);
     setSelectedModelIds(allVisibleIds);
+    setSelectionAnchorIndex(0);
   };
 
   const deselectAllModels = () => {
     setSelectedModelIds([]);
+    setSelectionAnchorIndex(null);
   };
 
   const exitSelectionMode = () => {
     setSelectedModelIds([]);
     setIsSelectionMode(false);
+    setSelectionAnchorIndex(null);
   };
 
   const getSelectedModels = (): Model[] => {
@@ -603,6 +632,8 @@ function AppContent() {
     // Apply sorting via utility
     const sorted = sortModels(filtered as any[], (filters.sortBy || 'none') as any);
     setFilteredModels(sorted);
+  // Reset anchor when the visible list changes order/content
+  setSelectionAnchorIndex(null);
     // Update last seen category for future comparisons
     setLastCategoryFilter(incomingCategory);
     

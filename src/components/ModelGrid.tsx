@@ -17,7 +17,7 @@ interface ModelGridProps {
   onModelClick: (model: Model) => void;
   isSelectionMode?: boolean;
   selectedModelIds?: string[];
-  onModelSelection?: (modelId: string) => void;
+  onModelSelection?: (modelId: string, opts?: { shiftKey?: boolean; index?: number }) => void;
   onToggleSelectionMode?: () => void;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
@@ -114,9 +114,9 @@ export function ModelGrid({
     return densityMap[density] || densityMap[4];
   };
 
-  const handleModelInteraction = (model: Model) => {
+  const handleModelInteraction = (e: React.MouseEvent, model: Model, index: number) => {
     if (isSelectionMode && onModelSelection) {
-      onModelSelection(model.id);
+      onModelSelection(model.id, { shiftKey: e.shiftKey, index });
     } else {
       onModelClick(model);
     }
@@ -138,10 +138,10 @@ export function ModelGrid({
     // If parent did not return a Promise (e.g. it just opened a confirmation dialog), don't clear selection here.
   };
 
-  const handleCheckboxClick = (e: React.MouseEvent<HTMLButtonElement>, modelId: string) => {
+  const handleCheckboxClick = (e: React.MouseEvent<HTMLButtonElement>, modelId: string, index: number) => {
     e.stopPropagation();
     if (onModelSelection) {
-      onModelSelection(modelId);
+      onModelSelection(modelId, { index, shiftKey: e.shiftKey });
     }
   };
 
@@ -298,14 +298,14 @@ export function ModelGrid({
             </div>
           ) : viewMode === 'grid' ? (
             <div className={`grid ${getGridClasses(gridDensity[0])} gap-4 lg:gap-6`}>
-              {models.map((model) => (
+              {models.map((model, index) => (
                 <ModelCard
                   key={model.id}
                   model={model}
-                  onClick={() => handleModelInteraction(model)}
+                  onClick={(e) => handleModelInteraction(e, model, index)}
                   isSelectionMode={isSelectionMode}
                   isSelected={selectedModelIds.includes(model.id)}
-                  onSelectionChange={onModelSelection}
+                  onSelectionChange={(id, shiftKey) => onModelSelection?.(id, { index, shiftKey })}
                   config={config}
                 />
               ))}
@@ -313,10 +313,14 @@ export function ModelGrid({
           ) : (
             /* List View */
             <div className="space-y-3">
-              {models.map((model) => (
+              {models.map((model, index) => (
                 <div
                   key={model.id}
-                  onClick={() => handleModelInteraction(model)}
+                  onClick={(e) => handleModelInteraction(e, model, index)}
+                  onMouseDown={(e) => {
+                    // Prevent text selection when Shift-clicking in selection mode
+                    if (isSelectionMode && e.shiftKey) e.preventDefault();
+                  }}
                   className={`flex items-center gap-4 p-4 bg-card rounded-lg border hover:bg-accent/50 hover:border-primary/30 cursor-pointer transition-all duration-200 group shadow-sm hover:shadow-md ${
                     isSelectionMode && selectedModelIds.includes(model.id) 
                       ? 'border-primary bg-primary/5' 
@@ -328,8 +332,9 @@ export function ModelGrid({
                     <div className="flex-shrink-0 pl-1">
                       <Checkbox
                         checked={selectedModelIds.includes(model.id)}
-                        onCheckedChange={() => onModelSelection?.(model.id)}
-                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleCheckboxClick(e, model.id)}
+                        // handle clicks to capture shiftKey; avoid double firing on change
+                        onCheckedChange={() => { /* handled by click */ }}
+                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleCheckboxClick(e, model.id, index)}
                         className="w-5 h-5"
                       />
                     </div>
