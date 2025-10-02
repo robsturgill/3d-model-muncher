@@ -314,9 +314,10 @@ export function ModelGrid({
             /* List View */
             <div className="space-y-3">
               {models.map((model, index) => (
-                <div
-                  key={model.id}
-                  onClick={(e) => handleModelInteraction(e, model, index)}
+                  <div
+                    key={model.id}
+                    data-testid={`row-${model.id}`}
+                    onClick={(e) => handleModelInteraction(e, model, index)}
                   onMouseDown={(e) => {
                     // Prevent text selection when Shift-clicking in selection mode
                     if (isSelectionMode && e.shiftKey) e.preventDefault();
@@ -335,6 +336,7 @@ export function ModelGrid({
                         // handle clicks to capture shiftKey; avoid double firing on change
                         onCheckedChange={() => { /* handled by click */ }}
                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleCheckboxClick(e, model.id, index)}
+                        data-testid={`checkbox-${model.id}`}
                         className="w-5 h-5"
                       />
                     </div>
