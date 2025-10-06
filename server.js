@@ -2198,7 +2198,9 @@ app.post('/api/backup-munchie-files', async (req, res) => {
     const backup = {
       timestamp: new Date().toISOString(),
       version: '1.0.0',
-      files: []
+      files: [],
+      // Include collections.json when present so collections are preserved in backup
+      collections: undefined
     };
 
     // Recursively find all munchie.json files
@@ -2230,13 +2232,31 @@ app.post('/api/backup-munchie-files', async (req, res) => {
 
     findMunchieFiles(modelsDir);
 
+    // Try to include collections.json if it exists
+    try {
+      const collectionsPath = path.join(process.cwd(), 'data', 'collections.json');
+      if (fs.existsSync(collectionsPath)) {
+        const raw = fs.readFileSync(collectionsPath, 'utf8');
+        if (raw && raw.trim() !== '') {
+          const parsed = JSON.parse(raw);
+          // Normalize to an array in case file contains { collections: [...] }
+          const cols = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.collections) ? parsed.collections : []);
+          backup.collections = cols;
+        } else {
+          backup.collections = [];
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to read collections.json for backup:', e && e.message ? e.message : e);
+    }
+
     // Compress the backup data
     const jsonString = JSON.stringify(backup, null, 2);
     const compressed = zlib.gzipSync(Buffer.from(jsonString, 'utf8'));
 
     // Set headers for file download
     const timestamp = backup.timestamp.replace(/[:.]/g, '-').slice(0, 19);
-    const filename = `munchie-backup-${timestamp}.gz`;
+  const filename = `munchie-backup-${timestamp}.gz`;
     
     res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -2244,7 +2264,8 @@ app.post('/api/backup-munchie-files', async (req, res) => {
     
     res.send(compressed);
     
-    console.log(`Backup created: ${backup.files.length} munchie.json files, ${(compressed.length / 1024).toFixed(2)} KB compressed`);
+  const colCount = Array.isArray(backup.collections) ? backup.collections.length : 0;
+  console.log(`Backup created: ${backup.files.length} munchie.json files, ${colCount} collections, ${(compressed.length / 1024).toFixed(2)} KB compressed`);
     
   } catch (error) {
     console.error('Backup creation error:', error);
@@ -2255,7 +2276,7 @@ app.post('/api/backup-munchie-files', async (req, res) => {
 // API endpoint to restore munchie.json files from backup
 app.post('/api/restore-munchie-files', async (req, res) => {
   try {
-    const { backupData, strategy = 'hash-match' } = req.body;
+    const { backupData, strategy = 'hash-match', collectionsStrategy = 'merge' } = req.body;
     
     if (!backupData) {
       return res.status(400).json({ success: false, error: 'No backup data provided' });
@@ -2278,7 +2299,8 @@ app.post('/api/restore-munchie-files', async (req, res) => {
       restored: [],
       skipped: [],
       errors: [],
-      strategy: strategy
+      strategy: strategy,
+      collections: { restored: 0, skipped: 0, strategy: collectionsStrategy }
     };
 
     // Create a map of existing 3MF files by their hashes for hash-based matching
@@ -2320,6 +2342,39 @@ app.post('/api/restore-munchie-files', async (req, res) => {
     }
 
     mapExistingFiles(modelsDir);
+
+    // Restore collections first (optional)
+    try {
+      if (backup.collections && Array.isArray(backup.collections)) {
+        const existing = loadCollections();
+        let next = [];
+        if (collectionsStrategy === 'replace') {
+          next = backup.collections;
+        } else {
+          // merge by id (prefer backup for matching IDs), append new ones
+          const byId = new Map(existing.map(c => [c && c.id, c]).filter(([k]) => typeof k === 'string' && k));
+          for (const c of backup.collections) {
+            if (c && typeof c.id === 'string' && c.id) {
+              byId.set(c.id, c);
+            } else {
+              // no id, assign one to avoid collisions
+              const assigned = { ...c, id: makeId() };
+              next.push(assigned);
+            }
+          }
+          next = [...new Set(next.concat(Array.from(byId.values()).filter(Boolean)))];
+        }
+        if (!Array.isArray(next)) next = [];
+        if (saveCollections(next)) {
+          results.collections.restored = Array.isArray(next) ? next.length : 0;
+        } else {
+          results.collections.skipped = Array.isArray(backup.collections) ? backup.collections.length : 0;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore collections from backup:', e && e.message ? e.message : e);
+      results.errors.push({ originalPath: 'collections.json', error: 'Failed to restore collections: ' + (e && e.message ? e.message : e) });
+    }
 
     // Process each file in the backup
     for (const backupFile of backup.files) {
@@ -2427,7 +2482,7 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
       return res.status(400).json({ success: false, error: 'No backup file provided' });
     }
 
-    const { strategy = 'hash-match' } = req.body;
+  const { strategy = 'hash-match', collectionsStrategy = 'merge' } = req.body;
     let backupData;
 
     // Check if file is gzipped
@@ -2459,7 +2514,8 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
       restored: [],
       skipped: [],
       errors: [],
-      strategy: strategy
+      strategy: strategy,
+      collections: { restored: 0, skipped: 0, strategy: collectionsStrategy }
     };
 
     // Create a map of existing 3MF files by their hashes for hash-based matching
@@ -2501,6 +2557,37 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
     }
 
     mapExistingFiles(modelsDir);
+
+    // Restore collections first (optional)
+    try {
+      if (backup.collections && Array.isArray(backup.collections)) {
+        const existing = loadCollections();
+        let next = [];
+        if (collectionsStrategy === 'replace') {
+          next = backup.collections;
+        } else {
+          const byId = new Map(existing.map(c => [c && c.id, c]).filter(([k]) => typeof k === 'string' && k));
+          for (const c of backup.collections) {
+            if (c && typeof c.id === 'string' && c.id) {
+              byId.set(c.id, c);
+            } else {
+              const assigned = { ...c, id: makeId() };
+              next.push(assigned);
+            }
+          }
+          next = [...new Set(next.concat(Array.from(byId.values()).filter(Boolean)))];
+        }
+        if (!Array.isArray(next)) next = [];
+        if (saveCollections(next)) {
+          results.collections.restored = Array.isArray(next) ? next.length : 0;
+        } else {
+          results.collections.skipped = Array.isArray(backup.collections) ? backup.collections.length : 0;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore collections from uploaded backup:', e && e.message ? e.message : e);
+      results.errors.push({ originalPath: 'collections.json', error: 'Failed to restore collections: ' + (e && e.message ? e.message : e) });
+    }
 
     // Process each file in the backup
     for (const backupFile of backup.files) {

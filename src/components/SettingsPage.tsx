@@ -346,6 +346,8 @@ export function SettingsPage({
     fileCount: number;
   }>>([]);
   const [restoreStrategy, setRestoreStrategy] = useState<'hash-match' | 'path-match' | 'force'>('hash-match');
+  // Collections restore behavior for backups that include collections.json
+  const [collectionsRestoreStrategy, setCollectionsRestoreStrategy] = useState<'merge' | 'replace'>('merge');
 
   // State and handler for generating model JSONs via backend API
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
@@ -1558,6 +1560,8 @@ export function SettingsPage({
         formData.append('backupFile', file);
         formData.append('strategy', restoreStrategy);
 
+        // Include collections strategy in upload restore
+        formData.append('collectionsStrategy', collectionsRestoreStrategy);
         const response = await fetch('/api/restore-munchie-files/upload', {
           method: 'POST',
           body: formData
@@ -1584,7 +1588,8 @@ export function SettingsPage({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             backupData,
-            strategy: restoreStrategy
+            strategy: restoreStrategy,
+            collectionsStrategy: collectionsRestoreStrategy
           })
         });
 
@@ -2349,8 +2354,8 @@ export function SettingsPage({
                     Backup & Restore
                   </CardTitle>
                   <CardDescription>
-                    Create rolling backups of your model metadata and restore from previous backups. 
-                    Backups include all *-munchie.json files with model metadata, tags, and settings.
+                    Create rolling backups of your model metadata and restore from previous backups.
+                    Backups include all *-munchie.json files with model metadata, tags, and settings, plus your collections.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -2497,6 +2502,44 @@ export function SettingsPage({
                       </div>
                     </div>
 
+                    {/* Collections Restore Strategy */}
+                    <div className="space-y-3">
+                      <Label>Collections Restore</Label>
+                      <Select
+                        value={collectionsRestoreStrategy}
+                        onValueChange={(value: 'merge' | 'replace') => setCollectionsRestoreStrategy(value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="merge">
+                            <div className="font-medium">Merge <span className="text-xs text-muted-foreground sm:hidden">(Default)</span></div>
+                            <div className="text-xs text-muted-foreground hidden sm:block">
+                              Combine backup collections with existing ones by ID; backup wins on conflict
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="replace">
+                            <div className="font-medium">Replace</div>
+                            <div className="text-xs text-muted-foreground hidden sm:block">
+                              Overwrite existing collections with those from the backup
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-lg">
+                        {collectionsRestoreStrategy === 'merge' ? (
+                          <>
+                            <strong>Merge:</strong> Backup collections are merged with existing ones by ID. Existing collections not in the backup are kept.
+                          </>
+                        ) : (
+                          <>
+                            <strong>Replace:</strong> Existing collections are replaced entirely by the backup collections.
+                          </>
+                        )}
+                      </div>
+                    </div>
+
                     <div className="flex gap-2">
                       <Button 
                         onClick={handleRestoreFromFile}
@@ -2516,7 +2559,7 @@ export function SettingsPage({
                     <div className="text-xs text-muted-foreground">
                       <strong>Supported formats:</strong> .gz (compressed backup), .json (plain backup)
                       <br />
-                      <strong>Note:</strong> Only model metadata (*-munchie.json) files are restored, not the actual 3MF files.
+                      <strong>Note:</strong> Restores model metadata files and collections. Actual 3MF/STL models are not included in backups.
                     </div>
                   </div>
 
