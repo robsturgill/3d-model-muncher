@@ -28,10 +28,16 @@ function SheetPortal({
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
 }
 
+type SheetOverlayProps = React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay> & {
+  // When true (default), block interactions from propagating beyond the overlay.
+  // When false, allow Radix to process outside clicks to close the sheet.
+  blockInteractions?: boolean;
+};
+
 const SheetOverlay = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+  SheetOverlayProps
+>(({ className, blockInteractions = true, ...props }, ref) => (
   <SheetPrimitive.Overlay
     ref={ref}
     data-slot="sheet-overlay"
@@ -39,23 +45,11 @@ const SheetOverlay = React.forwardRef<
       "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
       className,
     )}
-    // Consume interactions so they don't hit underlying UI
-    onPointerDown={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    onMouseDown={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    onClick={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    onDoubleClick={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
+    // Optionally consume interactions so they don't hit underlying UI and to prevent outside-close
+    onPointerDown={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
+    onMouseDown={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
+    onClick={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
+    onDoubleClick={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
     {...props}
   />
 ));
@@ -65,13 +59,17 @@ function SheetContent({
   className,
   children,
   side = "right",
+  // When true (default), overlay blocks interactions (no outside-close).
+  // Set to false to allow clicking outside to close the sheet.
+  blockOverlayInteractions = true,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left";
+  blockOverlayInteractions?: boolean;
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay blockInteractions={blockOverlayInteractions} />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(

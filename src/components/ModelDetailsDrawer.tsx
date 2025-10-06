@@ -315,10 +315,10 @@ export function ModelDetailsDrawer({
         }
       };
 
-    // Compute the full images array (thumbnail + additional images) from the
-    // currently-displayed model. During edit mode prefer the in-edit
-    // `inlineCombined` ordering when present so the UI can show arbitrary
-    // placements; otherwise build from the model state.
+      // Compute the full images array (thumbnail + additional images) from the
+      // currently-displayed model. During edit mode prefer the in-edit
+      // `inlineCombined` ordering when present so the UI can show arbitrary
+      // placements; otherwise build from the model state.
       // Helper: extract data URL from userDefined image entry (supports legacy string and new object form)
       const getUserImageData = (entry: any) => {
         if (!entry) return '';
@@ -326,7 +326,6 @@ export function ModelDetailsDrawer({
         if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
         return '';
       };
-
       // Resolve a descriptor to actual image data for the new parsedImages structure
       const resolveDescriptorToData = (desc: string | undefined, m: Model): string | undefined => {
         if (!desc) return undefined;
@@ -379,7 +378,7 @@ export function ModelDetailsDrawer({
         
         // Use new parsedImages structure when available
         const parsedImages = Array.isArray(m.parsedImages) ? m.parsedImages : [];
-  const userArr = Array.isArray((m as any).userDefined?.images) ? (m as any).userDefined.images : [];
+        const userArr = Array.isArray((m as any).userDefined?.images) ? (m as any).userDefined.images : [];
         
         // Add parsed image descriptors
         for (let i = 0; i < parsedImages.length; i++) {
@@ -542,8 +541,8 @@ export function ModelDetailsDrawer({
     // perform descriptor reordering (move source -> target)
     const descItem = currentDescriptors.splice(sourceIndex, 1)[0];
     currentDescriptors.splice(targetIndex, 0, descItem);
-  // Determine if the new first descriptor references a user or parsed image
-  // so we can persist it as userDefined.thumbnail (descriptor form).
+    // Determine if the new first descriptor references a user or parsed image
+    // so we can persist it as userDefined.thumbnail (descriptor form).
     let firstDescriptor: string | undefined = undefined;
     if (currentDescriptors.length > 0 && typeof currentDescriptors[0] === 'string') {
       firstDescriptor = currentDescriptors[0] as string;
@@ -564,7 +563,7 @@ export function ModelDetailsDrawer({
       const firstUrl = resolvedUrls[0];
       if (firstUrl) {
         const parsedSnapshot = parsedImagesSnapshotRef.current || [];
-  const userArr = Array.isArray((editedModel as any)?.userDefined?.images) ? (editedModel as any).userDefined.images : [];
+        const userArr = Array.isArray((editedModel as any)?.userDefined?.images) ? (editedModel as any).userDefined.images : [];
         const uidx = userArr.findIndex((u: any) => getUserImageData(u) === firstUrl);
         if (uidx !== -1) normalizedThumbDescriptor = `user:${uidx}`;
         else {
@@ -612,7 +611,7 @@ export function ModelDetailsDrawer({
       }
     }
 
-    // Update editedModel to set imageOrder and optionally update nested thumbnail
+      // Update editedModel to set imageOrder and optionally update nested thumbnail
       // Debug: log normalization result so we can see what the UI computed on drop
       try {
         console.debug('DEBUG handleDrop: currentDescriptors =', currentDescriptors);
@@ -637,11 +636,11 @@ export function ModelDetailsDrawer({
     });
 
     // Update inlineCombined (UI) to reflect new order by resolving descriptors
-      const tempUdObj2 = (editedModel as any).userDefined && typeof (editedModel as any).userDefined === 'object'
-        ? { ...(editedModel as any).userDefined }
-        : {};
-      tempUdObj2.imageOrder = currentDescriptors;
-      const tempModelForResolve = { ...editedModel, userDefined: tempUdObj2 } as Model;
+    const tempUdObj2 = (editedModel as any).userDefined && typeof (editedModel as any).userDefined === 'object'
+      ? { ...(editedModel as any).userDefined }
+      : {};
+    tempUdObj2.imageOrder = currentDescriptors;
+    const tempModelForResolve = { ...editedModel, userDefined: tempUdObj2 } as Model;
     const resolved = resolveImageOrderToUrls(tempModelForResolve) || [];
     setInlineCombined(resolved);
     // update preview index to the dropped location
@@ -777,10 +776,10 @@ export function ModelDetailsDrawer({
     // images. This disambiguation is important so we don't accidentally treat
     // userDefined images as parsed when splitting the combined gallery later.
     const parsedImgs = parsedImages; // Use the parsedImages we just established
-  // If thumbnail matches one of the parsed images by reference/value, then
-  // the server produced a true top-level thumbnail. Otherwise, if the
-  // thumbnail appears in userDefined.images, treat it as a user image.
-  const udImgs = Array.isArray((srcModel as any).userDefined?.images) ? (srcModel as any).userDefined.images : [];
+    // If thumbnail matches one of the parsed images by reference/value, then
+    // the server produced a true top-level thumbnail. Otherwise, if the
+    // thumbnail appears in userDefined.images, treat it as a user image.
+    const udImgs = Array.isArray((srcModel as any).userDefined?.images) ? (srcModel as any).userDefined.images : [];
     const thumbnailVal = srcModel.thumbnail;
     const thumbnailIsParsed = typeof thumbnailVal === 'string' && thumbnailVal !== '' && parsedImgs.includes(thumbnailVal);
     const thumbnailIsUser = typeof thumbnailVal === 'string' && thumbnailVal !== '' && udImgs.includes(thumbnailVal);
@@ -1043,9 +1042,9 @@ export function ModelDetailsDrawer({
       }
     });
 
-  // If the edited top-level thumbnail is a descriptor (user:, parsed:),
-  // do not persist it to top-level; instead move it into userDefined.thumbnail
-  // to ensure the actual parsed base64 thumbnail at top-level is preserved.
+    // If the edited top-level thumbnail is a descriptor (user:, parsed:),
+    // do not persist it to top-level; instead move it into userDefined.thumbnail
+    // to ensure the actual parsed base64 thumbnail at top-level is preserved.
     if (typeof changes.thumbnail === 'string' && /^(user:|parsed:)/.test(changes.thumbnail)) {
       const descriptor = changes.thumbnail;
       delete changes.thumbnail;
@@ -1231,9 +1230,9 @@ export function ModelDetailsDrawer({
       console.warn('Failed to include edited nested thumbnail into changes (defensive):', e);
     }
 
-  // Also ensure that a user-defined thumbnail (stored under userDefined.thumbnail)
-  // is included in the changes payload if it exists or changed. The generic diff
-  // above may not pick it up if only nested userDefined fields changed.
+    // Also ensure that a user-defined thumbnail (stored under userDefined.thumbnail)
+    // is included in the changes payload if it exists or changed. The generic diff
+    // above may not pick it up if only nested userDefined fields changed.
     if (editedUD && typeof editedUD === 'object') {
       const editedThumb = (editedUD as any).thumbnail;
       const origUD = (original as any).userDefined && typeof (original as any).userDefined === 'object' ? (original as any).userDefined : undefined;
@@ -1294,86 +1293,86 @@ export function ModelDetailsDrawer({
     // it is included in the outgoing changes payload even if the generic diff
     // didn't detect any change (this can happen when only deeply-nested fields
     // were updated via local helpers like buildImageOrderFromModel).
-      try {
-        const ud0 = (editedForSave as any).userDefined && typeof (editedForSave as any).userDefined === 'object' ? (editedForSave as any).userDefined : undefined;
-        // If there's an explicit imageOrder, prefer its first descriptor as the thumbnail
-        if (ud0 && Array.isArray(ud0.imageOrder) && ud0.imageOrder.length > 0) {
-          try {
-            ud0.thumbnail = ud0.imageOrder[0];
-          } catch (e) {
-            // ignore
-          }
+    try {
+      const ud0 = (editedForSave as any).userDefined && typeof (editedForSave as any).userDefined === 'object' ? (editedForSave as any).userDefined : undefined;
+      // If there's an explicit imageOrder, prefer its first descriptor as the thumbnail
+      if (ud0 && Array.isArray(ud0.imageOrder) && ud0.imageOrder.length > 0) {
+        try {
+          ud0.thumbnail = ud0.imageOrder[0];
+        } catch (e) {
+          // ignore
         }
-        if (ud0 && typeof ud0.thumbnail === 'string' && ud0.thumbnail.length > 0) {
+      }
+      if (ud0 && typeof ud0.thumbnail === 'string' && ud0.thumbnail.length > 0) {
+        if (!changes.userDefined || typeof changes.userDefined !== 'object') changes.userDefined = {};
+        // Do not overwrite an explicit thumbnail already present in changes.userDefined
+        if (!(changes.userDefined && (changes.userDefined as any).thumbnail)) {
+          changes.userDefined = { ...(changes.userDefined as any), thumbnail: ud0.thumbnail };
+        }
+      }
+    } catch (e) {
+      // Non-fatal: proceed without forcing thumbnail into changes
+      console.warn('Failed to defensively include nested thumbnail into changes', e);
+    }
+
+    // Final enforcement: Make absolutely sure the outgoing `changes` payload
+    // includes a nested thumbnail descriptor that matches the first item of
+    // the edited model's `userDefined.imageOrder` (if present). This prevents
+    // racey or-missed-diff cases where the thumbnail change could be omitted
+    // and the server would keep the previous parsed:0 value.
+    try {
+      const editedUdFinal = (editedForSave as any).userDefined && typeof (editedForSave as any).userDefined === 'object'
+        ? (editedForSave as any).userDefined
+        : undefined;
+      if (editedUdFinal && Array.isArray(editedUdFinal.imageOrder) && editedUdFinal.imageOrder.length > 0) {
+        const firstDesc = editedUdFinal.imageOrder[0];
+        if (typeof firstDesc === 'string' && firstDesc.length > 0) {
           if (!changes.userDefined || typeof changes.userDefined !== 'object') changes.userDefined = {};
-          // Do not overwrite an explicit thumbnail already present in changes.userDefined
-          if (!(changes.userDefined && (changes.userDefined as any).thumbnail)) {
-            changes.userDefined = { ...(changes.userDefined as any), thumbnail: ud0.thumbnail };
+          // Only overwrite if it's missing or different to avoid stomping other client intent
+          if ((changes.userDefined as any).thumbnail !== firstDesc) {
+            (changes.userDefined as any).thumbnail = firstDesc;
           }
         }
-      } catch (e) {
-        // Non-fatal: proceed without forcing thumbnail into changes
-        console.warn('Failed to defensively include nested thumbnail into changes', e);
       }
+    } catch (e) {
+      // Non-fatal - continue with the best effort payload
+      console.warn('Failed final enforcement of nested thumbnail into outgoing changes:', e);
+    }
 
-      // Final enforcement: Make absolutely sure the outgoing `changes` payload
-      // includes a nested thumbnail descriptor that matches the first item of
-      // the edited model's `userDefined.imageOrder` (if present). This prevents
-      // racey or-missed-diff cases where the thumbnail change could be omitted
-      // and the server would keep the previous parsed:0 value.
+    // Note: clearing is represented by writing userDefined = [] above when the
+    // user checks the "Restore original description" checkbox. We no longer
+    // rely on a local flag here — the post-save refresh below always fetches
+    // the authoritative model.
+
+    try {
+      // Log a compact preview of the outgoing payload for debugging (avoid dumping full base64 blobs)
       try {
-        const editedUdFinal = (editedForSave as any).userDefined && typeof (editedForSave as any).userDefined === 'object'
-          ? (editedForSave as any).userDefined
+        const preview = { filePath: editedForSave.filePath, changes: { ...changes } } as any;
+        if (preview.changes && preview.changes.userDefined && typeof preview.changes.userDefined === 'object') {
+          const ud0 = preview.changes.userDefined;
+          if (ud0 && Array.isArray(ud0.images)) {
+            preview.changes.userDefined = { ...ud0, images: `[${ud0.images.length} images]` } as any;
+          }
+        }
+        console.debug('POST /api/save-model payload preview:', preview);
+      } catch (e) {
+        // Don't let logging break the save flow
+        console.warn('Failed to produce save-model preview log', e);
+      }
+        // Extra debug: explicitly log the nested thumbnail descriptor if present so we can
+        // verify whether the client is sending userDefined.thumbnail as expected.
+      try {
+        // Keep a single, sanitized console.debug preview for developers. This
+        // avoids spamming visible console.log output while still making the
+        // information available when debug logging is enabled.
+        const udPreview = changes.userDefined && typeof changes.userDefined === 'object'
+          ? { ...changes.userDefined, images: Array.isArray(changes.userDefined.images) ? `[${changes.userDefined.images.length} images]` : changes.userDefined.images }
           : undefined;
-        if (editedUdFinal && Array.isArray(editedUdFinal.imageOrder) && editedUdFinal.imageOrder.length > 0) {
-          const firstDesc = editedUdFinal.imageOrder[0];
-          if (typeof firstDesc === 'string' && firstDesc.length > 0) {
-            if (!changes.userDefined || typeof changes.userDefined !== 'object') changes.userDefined = {};
-            // Only overwrite if it's missing or different to avoid stomping other client intent
-            if ((changes.userDefined as any).thumbnail !== firstDesc) {
-              (changes.userDefined as any).thumbnail = firstDesc;
-            }
-          }
-        }
+        const preview = { filePath: editedForSave.filePath, changes: { ...changes, userDefined: udPreview ? udPreview : undefined } };
+        console.debug('POST /api/save-model payload preview (sanitized):', preview);
       } catch (e) {
-        // Non-fatal - continue with the best effort payload
-        console.warn('Failed final enforcement of nested thumbnail into outgoing changes:', e);
+        console.warn('Failed to produce save-model preview log', e);
       }
-
-  // Note: clearing is represented by writing userDefined = [] above when the
-  // user checks the "Restore original description" checkbox. We no longer
-  // rely on a local flag here — the post-save refresh below always fetches
-  // the authoritative model.
-
-      try {
-        // Log a compact preview of the outgoing payload for debugging (avoid dumping full base64 blobs)
-        try {
-          const preview = { filePath: editedForSave.filePath, changes: { ...changes } } as any;
-          if (preview.changes && preview.changes.userDefined && typeof preview.changes.userDefined === 'object') {
-            const ud0 = preview.changes.userDefined;
-            if (ud0 && Array.isArray(ud0.images)) {
-              preview.changes.userDefined = { ...ud0, images: `[${ud0.images.length} images]` } as any;
-            }
-          }
-          console.debug('POST /api/save-model payload preview:', preview);
-        } catch (e) {
-          // Don't let logging break the save flow
-          console.warn('Failed to produce save-model preview log', e);
-        }
-          // Extra debug: explicitly log the nested thumbnail descriptor if present so we can
-          // verify whether the client is sending userDefined.thumbnail as expected.
-        try {
-          // Keep a single, sanitized console.debug preview for developers. This
-          // avoids spamming visible console.log output while still making the
-          // information available when debug logging is enabled.
-          const udPreview = changes.userDefined && typeof changes.userDefined === 'object'
-            ? { ...changes.userDefined, images: Array.isArray(changes.userDefined.images) ? `[${changes.userDefined.images.length} images]` : changes.userDefined.images }
-            : undefined;
-          const preview = { filePath: editedForSave.filePath, changes: { ...changes, userDefined: udPreview ? udPreview : undefined } };
-          console.debug('POST /api/save-model payload preview (sanitized):', preview);
-        } catch (e) {
-          console.warn('Failed to produce save-model preview log', e);
-        }
 
       const response = await fetch('/api/save-model', {
         method: 'POST',
@@ -1493,7 +1492,7 @@ export function ModelDetailsDrawer({
         modelToPersist = cleanedModel;
       }
       let finalModel = modelToPersist;
-  // If any images are selected, remove them from the correct arrays (parsedImages vs userDefined.images)
+      // If any images are selected, remove them from the correct arrays (parsedImages vs userDefined.images)
       if (selectedImageIndexes.length > 0) {
         const sel = new Set(selectedImageIndexes);
         
@@ -1535,10 +1534,10 @@ export function ModelDetailsDrawer({
         });
         
         // Remove from parsedImages (create new array with items removed)
-  const newParsedImages = parsedImages.filter((_: any, index: number) => !parsedToRemove.has(index));
-        
-  // Remove from userDefined.images (create new array with items removed)  
-  const newUserImages = userImages.filter((_: any, index: number) => !userToRemove.has(index));
+        const newParsedImages = parsedImages.filter((_: any, index: number) => !parsedToRemove.has(index));
+              
+        // Remove from userDefined.images (create new array with items removed)  
+        const newUserImages = userImages.filter((_: any, index: number) => !userToRemove.has(index));
         
         // Rebuild imageOrder with corrected indices
         const adjustedOrder: string[] = [];
@@ -1783,7 +1782,7 @@ export function ModelDetailsDrawer({
       // Set the thumbnail descriptor
       udObj.thumbnail = selectedDescriptor;
       // Move this descriptor to the front of imageOrder so it appears first
-  const newOrder = [selectedDescriptor, ...currentOrder.filter((_: any, idx: number) => idx !== imageIndex)];
+      const newOrder = [selectedDescriptor, ...currentOrder.filter((_: any, idx: number) => idx !== imageIndex)];
       udObj.imageOrder = newOrder;
       return { ...prev, userDefined: udObj } as Model;
     });
@@ -1906,7 +1905,12 @@ export function ModelDetailsDrawer({
 
   return (
     <Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl" onEscapeKeyDown={handleContentEscapeKeyDown}>
+      <SheetContent
+        className="w-full sm:max-w-2xl"
+        onEscapeKeyDown={handleContentEscapeKeyDown}
+        // Allow outside clicks to close only when not editing and not in fullscreen image mode
+        blockOverlayInteractions={isEditing || isWindowFullscreen}
+      >
         {/* Sticky Header during editing */}
         <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}> 
           <div className="flex items-start justify-between">
