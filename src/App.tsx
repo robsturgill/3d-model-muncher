@@ -992,7 +992,7 @@ function AppContent() {
               {/* Quick File Actions dropdown (3MF/STL check/generate) */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="p-2 hover:bg-accent transition-colors" title="Actions">
+                  <Button variant="ghost" size="sm" className="p-2 hover:bg-accent transition-colors" title="Actions" aria-label="Actions">
                     <Box className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
