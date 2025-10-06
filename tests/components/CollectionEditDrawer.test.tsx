@@ -30,10 +30,10 @@ describe('CollectionEditDrawer', () => {
     return { onOpenChange, onSaved }
   }
 
-  it('maps Select "none" to empty category on save (create mode)', async () => {
+  it('defaults to "Uncategorized" category on save when not selected (create mode)', async () => {
     const { onSaved } = baseRender()
     fireEvent.change(screen.getByPlaceholderText('Collection name'), { target: { value: 'Desk Set' } })
-    // default category is none -> should map to ''
+  // default category is 'Uncategorized' if nothing selected
     // mock fetch
     const mockRes = { ok: true, json: () => Promise.resolve({ success: true, collection: { id: 'c1' } }) }
     // @ts-ignore
@@ -41,7 +41,7 @@ describe('CollectionEditDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: /save/i }))
     expect(global.fetch).toHaveBeenCalled()
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body)
-    expect(body.category).toBe('')
+  expect(body.category).toBe('Uncategorized')
     expect(body.modelIds).toEqual(['m1','m2'])
   })
 

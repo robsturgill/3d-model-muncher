@@ -22,9 +22,8 @@ interface Props {
 export default function CollectionEditDrawer({ open, onOpenChange, collection, categories, onSaved, initialModelIds = [] }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  // We store category as '' for none, but Radix <SelectItem> cannot have empty value.
-  // Use 'none' as the UI sentinel and map to ''.
-  const [category, setCategory] = useState<string>('');
+  // Default to 'Uncategorized' when not explicitly set
+  const [category, setCategory] = useState<string>('Uncategorized');
   const [tags, setTags] = useState<string[]>([]);
   const [images, setImages] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
@@ -35,7 +34,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
     if (!open) return;
     setName(collection?.name || '');
     setDescription(collection?.description || '');
-  setCategory(collection?.category || '');
+    setCategory(collection?.category && collection.category.trim() ? collection.category : 'Uncategorized');
     setTags(Array.isArray(collection?.tags) ? collection!.tags! : []);
     setImages(Array.isArray(collection?.images) ? collection!.images! : []);
   }, [open, collection?.id]);
@@ -73,7 +72,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
       const payload: any = {
         name: name.trim(),
         description,
-        category,
+        category: (category && category.trim()) ? category : 'Uncategorized',
         tags,
         images,
       };
@@ -175,16 +174,18 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
             <div className="space-y-2">
               <label className="text-sm font-medium">Category</label>
               <Select
-                value={category === '' ? 'none' : category}
-                onValueChange={(val) => setCategory(val === 'none' ? '' : val)}
+                value={category || 'Uncategorized'}
+                onValueChange={(val) => setCategory(val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="None" />
+                  <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
+                  {/* Always include 'Uncategorized' as the default option */}
+                  <SelectItem value="Uncategorized">Uncategorized</SelectItem>
                   {categories
                     .filter(c => c?.label && c.label.trim() !== '')
+                    .filter(c => c.label !== 'Uncategorized')
                     .map(c => (
                       <SelectItem key={c.id} value={c.label}>{c.label}</SelectItem>
                     ))}
