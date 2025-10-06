@@ -457,6 +457,7 @@ export function FilterSidebar({
                   <SelectItem value="all">All Files</SelectItem>
                   <SelectItem value="3mf">3MF</SelectItem>
                   <SelectItem value="stl">STL</SelectItem>
+                  <SelectItem value="collections">Collections</SelectItem>
                 </SelectContent>
               </Select>
             </div>

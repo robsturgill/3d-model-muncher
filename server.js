@@ -114,6 +114,42 @@ const upload = multer({
 app.use(cors());
 app.use(express.json({ limit: '100mb' })); // Increased limit for large model payloads
 
+// Collections storage helpers (persist under data/collections.json)
+const collectionsFilePath = path.join(process.cwd(), 'data', 'collections.json');
+
+function loadCollections() {
+  try {
+    if (!fs.existsSync(collectionsFilePath)) return [];
+    const raw = fs.readFileSync(collectionsFilePath, 'utf8');
+    if (!raw || raw.trim() === '') return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.collections) ? parsed.collections : []);
+  } catch (e) {
+    console.warn('Failed to load collections.json:', e);
+    return [];
+  }
+}
+
+function saveCollections(collections) {
+  try {
+    const dataDir = path.join(process.cwd(), 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    const tmp = collectionsFilePath + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(collections, null, 2), 'utf8');
+    fs.renameSync(tmp, collectionsFilePath);
+    return true;
+  } catch (e) {
+    console.error('Failed to save collections.json:', e);
+    return false;
+  }
+}
+
+function makeId(prefix = 'col') {
+  const ts = Date.now().toString(36);
+  const rnd = Math.random().toString(36).slice(2, 7);
+  return `${prefix}-${ts}-${rnd}`;
+}
+
 // Health check endpoint for Docker/Unraid
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -122,6 +158,73 @@ app.get('/api/health', (req, res) => {
     uptime: process.uptime(),
     version: '0.1.0'
   });
+});
+
+// --- Collections API ---
+// List all collections
+app.get('/api/collections', (req, res) => {
+  try {
+    const cols = loadCollections();
+    res.json({ success: true, collections: cols });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Failed to load collections' });
+  }
+});
+
+// Create or update a collection
+app.post('/api/collections', (req, res) => {
+  try {
+    const { id, name, description = '', modelIds = [], coverModelId, category = '', tags = [], images = [] } = req.body || {};
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Name is required' });
+    }
+    if (!Array.isArray(modelIds)) {
+      return res.status(400).json({ success: false, error: 'modelIds must be an array' });
+    }
+
+    const now = new Date().toISOString();
+    const normalizedIds = Array.from(new Set(modelIds.filter(x => typeof x === 'string' && x.trim() !== '')));
+
+    const cols = loadCollections();
+    let result;
+    if (id) {
+      const idx = cols.findIndex(c => c.id === id);
+      if (idx === -1) {
+        return res.status(404).json({ success: false, error: 'Collection not found' });
+      }
+      const updated = { ...cols[idx], name, description, modelIds: normalizedIds, coverModelId, lastModified: now };
+      if (typeof category === 'string') updated.category = category;
+      if (Array.isArray(tags)) updated.tags = Array.from(new Set(tags.filter(t => typeof t === 'string')));
+      if (Array.isArray(images)) updated.images = images.filter(s => typeof s === 'string');
+      cols[idx] = updated;
+      if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
+      result = updated;
+    } else {
+      const newCol = { id: makeId(), name, description, modelIds: normalizedIds, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
+      cols.push(newCol);
+      if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
+      result = newCol;
+    }
+    res.json({ success: true, collection: result });
+  } catch (e) {
+    console.error('/api/collections error:', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Delete a collection
+app.delete('/api/collections/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const cols = loadCollections();
+    const idx = cols.findIndex(c => c.id === id);
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Not found' });
+    const removed = cols.splice(idx, 1)[0];
+    if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collections' });
+    res.json({ success: true, deleted: removed });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
 });
 
 // Serve model files from the models directory. The configured directory can be

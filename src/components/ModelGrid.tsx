@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Model } from "../types/model";
 import { AppConfig } from "../types/config";
+import type { Collection } from "../types/collection";
 import { ModelCard } from "./ModelCard";
+import { CollectionCard } from "./CollectionCard";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 import { ConfigManager } from "../utils/configManager";
@@ -11,10 +13,14 @@ import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
 import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive, CheckSquare, Square, Edit, Trash2, X } from "lucide-react";
 import { Badge } from "./ui/badge";
+import CollectionEditDrawer from "./CollectionEditDrawer";
 
 interface ModelGridProps {
   models: Model[];
+  collections?: Collection[];
   onModelClick: (model: Model) => void;
+  onOpenCollection?: (collectionId: string) => void;
+  onCollectionChanged?: () => void;
   isSelectionMode?: boolean;
   selectedModelIds?: string[];
   onModelSelection?: (modelId: string, opts?: { shiftKey?: boolean; index?: number }) => void;
@@ -52,8 +58,11 @@ function saveUiPrefs(prefs: any) {
 }
 
 export function ModelGrid({ 
-  models, 
+  models,
+  collections = [],
   onModelClick, 
+  onOpenCollection,
+  onCollectionChanged,
   isSelectionMode = false,
   selectedModelIds = [],
   onModelSelection,
@@ -83,6 +92,9 @@ export function ModelGrid({
     const density = config.settings.defaultGridDensity;
     return [density >= 1 && density <= 6 ? density : 4];
   });
+
+  // Create Collection drawer state
+  const [isCreateCollectionOpen, setIsCreateCollectionOpen] = useState(false);
 
   // Save settings when they change
   const handleViewModeChange = (newMode: ViewMode) => {
@@ -149,10 +161,14 @@ export function ModelGrid({
     <div className="h-full flex flex-col">
       {/* Enhanced header with view controls */}
       <div className="p-4 lg:p-6 border-b bg-card shadow-sm shrink-0">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4 flex-wrap">
             <p className="text-muted-foreground text-sm font-medium">
-              {models.length} model{models.length !== 1 ? 's' : ''} found
+              {models.length > 0
+                ? `${models.length} model${models.length !== 1 ? 's' : ''} found`
+                : collections.length > 0
+                ? `${collections.length} collection${collections.length !== 1 ? 's' : ''}`
+                : 'No items found'}
             </p>
             
             {/* View Mode Toggle - Hide in selection mode for cleaner UI */}
@@ -199,6 +215,19 @@ export function ModelGrid({
                     >
                       <Edit className="h-4 w-4" />
                       <span className="hidden sm:inline">Edit</span>
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsCreateCollectionOpen(true)}
+                      className="gap-2"
+                      title="Create collection from selection"
+                      disabled={selectedModelIds.length === 0}
+                    >
+                      {/* Using List icon to represent grouping */}
+                      <List className="h-4 w-4" />
+                      <span className="hidden sm:inline">Collection</span>
                     </Button>
                     
                     <Button
@@ -286,18 +315,30 @@ export function ModelGrid({
       {/* Scrollable content */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 lg:p-6 pb-8 lg:pb-12">
-          {models.length === 0 ? (
+          {(models.length === 0 && collections.length === 0) ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <h2 className="font-semibold text-lg">No models found</h2>
+              <h2 className="font-semibold text-lg">No items found</h2>
               <p className="text-muted-foreground text-sm">Try adjusting your search or filters</p>
               <img
                 src="/images/munchie-front.png"
-                alt="No models found"
+                alt="No items found"
                 width="418"
               />
             </div>
           ) : viewMode === 'grid' ? (
             <div className={`grid ${getGridClasses(gridDensity[0])} gap-4 lg:gap-6`}>
+              {/* Render collections first */}
+              {collections.filter(Boolean).map((c) => (
+                <CollectionCard
+                  key={`col-${c.id}`}
+                  collection={c}
+                  categories={config.categories || []}
+                  onOpen={(id) => onOpenCollection?.(id)}
+                  onChanged={() => onCollectionChanged?.()}
+                  onDeleted={() => onCollectionChanged?.()}
+                />
+              ))}
+              {/* Render models */}
               {models.map((model, index) => (
                 <ModelCard
                   key={model.id}
@@ -313,6 +354,28 @@ export function ModelGrid({
           ) : (
             /* List View */
             <div className="space-y-3">
+              {/* Collections in list view */}
+              {collections.filter(Boolean).map((c) => (
+                <div key={`col-row-${c.id}`} className="flex items-center gap-4 p-4 bg-card rounded-lg border hover:bg-accent/50 hover:border-primary/30 cursor-pointer transition-all duration-200 group shadow-sm hover:shadow-md" onClick={() => onOpenCollection?.(c.id)}>
+                  <div className="flex-shrink-0 pl-1">
+                    <div className="w-14 h-10 rounded bg-muted/40 border border-primary/20 overflow-hidden flex items-center justify-center">
+                      {Array.isArray(c.images) && c.images.length > 0 ? (
+                        <img src={c.images[0]} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-sm bg-primary/20 border border-primary/40" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold">{c.name}</h3>
+                      <Badge variant="secondary">{(c.modelIds || []).length} items</Badge>
+                    </div>
+                    {c.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{c.description}</p>}
+                  </div>
+                </div>
+              ))}
+              {/* Models in list view */}
               {models.map((model, index) => (
                   <div
                     key={model.id}
@@ -456,6 +519,24 @@ export function ModelGrid({
           )}
         </div>
       </ScrollArea>
+      {/* Create Collection Drawer (uses CollectionEditDrawer) */}
+      <CollectionEditDrawer
+        open={isCreateCollectionOpen}
+        onOpenChange={(open) => {
+          if (!open) setIsCreateCollectionOpen(false);
+          else setIsCreateCollectionOpen(true);
+        }}
+        collection={null}
+        categories={config.categories || []}
+        initialModelIds={selectedModelIds}
+        onSaved={() => {
+          setIsCreateCollectionOpen(false);
+          // Leave selection mode to reduce confusion after collection creation
+          onToggleSelectionMode?.();
+          // Notify parent to refresh collections if provided
+          onCollectionChanged?.();
+        }}
+      />
     </div>
   );
 }

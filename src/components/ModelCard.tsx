@@ -15,6 +15,7 @@ import { ConfigManager } from "../utils/configManager";
 import { getLabel } from "../constants/labels";
 import type { AppConfig } from "../types/config";
 import { ImageWithFallback } from "./ImageWithFallback";
+import { resolveModelThumbnail } from "../utils/thumbnailUtils";
 import { triggerDownload, normalizeModelPath } from "../utils/downloadUtils";
 
 interface ModelCardProps {
@@ -65,50 +66,7 @@ export function ModelCard({
     document.body.removeChild(link);
   };
 
-  // Helper to extract user image data
-  const getUserImageData = (entry: any) => {
-    if (!entry) return '';
-    if (typeof entry === 'string') return entry;
-    if (typeof entry === 'object' && typeof entry.data === 'string') return entry.data;
-    return '';
-  };
-
-  // Resolve thumbnail descriptor to actual image URL
-  const resolveThumbnail = () => {
-  const thumbnailDesc = (model as any).userDefined?.thumbnail;
-    
-    if (thumbnailDesc && typeof thumbnailDesc === 'string') {
-      // Handle descriptor format (parsed:0, user:1, etc.)
-      if (thumbnailDesc.startsWith('parsed:')) {
-        const idx = parseInt(thumbnailDesc.split(':')[1] || '', 10);
-        if (!isNaN(idx)) {
-          // Try new parsedImages structure first
-          if (Array.isArray(model.parsedImages) && model.parsedImages[idx]) {
-            return model.parsedImages[idx];
-          }
-          // Fall back to legacy structure
-          if (idx === 0 && model.thumbnail) return model.thumbnail;
-          if (Array.isArray(model.images) && model.images[idx - 1]) {
-            return model.images[idx - 1];
-          }
-        }
-      } else if (thumbnailDesc.startsWith('user:')) {
-        const idx = parseInt(thumbnailDesc.split(':')[1] || '', 10);
-  const userImages = (model as any).userDefined?.images;
-        if (!isNaN(idx) && Array.isArray(userImages) && userImages[idx]) {
-          return getUserImageData(userImages[idx]);
-        }
-      } else {
-        // Legacy: treat as literal data URL
-        return thumbnailDesc;
-      }
-    }
-    
-    // Fallback to model.thumbnail for backward compatibility
-    return model.thumbnail || '';
-  };
-
-  const thumbnailSrc = resolveThumbnail();
+  const thumbnailSrc = resolveModelThumbnail(model);
 
   return (
     <Card

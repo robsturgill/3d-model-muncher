@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { ModelGrid } from "./components/ModelGrid";
 import { ModelDetailsDrawer } from "./components/ModelDetailsDrawer";
@@ -16,7 +16,7 @@ import { ConfigManager } from "./utils/configManager";
 import * as pkg from '../package.json';
 import { applyFiltersToModels, FilterState } from "./utils/filterUtils";
 import { sortModels } from "./utils/sortUtils";
-import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload } from "lucide-react";
+import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload, List, ArrowLeft } from "lucide-react";
 import ModelUploadDialog from "./components/ModelUploadDialog";
 import { Button } from "./components/ui/button";
 import {
@@ -39,10 +39,12 @@ import {
   AlertDialogTitle,
 } from "./components/ui/alert-dialog";
 import { Separator } from "./components/ui/separator";
+import CollectionGrid from "./components/CollectionGrid";
+import type { Collection } from "./types/collection";
 
 // Function to load model data from JSON files
 // Initial type for view
-type ViewType = 'models' | 'settings' | 'demo';
+type ViewType = 'models' | 'settings' | 'demo' | 'collections' | 'collection-view';
 
 function AppContent() {
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
@@ -72,6 +74,21 @@ function AppContent() {
   const [selectionAnchorIndex, setSelectionAnchorIndex] = useState<number | null>(null);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  // Collections state
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [activeCollection, setActiveCollection] = useState<Collection | null>(null);
+  // Track where to return when leaving a collection view
+  const [collectionReturnView, setCollectionReturnView] = useState<ViewType>('models');
+  // Force sidebar to re-mount to reset its internal filter UI when switching contexts
+  const [sidebarResetKey, setSidebarResetKey] = useState(0);
+  // When in a collection, this is the full set of models in that collection (used for sidebar tags/categories)
+  const collectionBaseModels = useMemo(() => {
+    if (activeCollection && Array.isArray(activeCollection.modelIds)) {
+      const idSet = new Set(activeCollection.modelIds);
+      return models.filter(m => idSet.has(m.id));
+    }
+    return models;
+  }, [models, activeCollection]);
   
   // Delete file type selection state
   const [includeThreeMfFiles, setIncludeThreeMfFiles] = useState(false);
@@ -142,7 +159,7 @@ function AppContent() {
         if (!response.ok) {
           throw new Error('Failed to fetch models');
         }
-        const loadedModels = await response.json();
+  const loadedModels = await response.json();
         setModels(loadedModels);
         // Apply configured default filters (from appConfig) when initializing filteredModels
         const defaultFilters = config.filters || { defaultCategory: 'all', defaultPrintStatus: 'all', defaultLicense: 'all' };
@@ -159,6 +176,14 @@ function AppContent() {
   const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
   setFilteredModels(visibleModels);
   setIsModelsLoading(false);
+        // Load collections list
+        try {
+          const colResp = await fetch('/api/collections');
+          if (colResp.ok) {
+            const data = await colResp.json();
+            if (data && data.success && Array.isArray(data.collections)) setCollections(data.collections);
+          }
+        } catch (e) { /* ignore */ }
       } catch (error) {
         console.error('Failed to load configuration or models:', error);
         // Use default categories if config fails to load
@@ -573,7 +598,20 @@ function AppContent() {
       setCurrentView('models');
     }
 
-    let filtered = models;
+    // Determine base set: in collection view, filter within the collection's full set (not the current filtered subset)
+    let filtered = (currentView === 'collection-view' && activeCollection)
+      ? collectionBaseModels
+      : models;
+
+    // Special case: collections-only filter is relevant only in main models view
+    if (currentView !== 'collection-view') {
+      if ((filters.fileType || '').toLowerCase() === 'collections') {
+        setFilteredModels([]);
+        setLastCategoryFilter(incomingCategory);
+        if (isSelectionMode) setSelectedModelIds([]);
+        return;
+      }
+    }
 
     // Hidden filter - exclude hidden models unless showHidden is true
     if (!filters.showHidden) {
@@ -762,6 +800,53 @@ function AppContent() {
     setCurrentView('models');
   };
 
+  // Collections helpers and effects
+  const openCollectionsList = () => {
+    setCurrentView('collections');
+    setIsDrawerOpen(false);
+    setIsSelectionMode(false);
+  };
+  const openCollection = (col: Collection) => {
+    setActiveCollection(col);
+    setCurrentView('collection-view');
+    setIsDrawerOpen(false);
+    // When opened from the Collections list, return back there
+    setCollectionReturnView('collections');
+    // Initialize filtered models to the collection contents (no filters active)
+    try {
+      const setIds = new Set(col.modelIds || []);
+      const base = models.filter(m => setIds.has(m.id));
+      setFilteredModels(base);
+    } catch { /* ignore */ }
+    // Reset the sidebar controls to defaults for the new context
+    setSidebarResetKey(k => k + 1);
+  };
+  const refreshCollections = async () => {
+    try {
+      const r = await fetch('/api/collections');
+      if (r.ok) {
+        const data = await r.json();
+        if (data && data.success && Array.isArray(data.collections)) setCollections(data.collections);
+      }
+    } catch (e) { /* ignore */ }
+  };
+  // Listen for collection-created events from child dialogs
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      try {
+        const anyEv: any = ev as any;
+        const col = anyEv?.detail as Collection | undefined;
+        if (col && Array.isArray(col.modelIds)) {
+          setActiveCollection(col);
+          setCurrentView('collection-view');
+        }
+      } catch { /* ignore */ }
+      refreshCollections();
+    };
+    window.addEventListener('collection-created', handler as any);
+    return () => window.removeEventListener('collection-created', handler as any);
+  }, []);
+
   const handleDonationClick = () => {
     setIsDonationDialogOpen(true);
   };
@@ -819,6 +904,7 @@ function AppContent() {
       onClick={() => !isSidebarOpen && setIsSidebarOpen(true)}
       >
         <FilterSidebar 
+          key={sidebarResetKey}
           onFilterChange={handleFilterChange}
           onCategoryChosen={(label) => {
             // Switch to models view if currently in settings and the user explicitly chose a category
@@ -832,7 +918,9 @@ function AppContent() {
           onClose={() => setIsSidebarOpen(false)}
           onSettingsClick={handleSettingsClick}
           categories={categories}
-          models={models}
+          models={(currentView === 'collection-view' && activeCollection)
+            ? collectionBaseModels
+            : models}
           initialFilters={{
             search: '',
             category: appConfig?.filters?.defaultCategory || 'all',
@@ -912,6 +1000,9 @@ function AppContent() {
                   <DropdownMenuItem onClick={() => { handleRefreshModels(); }} disabled={isRefreshing}>
                     <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openCollectionsList}>
+                    <List className="h-4 w-4 mr-2" /> Collections
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'hash-check', fileType: '3mf' })}> 
                     <FileCheck className="h-4 w-4 mr-2" /> 3MF Check
                   </DropdownMenuItem>
@@ -971,7 +1062,25 @@ function AppContent() {
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
+              collections={collections}
               onModelClick={handleModelClick}
+              onOpenCollection={(id) => {
+                const col = collections.find(c => c.id === id);
+                if (col) {
+                  // When opened from the main grid, return to models on back
+                  setCollectionReturnView('models');
+                  setActiveCollection(col);
+                  setCurrentView('collection-view');
+                  // Initialize filtered models to the collection contents (no filters active)
+                  try {
+                    const setIds = new Set(col.modelIds || []);
+                    const base = models.filter(m => setIds.has(m.id));
+                    setFilteredModels(base);
+                  } catch { /* ignore */ }
+                  setSidebarResetKey(k => k + 1);
+                }
+              }}
+              onCollectionChanged={refreshCollections}
               isSelectionMode={isSelectionMode}
               selectedModelIds={selectedModelIds}
               onModelSelection={handleModelSelection}
@@ -997,14 +1106,79 @@ function AppContent() {
               settingsAction={settingsAction}
               onActionHandled={() => setSettingsAction(null)}
             />
+          ) : currentView === 'collections' ? (
+            <div className="h-full flex flex-col">
+              <div className="p-4 lg:p-6 border-b bg-card shadow-sm shrink-0 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="sm" onClick={handleBackToModels} className="gap-2" title="Back to models">
+                    <ArrowLeft className="h-4 w-4" />
+                    Models
+                  </Button>
+                  <div className="font-semibold">Collections</div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={refreshCollections} title="Refresh collections">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="p-4 lg:p-6">
+                {collections.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No collections yet. Select some models and create one from the selection.</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {collections.map(c => (
+                      <button key={c.id} onClick={() => openCollection(c)} className="p-4 text-left rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-16 h-12 rounded overflow-hidden bg-muted/40 flex-shrink-0">
+                            {Array.isArray(c.images) && c.images.length > 0 ? (
+                              <img src={c.images[0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium truncate">{c.name}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{(c.modelIds || []).length} items</div>
+                            {c.description && <div className="text-xs line-clamp-2 mt-2">{c.description}</div>}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : currentView === 'collection-view' && activeCollection ? (
+            <CollectionGrid
+              name={activeCollection.name}
+              modelIds={activeCollection.modelIds}
+              models={filteredModels}
+              onBack={() => {
+                if (collectionReturnView === 'models') {
+                  // Return to main grid: reset filters and show all models
+                  setCurrentView('models');
+                  setFilteredModels(models);
+                  setSidebarResetKey(k => k + 1);
+                  setSelectedModelIds([]);
+                  setSelectionAnchorIndex(null);
+                  setIsSelectionMode(false);
+                  setActiveCollection(null);
+                } else {
+                  // Return to the collections list view
+                  setCurrentView('collections');
+                  setActiveCollection(null);
+                }
+              }}
+              onModelClick={handleModelClick}
+              config={appConfig}
+            />
           ) : (
             <DemoPage onBack={handleBackToModels} />
           )}
         </div>
       </div>
 
-      {/* Model Details Drawer - Show in models and settings view */}
-      {(currentView === 'models' && !isSelectionMode || currentView === 'settings') && (
+      {/* Model Details Drawer - Show in models, collection-view, and settings views */}
+      {(((currentView === 'models') && !isSelectionMode) || currentView === 'settings' || currentView === 'collection-view') && (
         <ModelDetailsDrawer
           model={selectedModel}
           isOpen={isDrawerOpen}
