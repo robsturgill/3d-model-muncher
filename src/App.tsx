@@ -16,7 +16,7 @@ import { ConfigManager } from "./utils/configManager";
 // Import package.json to read the last published version (used as previous release)
 import * as pkg from '../package.json';
 import { applyFiltersToModels, FilterState } from "./utils/filterUtils";
-import { sortModels } from "./utils/sortUtils";
+import { sortModels, sortCollections, SortKey } from "./utils/sortUtils";
 import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload, List, ArrowLeft } from "lucide-react";
 import ModelUploadDialog from "./components/ModelUploadDialog";
 import { Button } from "./components/ui/button";
@@ -82,6 +82,8 @@ function AppContent() {
   const [collectionReturnView, setCollectionReturnView] = useState<ViewType>('models');
   // Force sidebar to re-mount to reset its internal filter UI when switching contexts
   const [sidebarResetKey, setSidebarResetKey] = useState(0);
+  // Remember last selected sort from sidebar so collections list can respect it
+  const [currentSortBy, setCurrentSortBy] = useState<SortKey>('none');
   // When in a collection, this is the full set of models in that collection (used for sidebar tags/categories)
   const collectionBaseModels = useMemo(() => {
     if (activeCollection && Array.isArray(activeCollection.modelIds)) {
@@ -589,6 +591,9 @@ function AppContent() {
     showHidden: boolean;
     sortBy?: string;
   }) => {
+    // Capture sort selection up front so collections views can react even if we early-return
+    const incomingSort = (filters.sortBy || 'none') as SortKey;
+    setCurrentSortBy(incomingSort);
     // If the user is viewing Settings and selects a category in the sidebar,
     // automatically switch to the Models view with that category applied.
     const incomingCategory = (filters.category || 'all');
@@ -669,10 +674,11 @@ function AppContent() {
     }
 
     // Apply sorting via utility
-    const sorted = sortModels(filtered as any[], (filters.sortBy || 'none') as any);
+    const sortKey = (filters.sortBy || 'none') as SortKey;
+    const sorted = sortModels(filtered as any[], sortKey);
     setFilteredModels(sorted);
-  // Reset anchor when the visible list changes order/content
-  setSelectionAnchorIndex(null);
+    // Reset anchor when the visible list changes order/content
+    setSelectionAnchorIndex(null);
     // Update last seen category for future comparisons
     setLastCategoryFilter(incomingCategory);
     
@@ -1073,7 +1079,8 @@ function AppContent() {
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
-              collections={collections}
+              collections={sortCollections(collections, currentSortBy)}
+              sortBy={currentSortBy}
               onModelClick={handleModelClick}
               onOpenCollection={(id) => {
                 const col = collections.find(c => c.id === id);
@@ -1136,7 +1143,7 @@ function AppContent() {
                   <div className="text-sm text-muted-foreground">No collections yet. Select some models and create one from the selection.</div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {collections.map(c => (
+                    {sortCollections(collections, currentSortBy).map(c => (
                       <button key={c.id} onClick={() => openCollection(c)} className="p-4 text-left rounded-lg border bg-card hover:bg-accent/50 transition-colors">
                         <div className="flex items-center gap-3">
                           <div className="relative w-16 h-12 rounded overflow-hidden bg-muted/40 flex-shrink-0">
