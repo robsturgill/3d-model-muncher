@@ -581,6 +581,9 @@ function AppContent() {
     setIsBulkEditOpen(false);
   };
 
+  // Track current file type filter to control whether collections should be shown
+  const [currentFileType, setCurrentFileType] = useState<string>('all');
+
   const handleFilterChange = (filters: {
     search: string;
     category: string;
@@ -594,6 +597,9 @@ function AppContent() {
     // Capture sort selection up front so collections views can react even if we early-return
     const incomingSort = (filters.sortBy || 'none') as SortKey;
     setCurrentSortBy(incomingSort);
+    // Track the current selected file type (all | 3mf | stl | collections)
+    const incomingFileType = (filters.fileType || 'all').toLowerCase();
+    setCurrentFileType(incomingFileType);
     // If the user is viewing Settings and selects a category in the sidebar,
     // automatically switch to the Models view with that category applied.
     const incomingCategory = (filters.category || 'all');
@@ -611,7 +617,7 @@ function AppContent() {
 
     // Special case: collections-only filter is relevant only in main models view
     if (currentView !== 'collection-view') {
-      if ((filters.fileType || '').toLowerCase() === 'collections') {
+      if (incomingFileType === 'collections') {
         setFilteredModels([]);
         setLastCategoryFilter(incomingCategory);
         if (isSelectionMode) setSelectedModelIds([]);
@@ -950,7 +956,7 @@ function AppContent() {
         />
       </div>
 
-      {/* Main Content */}
+  {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 p-4 border-b bg-card shadow-sm shrink-0">
@@ -1079,7 +1085,7 @@ function AppContent() {
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
-              collections={sortCollections(collections, currentSortBy)}
+              collections={(currentFileType === '3mf' || currentFileType === 'stl') ? [] : sortCollections(collections, currentSortBy)}
               sortBy={currentSortBy}
               onModelClick={handleModelClick}
               onOpenCollection={(id) => {
