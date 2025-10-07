@@ -48,6 +48,7 @@ import {
 import { ImagePlus } from "lucide-react";
 import { RendererPool } from "../utils/rendererPool";
 import { AlertCircle } from "lucide-react";
+import TagsInput from "./TagsInput";
 
 interface BulkEditDrawerProps {
   models: Model[];
@@ -139,7 +140,7 @@ export function BulkEditDrawer({
       regenerateMunchie: false,
       relatedFiles: false,
     });
-  const [newTag, setNewTag] = useState("");
+  // Tags add UI now handled via shared TagsInput
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [closeRequestedWhileGenerating, setCloseRequestedWhileGenerating] = useState(false);
@@ -267,8 +268,8 @@ export function BulkEditDrawer({
         regenerateMunchie: false,
         relatedFiles: false,
       });
-      setNewTag("");
-      setRelatedIncludedIds(models.map((m) => uniqueKeyForModel(m)));
+  // no-op: TagsInput controls add list
+  setRelatedIncludedIds(models.map((m) => uniqueKeyForModel(m)));
       // Clear any leftover image-generation state so alerts don't persist
       setIsGeneratingImages(false);
       setCloseRequestedWhileGenerating(false);
@@ -337,52 +338,7 @@ export function BulkEditDrawer({
 
   // related-files state is managed inline in the UI handlers
 
-  const handleAddTag = () => {
-    if (!newTag.trim()) return;
-
-    const trimmedTag = newTag.trim();
-    setEditState((prev) => {
-      const currentAdds = prev.tags?.add || [];
-      const currentRemoves = prev.tags?.remove || [];
-
-      // Prevent duplicates: check case-insensitively against currentAdds and allTags
-      const lowerNew = trimmedTag.toLowerCase();
-      const existingInAdds = currentAdds.some(t => t.toLowerCase() === lowerNew);
-      const existingInAllTags = allTags.some(t => t.toLowerCase() === lowerNew);
-
-      if (existingInAdds || existingInAllTags) {
-        // If tag is present in remove list, ensure it's removed from remove list
-        return {
-          ...prev,
-          tags: {
-            add: currentAdds,
-            remove: currentRemoves.filter((tag) => tag.toLowerCase() !== lowerNew),
-          },
-        };
-      }
-
-      return {
-        ...prev,
-        tags: {
-          add: [...currentAdds, trimmedTag],
-          remove: currentRemoves.filter((tag) => tag.toLowerCase() !== lowerNew),
-        },
-      };
-    });
-    setNewTag("");
-  };
-
-  const handleRemoveTagFromAdd = (tagToRemove: string) => {
-    setEditState((prev) => ({
-      ...prev,
-      tags: {
-        add: (prev.tags?.add || []).filter(
-          (tag) => tag !== tagToRemove,
-        ),
-        remove: prev.tags?.remove || [],
-      },
-    }));
-  };
+  // Add/remove for add-list now managed via TagsInput onChange
 
   const handleToggleTagRemoval = (tag: string) => {
     setEditState((prev) => {
@@ -1237,58 +1193,23 @@ export function BulkEditDrawer({
                 <div className="ml-6 space-y-4">
                   {/* Add New Tags */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Add Tags
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Add a tag..."
-                        value={newTag}
-                        onChange={(e) =>
-                          setNewTag(e.target.value)
-                        }
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddTag();
-                          }
-                        }}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        onClick={handleAddTag}
-                        disabled={!newTag.trim()}
-                        size="sm"
-                      >
-                        Add
-                      </Button>
-                    </div>
-
-                    {/* Tags to Add */}
-                    {editState.tags?.add &&
-                      editState.tags.add.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            Tags to add:
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {editState.tags.add.map((tag) => (
-                              <Badge
-                                key={tag}
-                                variant="default"
-                                className="text-sm gap-1 cursor-pointer hover:bg-primary/80"
-                                onClick={() =>
-                                  handleRemoveTagFromAdd(tag)
-                                }
-                              >
-                                {tag}
-                                <X className="h-3 w-3" />
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                    <Label className="text-sm font-medium">Add Tags</Label>
+                    <TagsInput
+                      value={editState.tags?.add || []}
+                      onChange={(next) => {
+                        // Always allow adding tags even if some selected models already have them; save step is idempotent.
+                        const cleaned = next;
+                        setEditState(prev => ({
+                          ...prev,
+                          tags: {
+                            add: cleaned,
+                            // If a tag is in add list, ensure it's not also marked for removal
+                            remove: (prev.tags?.remove || []).filter(r => !cleaned.some(t => t.toLowerCase() === r.toLowerCase())),
+                          },
+                        }));
+                      }}
+                      placeholder="Add a tag..."
+                    />
                   </div>
 
                   {/* Remove Existing Tags */}

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, Bot, Plus } from "lucide-react";
-import { Badge } from "../ui/badge";
+import { Search, X, Bot } from "lucide-react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
@@ -11,6 +10,7 @@ import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { toast } from 'sonner';
 import { Separator } from "../ui/separator";
+import TagsInput from "../TagsInput";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
 type ModelEntry = {
@@ -115,7 +115,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
   const [editCategory, setEditCategory] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
-  const [tagInput, setTagInput] = useState("");
+  // tag input handled by shared TagsInput
   const [saving, setSaving] = useState(false);
 
   // Suggestions returned by Gemini (structured if backend provides it)
@@ -642,63 +642,14 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
                   )}
                 </div>
 
-                {/* Add New Tag - matches ModelDetailsDrawer styling */}
+                {/* Tags editing - show edited tags, or fallback to selected model tags */}
                 <label className="text-sm font-medium">Tags</label>
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    placeholder="Add a tag..."
-                    value={tagInput}
-                    onChange={e => setTagInput((e.target as HTMLInputElement).value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const trimmed = tagInput.trim();
-                        if (!trimmed) return;
-                        setEditTags((t) => {
-                          const lower = trimmed.toLowerCase();
-                          if (t.some(x => x.toLowerCase() === lower)) return t;
-                          return [...t, trimmed];
-                        });
-                        setTagInput('');
-                      }
-                    }}
-                    className="flex-1 input-sm"
-                  />
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      const trimmed = tagInput.trim();
-                      if (!trimmed) return;
-                      setEditTags((t) => {
-                        const lower = trimmed.toLowerCase();
-                        if (t.some(x => x.toLowerCase() === lower)) return t;
-                        return [...t, trimmed];
-                      });
-                      setTagInput('');
-                    }}
-                    disabled={!tagInput.trim()}
-                    size="sm"
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add
-                  </Button>
-                </div>
-
-                {/* Tag chips - show edited tags if present, otherwise show the original tags */}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {(editTags.length ? editTags : (selected.tags ?? [])).map((tag, index) => (
-                    <Badge
-                      key={`${tag}-${index}`}
-                      variant="secondary"
-                      className="text-sm gap-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                      onClick={() => setEditTags((t) => t.filter(x => x !== tag))}
-                    >
-                      {tag}
-                      <X className="h-3 w-3" />
-                    </Badge>
-                  ))}
-                </div>
+                <TagsInput
+                  value={editTags}
+                  onChange={(next) => setEditTags(next)}
+                  size="sm"
+                  fallbackDisplay={selected?.tags || []}
+                />
 
 
                 {/* Generative AI suggestion area */}

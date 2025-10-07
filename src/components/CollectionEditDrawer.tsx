@@ -4,7 +4,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
+import TagsInput from './TagsInput';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from './ui/select';
 import type { Collection } from '../types/collection';
 import type { Category } from '../types/category';
@@ -26,7 +26,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
   const [category, setCategory] = useState<string>('Uncategorized');
   const [tags, setTags] = useState<string[]>([]);
   const [images, setImages] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
+  // Tags are now edited via shared TagsInput
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -39,14 +39,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
     setImages(Array.isArray(collection?.images) ? collection!.images! : []);
   }, [open, collection?.id]);
 
-  const addTag = () => {
-    const t = newTag.trim();
-    if (!t) return;
-    if (!tags.some(x => x.toLowerCase() === t.toLowerCase())) setTags([...tags, t]);
-    setNewTag('');
-  };
-
-  const removeTag = (t: string) => setTags(tags.filter(x => x !== t));
+  // Tag add/remove behavior handled in TagsInput
 
   const onPickImages = () => fileInputRef.current?.click();
 
@@ -194,31 +187,11 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Tags</label>
-              <div className="flex gap-2">
-                <Input
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-                  placeholder="Add tag"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={(e) => e.stopPropagation()}
-                />
-                <Button
-                  variant="secondary"
-                  onClick={(e) => { e.stopPropagation(); addTag(); }}
-                >
-                  Add
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {tags.map(t => (
-                  <Badge key={t} variant="secondary" className="cursor-pointer" onClick={() => removeTag(t)}>
-                    {t} ×
-                  </Badge>
-                ))}
-              </div>
+              <TagsInput
+                value={tags}
+                onChange={(next) => setTags(next)}
+                placeholder="Add tag"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Images</label>

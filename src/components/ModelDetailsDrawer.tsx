@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Model } from "../types/model";
 import { Category } from "../types/category";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "./ui/sheet";
@@ -18,7 +17,8 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Plus, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus } from "lucide-react";
+import TagsInput from "./TagsInput";
 import { Download } from "lucide-react";
 import { toast } from 'sonner';
 import { triggerDownload } from "../utils/downloadUtils";
@@ -51,7 +51,7 @@ export function ModelDetailsDrawer({
   const [availableRelatedMunchie, setAvailableRelatedMunchie] = useState<Record<number, boolean>>({});
   // ScrollArea viewport ref so we can programmatically scroll the drawer
   const detailsViewportRef = useRef<HTMLDivElement | null>(null);
-  const [newTag, setNewTag] = useState("");
+  // Tag input state now managed by shared TagsInput
   const [focusRelatedIndex, setFocusRelatedIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'3d' | 'images'>(defaultModelView);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -82,7 +82,7 @@ export function ModelDetailsDrawer({
       // Reset editing state when drawer closes
       setIsEditing(false);
       setEditedModel(null);
-      setNewTag("");
+      // no-op for newTag
       setSelectedImageIndexes([]);
     }
   }, [isOpen, defaultModelView]);
@@ -855,7 +855,7 @@ export function ModelDetailsDrawer({
   const cancelEditing = () => {
     setEditedModel(null);
     setIsEditing(false);
-    setNewTag("");
+    // no-op for newTag
     setSelectedImageIndexes([]);
     setInlineCombined(null);
   };
@@ -1660,7 +1660,6 @@ export function ModelDetailsDrawer({
         }
         setIsEditing(false);
         setEditedModel(null);
-        setNewTag("");
         setSelectedImageIndexes([]);
         setInlineCombined(null);
       } else {
@@ -1674,39 +1673,6 @@ export function ModelDetailsDrawer({
     }
   };
 
-  const handleAddTag = () => {
-    if (!newTag.trim() || !editedModel) return;
-
-    const trimmedTag = newTag.trim();
-    const currentTags = editedModel.tags || [];
-    const lowerNew = trimmedTag.toLowerCase();
-
-    // Prevent duplicates case-insensitively
-    const exists = currentTags.some(t => t.toLowerCase() === lowerNew);
-    if (!exists) {
-      setEditedModel({
-        ...editedModel,
-        tags: [...currentTags, trimmedTag]
-      });
-    }
-    setNewTag("");
-  };
-
-
-
-  const handleTagKeyPress = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAddTag();
-    }
-  };
-
-  // Remove a tag from the editedModel (case-insensitive)
-  const handleRemoveTag = (tagToRemove: string) => {
-    if (!editedModel) return;
-    const filtered = (editedModel.tags || []).filter(t => t.toLowerCase() !== tagToRemove.toLowerCase());
-    setEditedModel({ ...editedModel, tags: filtered });
-  };
 
   // Live-validate related_files whenever the edited model's related_files changes
   useEffect(() => {
@@ -2462,26 +2428,14 @@ export function ModelDetailsDrawer({
                     <Label>Tags</Label>
                   </div>
                   
-                  {/* Add New Tag */}
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Add a tag..."
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyPress={handleTagKeyPress}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleAddTag}
-                      disabled={!newTag.trim()}
-                      size="sm"
-                      className="gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add
-                    </Button>
-                  </div>
+                  {/* Tags editor */}
+                  <TagsInput
+                    value={editedModel?.tags || []}
+                    onChange={(next) => {
+                      if (!editedModel) return;
+                      setEditedModel({ ...editedModel, tags: next });
+                    }}
+                  />
 
                   {/* Suggested Tags */}
                   {getSuggestedTags().length > 0 && (
@@ -2502,26 +2456,7 @@ export function ModelDetailsDrawer({
                     </div>
                   )}
 
-                  {/* Current Tags (click to remove) */}
-                  {editedModel && (editedModel.tags || []).length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Current tags:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {(editedModel.tags || []).map((tag, index) => (
-                          <Badge
-                            key={`${tag}-${index}`}
-                            variant="secondary"
-                            className="text-sm gap-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                            onClick={() => handleRemoveTag(tag)}
-                          >
-                            {tag}
-                            <X className="h-3 w-3" />
-                          </Badge>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Click on a tag to remove it</p>
-                    </div>
-                  )}
+                  {/* Current tags are shown within TagsInput; retain suggested below */}
                 </div>
 
                 {/* Notes Editing Section */}
