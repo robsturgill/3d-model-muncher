@@ -7,6 +7,7 @@ import { DonationDialog } from "./components/DonationDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { DemoPage } from "./components/DemoPage";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { TagsProvider } from "./components/TagsContext";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Model } from "./types/model";
 import { Category } from "./types/category";
@@ -862,28 +863,38 @@ function AppContent() {
     }
   };
 
+  // Build a global, deduped, sorted tags list from all models
+  const globalTags = useMemo(() => {
+    const set = new Set<string>();
+    (models || []).forEach(m => (m.tags || []).forEach(t => { if (t) set.add(t); }));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [models]);
+
   // Don't render until config is loaded
   if (!appConfig) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-xl shadow-lg mx-auto">
-            <img
-              src="/images/favicon-32x32.png"
-              alt="3D Model Muncher"
-              className="animate-pulse"
-            />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">Loading 3D Model Muncher</h2>
-            <p className="text-muted-foreground">Initializing configuration...</p>
+      <TagsProvider tags={globalTags}>
+        <div className="flex items-center justify-center h-screen bg-background">
+          <div className="text-center space-y-4">
+            <div className="flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-xl shadow-lg mx-auto">
+              <img
+                src="/images/favicon-32x32.png"
+                alt="3D Model Muncher"
+                className="animate-pulse"
+              />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Loading 3D Model Muncher</h2>
+              <p className="text-muted-foreground">Initializing configuration...</p>
+            </div>
           </div>
         </div>
-      </div>
+      </TagsProvider>
     );
   }
 
   return (
+    <TagsProvider tags={globalTags}>
     <div className="flex h-screen bg-background">
       {/* Mobile Overlay */}
       {isSidebarOpen && (
@@ -1305,8 +1316,8 @@ function AppContent() {
         onClose={() => setIsUploadDialogOpen(false)}
         onUploaded={() => { handleRefreshModels(); }}
       />
-
     </div>
+    </TagsProvider>
   );
 }
 

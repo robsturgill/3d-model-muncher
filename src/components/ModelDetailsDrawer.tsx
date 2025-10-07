@@ -61,6 +61,7 @@ export function ModelDetailsDrawer({
   const originalUserDefinedDescriptionRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+
   // Suggested tags for each category - now dynamically based on current categories
   const getCategoryTags = (categoryLabel: string): string[] => {
     const defaultTags: Record<string, string[]> = {

@@ -33,7 +33,6 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
   const [availableCategories, setAvailableCategories] = useState<string[]>(['Uncategorized']);
   const [selectedCategory, setSelectedCategory] = useState<string>('Uncategorized');
   const [applyTags, setApplyTags] = useState<string[]>([]);
-  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -206,7 +205,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
     setShowCreateFolderInput(false);
   setNewFolderName('');
   setSelectedCategory('Uncategorized');
-    setApplyTags([]);
+  setApplyTags([]);
 
     (async () => {
       try {
@@ -227,21 +226,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
       // ignore
     }
 
-    (async () => {
-      try {
-        const modelsResp = await fetch('/api/models');
-        if (!modelsResp.ok) return;
-        const models = await modelsResp.json();
-        const tagSet = new Set<string>();
-        for (const m of Array.isArray(models) ? models : []) {
-          const tags: string[] = Array.isArray(m?.tags) ? m.tags : [];
-          for (const t of tags) if (typeof t === 'string' && t.trim()) tagSet.add(t.trim());
-        }
-        setSuggestedTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b)));
-      } catch (e) {
-        // ignore
-      }
-    })();
+    // rely on global TagsInput suggestions (context-driven); no local fetch needed
   }, [isOpen]);
 
   const createFolder = async (folderName?: string) => {
@@ -357,7 +342,6 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
                   value={applyTags}
                   onChange={setApplyTags}
                   placeholder="Add tags…"
-                  suggested={suggestedTags}
                 />
                 <p className="text-xs text-muted-foreground mt-1">Category defaults to "Uncategorized". Tags here will be applied to all uploaded models.</p>
               </div>

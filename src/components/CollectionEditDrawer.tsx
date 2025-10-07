@@ -191,6 +191,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
                 value={tags}
                 onChange={(next) => setTags(next)}
                 placeholder="Add tag"
+                // Note: Collection editor does not have global models here; suggestions can be wired later if available
               />
             </div>
             <div className="space-y-2">
