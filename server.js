@@ -508,6 +508,21 @@ app.post('/api/save-model', async (req, res) => {
 
     // Remove filePath and other computed properties from incomingChanges to prevent them from being saved
     const { filePath: _, modelUrl: __, ...cleanChanges } = incomingChanges;
+
+    // Determine target type based on the resolved filePath (3MF vs STL munchie)
+    const targetIsStlMunchie = typeof filePath === 'string' && /-stl-munchie\.json$/i.test(filePath);
+    const targetIs3mfMunchie = typeof filePath === 'string' && /-munchie\.json$/i.test(filePath) && !/-stl-munchie\.json$/i.test(filePath);
+
+    // Business rule: print settings (layerHeight, infill, nozzle, etc.) are only user-editable for STL models.
+    // For 3MF models, these values are derived from the .3mf and should not be overridden by saves.
+    if (targetIs3mfMunchie && cleanChanges && typeof cleanChanges === 'object' && cleanChanges.printSettings) {
+      // Drop any attempted edits to printSettings for 3MF targets
+      try {
+        delete cleanChanges.printSettings;
+      } catch (e) {
+        // ignore
+      }
+    }
     // Sanitize and log the cleaned changes to help debug whether nested thumbnails
     // were included by the client. Avoid printing base64 images directly.
     try {
@@ -1219,7 +1234,26 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           return { error: 'Unsupported file type' };
         }
 
-        const mergedMetadata = { ...newMetadata, ...userDataBackup, id: idForModel, hash };
+        // Preserve STL printSettings (user-managed) but let 3MF refresh them from parsed metadata
+        let mergedMetadata = { ...newMetadata, ...userDataBackup, id: idForModel, hash };
+        try {
+          const lower = String(modelFilePath).toLowerCase();
+          if (lower.endsWith('.stl')) {
+            // If existing STL had printSettings, prefer those; otherwise keep newMetadata defaults
+            if (currentData && currentData.printSettings && typeof currentData.printSettings === 'object') {
+              mergedMetadata.printSettings = {
+                layerHeight: String(currentData.printSettings.layerHeight || newMetadata.printSettings?.layerHeight || ''),
+                infill: String(currentData.printSettings.infill || newMetadata.printSettings?.infill || ''),
+                nozzle: String(currentData.printSettings.nozzle || newMetadata.printSettings?.nozzle || ''),
+              };
+            }
+          } else if (lower.endsWith('.3mf')) {
+            // For 3MF, ensure printSettings come from parsed data, ignoring any previous user-edits
+            // Nothing to do; mergedMetadata already pulls from newMetadata which is parsed.
+          }
+        } catch (e) {
+          // ignore preservation error
+        }
         // Ensure created/lastModified timestamps for regenerated file
         try {
           const now = new Date().toISOString();

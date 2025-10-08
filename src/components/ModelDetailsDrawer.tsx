@@ -1867,8 +1867,17 @@ export function ModelDetailsDrawer({
   const safePrintSettings = {
     layerHeight: currentModel.printSettings?.layerHeight || '',
     infill: currentModel.printSettings?.infill || '',
-    nozzle: currentModel.printSettings?.nozzle || ''
+    nozzle: currentModel.printSettings?.nozzle || '',
+    printer: (currentModel.printSettings as any)?.printer || ''
   };
+
+  // Determine if the underlying model is STL or 3MF using filePath/modelUrl
+  const isStlModel = (() => {
+    try {
+      const p = (currentModel.filePath || currentModel.modelUrl || '').toLowerCase();
+      return p.endsWith('.stl') || p.endsWith('-stl-munchie.json');
+    } catch (_) { return false; }
+  })();
 
   return (
     <Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
@@ -2162,6 +2171,11 @@ export function ModelDetailsDrawer({
           {/* Print Settings */}
           <div className="space-y-4 mb-4">
             <h3 className="font-semibold text-lg text-card-foreground">Print Settings</h3>
+            {safePrintSettings.printer ? (
+              <p className="text-sm text-muted-foreground">
+                Printer: <span className="font-medium text-foreground">{safePrintSettings.printer}</span>
+              </p>
+            ) : null}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
               <div className="flex items-center gap-2 text-sm">
                 <Clock className="h-4 w-4 text-muted-foreground" />
@@ -2237,6 +2251,73 @@ export function ModelDetailsDrawer({
             <h3 className="font-semibold text-lg text-card-foreground">Details</h3>
             {isEditing ? (
               <div className="grid gap-6">
+                {/* Print settings (editable only for STL models) */}
+                {isStlModel && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-layer-height">Layer height (mm)</Label>
+                        <Input
+                          id="edit-layer-height"
+                          value={(editedModel as any)?.printSettings?.layerHeight || ''}
+                          onChange={(e) => setEditedModel(prev => {
+                            if (!prev) return prev;
+                            const ps = { ...(prev.printSettings || {}) } as any;
+                            ps.layerHeight = e.target.value;
+                            return { ...prev, printSettings: ps } as Model;
+                          })}
+                          placeholder="e.g. 0.2"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-infill">Infill (%)</Label>
+                        <Input
+                          id="edit-infill"
+                          value={(editedModel as any)?.printSettings?.infill || ''}
+                          onChange={(e) => setEditedModel(prev => {
+                            if (!prev) return prev;
+                            const ps = { ...(prev.printSettings || {}) } as any;
+                            ps.infill = e.target.value;
+                            return { ...prev, printSettings: ps } as Model;
+                          })}
+                          placeholder="e.g. 20%"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-nozzle">Nozzle (mm)</Label>
+                        <Input
+                          id="edit-nozzle"
+                          value={(editedModel as any)?.printSettings?.nozzle || ''}
+                          onChange={(e) => setEditedModel(prev => {
+                            if (!prev) return prev;
+                            const ps = { ...(prev.printSettings || {}) } as any;
+                            ps.nozzle = e.target.value;
+                            return { ...prev, printSettings: ps } as Model;
+                          })}
+                          placeholder="e.g. 0.4"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-printer">Printer</Label>
+                        <Input
+                          id="edit-printer"
+                          value={(editedModel as any)?.printSettings?.printer || ''}
+                          onChange={(e) => setEditedModel(prev => {
+                            if (!prev) return prev;
+                            const ps = { ...(prev.printSettings || {}) } as any;
+                            ps.printer = e.target.value;
+                            return { ...prev, printSettings: ps } as Model;
+                          })}
+                          placeholder="e.g. Bambu P1S"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-name">Model Name</Label>

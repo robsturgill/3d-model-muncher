@@ -84,6 +84,13 @@ interface BulkEditState {
   price?: number;
   printTime?: string;
   filamentUsed?: string;
+  // STL-only print settings (bulk updates apply only to STL models)
+  printSettings?: {
+    layerHeight?: string;
+    infill?: string;
+    nozzle?: string;
+    printer?: string;
+  };
   // Related files: which model id is primary, whether to hide others, and which ids are included
   relatedPrimary?: string;
   relatedHideOthers?: boolean;
@@ -103,6 +110,7 @@ interface FieldSelection {
   price: boolean;
   printTime: boolean;
   filamentUsed: boolean;
+  printSettings: boolean;
   regenerateMunchie: boolean;
   relatedFiles: boolean;
 }
@@ -137,6 +145,7 @@ export function BulkEditDrawer({
       price: false,
       printTime: false,
       filamentUsed: false,
+      printSettings: false,
       regenerateMunchie: false,
       relatedFiles: false,
     });
@@ -265,6 +274,7 @@ export function BulkEditDrawer({
         price: false,
         printTime: false,
         filamentUsed: false,
+        printSettings: false,
         regenerateMunchie: false,
         relatedFiles: false,
       });
@@ -421,6 +431,24 @@ export function BulkEditDrawer({
     return false;
   };
 
+  // Determine if the given model is STL-based (STL-only print settings)
+  const isStlModel = (m: Model): boolean => {
+    const p = (m.filePath || '').toLowerCase();
+    const u = (m.modelUrl || '').toLowerCase();
+    return p.endsWith('.stl') || p.endsWith('-stl-munchie.json') || u.endsWith('.stl');
+  };
+
+  const hasAnyStlSelected = Array.isArray(models) && models.some(isStlModel);
+
+  // If selection changes such that no STL models are present, auto-uncheck the field
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!hasAnyStlSelected && fieldSelection.printSettings) {
+      setFieldSelection(prev => ({ ...prev, printSettings: false }));
+      setEditState(prev => ({ ...prev, printSettings: undefined }));
+    }
+  }, [hasAnyStlSelected, isOpen]);
+
   // ...existing code...
 
   // RendererPool handles creating its own offscreen container when needed.
@@ -509,6 +537,8 @@ export function BulkEditDrawer({
     
     try {
       const updates: Partial<Model> = {};
+      // capture selected print settings for STL-only application per model
+      const selectedPrintSettings = fieldSelection.printSettings ? editState.printSettings : undefined;
 
       // Apply selected fields
       if (fieldSelection.category && editState.category) {
@@ -774,6 +804,14 @@ export function BulkEditDrawer({
             (updatedModel as any)[key] = (updates as any)[key];
           }
         });
+
+        // Apply print settings only to STL models when selected
+        if (selectedPrintSettings && isStlModel(model)) {
+          (updatedModel as any).printSettings = {
+            ...(updatedModel as any).printSettings,
+            ...selectedPrintSettings,
+          };
+        }
 
         // Debug: show what will be saved
         console.debug(`[BulkEdit][DEBUG] Saving model ${model.name} -> file: ${updatedModel.filePath}, tagsCount:`, updatedModel.tags?.length || 0);
@@ -1530,6 +1568,81 @@ export function BulkEditDrawer({
                       Current: {commonValues.filamentUsed}
                     </p>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Print Settings (STL-only) */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="print-settings-field"
+                  checked={fieldSelection.printSettings}
+                  onCheckedChange={() => handleFieldToggle("printSettings")}
+                  disabled={!hasAnyStlSelected}
+                />
+                <Label htmlFor="print-settings-field" className="font-medium flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  Print Settings (STL only)
+                </Label>
+              </div>
+
+              {fieldSelection.printSettings && (
+                <div className="ml-6 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    These settings apply only to STL models. 3MF models store print settings internally and will be updated by Regenerate.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Layer Height</Label>
+                      <Input
+                        placeholder="e.g. 0.2mm"
+                        value={editState.printSettings?.layerHeight || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), layerHeight: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Infill</Label>
+                      <Input
+                        placeholder="e.g. 15%"
+                        value={editState.printSettings?.infill || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), infill: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Nozzle</Label>
+                      <Input
+                        placeholder="e.g. 0.4mm"
+                        value={editState.printSettings?.nozzle || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), nozzle: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Printer</Label>
+                      <Input
+                        placeholder="e.g. Bambu X1C"
+                        value={editState.printSettings?.printer || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), printer: e.target.value }
+                        }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!hasAnyStlSelected && (
+                <div className="ml-6">
+                  <p className="text-xs text-muted-foreground">No STL models selected.</p>
                 </div>
               )}
             </div>
