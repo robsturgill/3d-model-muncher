@@ -32,10 +32,10 @@ export function writeJson(filePath: string, data: any) {
 }
 
 export function setServerModelDir(modelsDir: string) {
-  // Write server-side config to data/config.json so server points to our temp models dir
+  // Write only a worker-specific config so tests never touch the real data/config.json
   const dataDir = path.join(process.cwd(), 'data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  const configPath = path.join(dataDir, 'config.json');
+
   const config = {
     version: '1.0.0',
     categories: [],
@@ -43,14 +43,14 @@ export function setServerModelDir(modelsDir: string) {
     filters: {},
     lastModified: new Date().toISOString()
   };
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
 
-  // Also write a worker-specific config to avoid cross-worker interference
-  try {
-    const workerId = (process.env as any).VITEST_WORKER_ID || (process.env as any).JEST_WORKER_ID;
-    if (workerId) {
-      const workerConfigPath = path.join(dataDir, `config.vitest-${workerId}.json`);
-      fs.writeFileSync(workerConfigPath, JSON.stringify(config, null, 2), 'utf8');
-    }
-  } catch {}
+  // Prefer Vitest/Jest worker id; if missing, use a local fallback id
+  let workerId = (process.env as any).VITEST_WORKER_ID || (process.env as any).JEST_WORKER_ID;
+  if (!workerId) {
+    workerId = 'local';
+    // Ensure server.js can discover the per-worker file by env var even in single-threaded runs
+    (process.env as any).VITEST_WORKER_ID = workerId;
+  }
+  const workerConfigPath = path.join(dataDir, `config.vitest-${workerId}.json`);
+  fs.writeFileSync(workerConfigPath, JSON.stringify(config, null, 2), 'utf8');
 }

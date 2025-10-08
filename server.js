@@ -1150,7 +1150,16 @@ app.post('/api/save-config', (req, res) => {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    const configPath = path.join(dataDir, 'config.json');
+    // During tests, prefer writing to a per-worker config to avoid clobbering the real config.json
+    let configPath = (function() {
+      try {
+        const vitestWorkerId = process.env.VITEST_WORKER_ID;
+        if (vitestWorkerId) return path.join(dataDir, `config.vitest-${vitestWorkerId}.json`);
+        const jestWorkerId = process.env.JEST_WORKER_ID;
+        if (jestWorkerId) return path.join(dataDir, `config.jest-${jestWorkerId}.json`);
+      } catch {}
+      return path.join(dataDir, 'config.json');
+    })();
     // Ensure lastModified is updated on server-side save
     const finalConfig = { ...config, lastModified: new Date().toISOString() };
     fs.writeFileSync(configPath, JSON.stringify(finalConfig, null, 2), 'utf8');
@@ -1165,7 +1174,24 @@ app.post('/api/save-config', (req, res) => {
 // API endpoint to load config.json from the data directory
 app.get('/api/load-config', (req, res) => {
   try {
-    const configPath = path.join(process.cwd(), 'data', 'config.json');
+    // Mirror getServerConfigPath behavior: prefer per-worker file when present
+    const dataDir = path.join(process.cwd(), 'data');
+    let configPath;
+    try {
+      const vitestWorkerId = process.env.VITEST_WORKER_ID;
+      if (vitestWorkerId) {
+        const workerPath = path.join(dataDir, `config.vitest-${vitestWorkerId}.json`);
+        if (fs.existsSync(workerPath)) configPath = workerPath;
+      }
+      if (!configPath) {
+        const jestWorkerId = process.env.JEST_WORKER_ID;
+        if (jestWorkerId) {
+          const workerPath = path.join(dataDir, `config.jest-${jestWorkerId}.json`);
+          if (fs.existsSync(workerPath)) configPath = workerPath;
+        }
+      }
+    } catch {}
+    if (!configPath) configPath = path.join(dataDir, 'config.json');
     if (!fs.existsSync(configPath)) {
       return res.status(404).json({ success: false, error: 'No server-side config found' });
     }
