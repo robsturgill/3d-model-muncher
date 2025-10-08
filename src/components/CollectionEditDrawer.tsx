@@ -98,9 +98,10 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
       <SheetContent
         className="w-full sm:max-w-xl"
         // Prevent React synthetic events from bubbling through the portal to ancestors (e.g., CollectionCard onClick)
+        // Use bubble-phase handlers so child onMouseDown (e.g., TagsInput suggestion items) still fire first.
         onClick={(e) => e.stopPropagation()}
-        onMouseDownCapture={(e) => e.stopPropagation()}
-        onPointerDownCapture={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         onInteractOutside={(e) => {
           // Prevent accidental close when double-clicking or selecting text
           e.preventDefault();
@@ -143,8 +144,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Collection name"
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
+                // Avoid bubbling clicks to underlying grid
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => e.stopPropagation()}
               />
@@ -155,8 +155,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
+                // Avoid bubbling clicks to underlying grid
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => {
                   // Ensure double-click selection does not bubble in a way that closes the sheet
