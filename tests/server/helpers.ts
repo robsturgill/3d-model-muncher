@@ -44,4 +44,13 @@ export function setServerModelDir(modelsDir: string) {
     lastModified: new Date().toISOString()
   };
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+
+  // Also write a worker-specific config to avoid cross-worker interference
+  try {
+    const workerId = (process.env as any).VITEST_WORKER_ID || (process.env as any).JEST_WORKER_ID;
+    if (workerId) {
+      const workerConfigPath = path.join(dataDir, `config.vitest-${workerId}.json`);
+      fs.writeFileSync(workerConfigPath, JSON.stringify(config, null, 2), 'utf8');
+    }
+  } catch {}
 }

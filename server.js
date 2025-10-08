@@ -75,10 +75,36 @@ function safeLog(...args) {
   console.log.apply(console, sanitized);
 }
 
+// Resolve server-side config path, supporting per-test worker overrides to avoid
+// concurrent test interference. If a worker-specific config exists, prefer it;
+// otherwise fall back to the global data/config.json.
+function getServerConfigPath() {
+  try {
+    const dataDir = path.join(process.cwd(), 'data');
+    const globalPath = path.join(dataDir, 'config.json');
+    // Prefer Vitest worker-specific config when available
+    const vitestWorkerId = process.env.VITEST_WORKER_ID;
+    if (vitestWorkerId) {
+      const workerPath = path.join(dataDir, `config.vitest-${vitestWorkerId}.json`);
+      if (fs.existsSync(workerPath)) return workerPath;
+    }
+    // Fallback: Jest worker (not used here, but safe to include)
+    const jestWorkerId = process.env.JEST_WORKER_ID;
+    if (jestWorkerId) {
+      const workerPath = path.join(dataDir, `config.jest-${jestWorkerId}.json`);
+      if (fs.existsSync(workerPath)) return workerPath;
+    }
+    return globalPath;
+  } catch (e) {
+    // On error, fall back to default global path
+    return path.join(process.cwd(), 'data', 'config.json');
+  }
+}
+
 // Helper: conditional debug logging controlled by server-side config (data/config.json)
 function isServerDebugEnabled() {
   try {
-    const cfgPath = path.join(process.cwd(), 'data', 'config.json');
+    const cfgPath = getServerConfigPath();
     if (fs.existsSync(cfgPath)) {
       const raw = fs.readFileSync(cfgPath, 'utf8');
       const parsed = JSON.parse(raw || '{}');
@@ -256,7 +282,7 @@ app.use('/models', (req, res, next) => {
 function getModelsDirectory() {
   // Prefer server-side `data/config.json` when present (written by /api/save-config).
   try {
-    const serverConfigPath = path.join(process.cwd(), 'data', 'config.json');
+    const serverConfigPath = getServerConfigPath();
     if (fs.existsSync(serverConfigPath)) {
       const raw = fs.readFileSync(serverConfigPath, 'utf8');
       const parsed = JSON.parse(raw || '{}');
@@ -1569,6 +1595,7 @@ app.post('/api/create-model-folder', express.json(), (req, res) => {
 // --- API: Get all -munchie.json files and their hashes ---
 app.get('/api/munchie-files', (req, res) => {
   const modelsDir = getAbsoluteModelsPath();
+  try { console.log('[debug] /api/munchie-files scanning modelsDir=', modelsDir); } catch (e) {}
   let result = [];
   
   function scanDirectory(dir) {
@@ -1584,11 +1611,13 @@ app.get('/api/munchie-files', (req, res) => {
             const json = JSON.parse(data);
             // Get path relative to models directory for the URL
             const relativePath = path.relative(modelsDir, fullPath);
-            result.push({
+            const item = {
               fileName: entry.name,
               hash: json.hash,
               modelUrl: '/models/' + relativePath.replace(/\\/g, '/')
-            });
+            };
+            try { console.log('[debug] /api/munchie-files item', { fileName: item.fileName, hash: item.hash, modelUrl: item.modelUrl }); } catch (e) {}
+            result.push(item);
           } catch (e) {
             // skip unreadable or invalid files
             console.error(`Error reading file ${fullPath}:`, e);
@@ -1602,6 +1631,7 @@ app.get('/api/munchie-files', (req, res) => {
 
   try {
     scanDirectory(modelsDir);
+    try { console.log('[debug] /api/munchie-files found', Array.isArray(result) ? result.length : 0, 'items'); } catch (e) {}
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: 'Failed to read models directory' });
@@ -1613,6 +1643,7 @@ app.post('/api/hash-check', async (req, res) => {
   try {
     const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const modelsDir = getAbsoluteModelsPath();
+    try { console.log('[debug] /api/hash-check fileType=', fileType, 'modelsDir=', modelsDir); } catch (e) {}
     const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
     let result = [];
     let seenHashes = new Set();
@@ -1657,8 +1688,8 @@ app.post('/api/hash-check', async (req, res) => {
       }
     }
 
-    // Start recursive scan
-    scanDirectory(modelsDir);
+  // Start recursive scan
+  scanDirectory(modelsDir);
 
     // Clean up the modelMap to only include entries that have the expected file type
     const cleanedModelMap = {};
@@ -1674,6 +1705,7 @@ app.post('/api/hash-check', async (req, res) => {
     }
 
     // Process all found models
+    try { console.log('[debug] /api/hash-check base entries count=', Object.keys(cleanedModelMap).length); } catch (e) {}
     for (const base in cleanedModelMap) {
       const entry = cleanedModelMap[base];
       const threeMFPath = entry.threeMF ? path.join(modelsDir, entry.threeMF) : null;
@@ -1774,6 +1806,7 @@ app.get('/api/load-model', async (req, res) => {
     const { filePath, id } = req.query;
     // Prefer id-based lookup when provided (more robust)
     const modelsDir = path.resolve(getModelsDirectory());
+    try { console.log('[debug] /api/load-model modelsDir=', modelsDir, 'id=', id); } catch (e) {}
 
     // If `id` provided, try scanning for a munchie.json with matching id
     if (id && typeof id === 'string' && id.trim().length > 0) {
@@ -1791,7 +1824,9 @@ app.get('/api/load-model', async (req, res) => {
               const raw = fs.readFileSync(full, 'utf8');
               if (!raw || raw.trim().length === 0) continue;
               const parsed = JSON.parse(raw);
+               try { console.log('[debug] /api/load-model inspecting', full, 'parsed.id=', parsed && parsed.id, 'parsed.name=', parsed && parsed.name); } catch (e) {}
               if (parsed && (parsed.id === id || parsed.name === id)) {
+                try { console.log('[debug] /api/load-model matched id at', full); } catch (e) {}
                 return full;
               }
             } catch (e) {
@@ -1809,6 +1844,7 @@ app.get('/api/load-model', async (req, res) => {
           const parsed = JSON.parse(content);
           return res.json(parsed);
         }
+        try { console.log('[debug] /api/load-model no match found for id', id); } catch (e) {}
         // If search completed without finding a match, return 404 to indicate not found
         return res.status(404).json({ success: false, error: 'Model not found for id' });
       } catch (e) {
