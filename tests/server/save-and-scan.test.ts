@@ -2,32 +2,18 @@ import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createTempModelsDir, writeJson } from './helpers';
+import { createTempModelsDir, writeJson, setServerModelDir } from './helpers';
 
 // Import the Express app
 import app from '../../server';
-
-function setModelDir(modelsDir: string) {
-  // Write server-side config to data/config.json so server points to our temp models dir
-  const dataDir = path.join(process.cwd(), 'data');
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  const configPath = path.join(dataDir, 'config.json');
-  const config = {
-    version: '1.0.0',
-    categories: [],
-    settings: { modelDirectory: modelsDir },
-    filters: {},
-    lastModified: new Date().toISOString()
-  };
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-}
 
 describe('save-model merge and scan preservation', () => {
   const tmp = createTempModelsDir();
   const modelsDir = tmp.root;
 
   beforeAll(() => {
-    setModelDir(modelsDir);
+    // Write both global and worker-specific config to avoid cross-worker interference
+    setServerModelDir(modelsDir);
   });
 
   afterAll(() => {

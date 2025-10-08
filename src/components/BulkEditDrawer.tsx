@@ -537,8 +537,19 @@ export function BulkEditDrawer({
     
     try {
       const updates: Partial<Model> = {};
-      // capture selected print settings for STL-only application per model
-      const selectedPrintSettings = fieldSelection.printSettings ? editState.printSettings : undefined;
+      // Capture selected print settings for STL-only application per model.
+      // Important: in bulk edit, empty inputs mean "no change", not "clear".
+      // So we sanitize to include only non-empty string values.
+      const selectedPrintSettingsRaw = fieldSelection.printSettings ? editState.printSettings : undefined;
+      const selectedPrintSettings = (() => {
+        if (!selectedPrintSettingsRaw || typeof selectedPrintSettingsRaw !== 'object') return undefined;
+        const out: Record<string, string> = {};
+        const entries = Object.entries(selectedPrintSettingsRaw as Record<string, any>);
+        for (const [k, v] of entries) {
+          if (typeof v === 'string' && v.trim() !== '') out[k] = v.trim();
+        }
+        return Object.keys(out).length > 0 ? out : undefined;
+      })();
 
       // Apply selected fields
       if (fieldSelection.category && editState.category) {
@@ -632,8 +643,18 @@ export function BulkEditDrawer({
             onClearSelections();
           }
           
-          // If regeneration was the only action, close and return
-          if (Object.keys(updates).length === 0) {
+          // If regeneration was the only action, close and return —
+          // BUT don't exit early if we still have per-model-only edits to apply
+          // (e.g., STL-only printSettings or Related Files), which are handled
+          // below in the per-model loop and not represented in the top-level
+          // `updates` object.
+          const hasPerModelOnlyChanges = (
+            // STL print settings are applied per-model
+            (fieldSelection.printSettings && !!editState.printSettings) ||
+            // Related files are applied per-model
+            fieldSelection.relatedFiles
+          );
+          if (Object.keys(updates).length === 0 && !hasPerModelOnlyChanges) {
             onClose();
             return;
           }
@@ -805,7 +826,7 @@ export function BulkEditDrawer({
           }
         });
 
-        // Apply print settings only to STL models when selected
+        // Apply print settings only to STL models when selected and sanitized has values
         if (selectedPrintSettings && isStlModel(model)) {
           (updatedModel as any).printSettings = {
             ...(updatedModel as any).printSettings,

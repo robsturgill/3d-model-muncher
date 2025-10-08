@@ -1266,13 +1266,25 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           const lower = String(modelFilePath).toLowerCase();
           if (lower.endsWith('.stl')) {
             // If existing STL had printSettings, prefer those; otherwise keep newMetadata defaults
-            if (currentData && currentData.printSettings && typeof currentData.printSettings === 'object') {
-              mergedMetadata.printSettings = {
-                layerHeight: String(currentData.printSettings.layerHeight || newMetadata.printSettings?.layerHeight || ''),
-                infill: String(currentData.printSettings.infill || newMetadata.printSettings?.infill || ''),
-                nozzle: String(currentData.printSettings.nozzle || newMetadata.printSettings?.nozzle || ''),
-              };
-            }
+            const cd = currentData && currentData.printSettings && typeof currentData.printSettings === 'object' ? currentData.printSettings : undefined;
+            const nd = newMetadata && newMetadata.printSettings && typeof newMetadata.printSettings === 'object' ? newMetadata.printSettings : {};
+            const prefer = (a, b) => {
+              const sa = typeof a === 'string' ? a : '';
+              const sb = typeof b === 'string' ? b : '';
+              return sa.trim() !== '' ? sa : (sb.trim() !== '' ? sb : '');
+            };
+            mergedMetadata.printSettings = {
+              layerHeight: prefer(cd && cd.layerHeight, nd.layerHeight),
+              infill: prefer(cd && cd.infill, nd.infill),
+              nozzle: prefer(cd && cd.nozzle, nd.nozzle),
+              printer: (() => {
+                const cp = cd && cd.printer;
+                const np = nd && nd.printer;
+                return typeof cp === 'string' && cp.trim() !== ''
+                  ? cp
+                  : (typeof np === 'string' && np.trim() !== '' ? np : undefined);
+              })()
+            };
           } else if (lower.endsWith('.3mf')) {
             // For 3MF, ensure printSettings come from parsed data, ignoring any previous user-edits
             // Nothing to do; mergedMetadata already pulls from newMetadata which is parsed.
