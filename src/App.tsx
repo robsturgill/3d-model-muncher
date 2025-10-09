@@ -80,6 +80,10 @@ function AppContent() {
   const [activeCollection, setActiveCollection] = useState<Collection | null>(null);
   // Track where to return when leaving a collection view
   const [collectionReturnView, setCollectionReturnView] = useState<ViewType>('models');
+  // Track last applied filters so we can reapply when navigating back from a collection or after refresh
+  const [lastFilters, setLastFilters] = useState<{ search: string; category: string; printStatus: string; license: string; fileType: string; tags: string[]; showHidden: boolean; sortBy?: string }>(
+    { search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false, sortBy: 'none' }
+  );
   // Force sidebar to re-mount to reset its internal filter UI when switching contexts
   const [sidebarResetKey, setSidebarResetKey] = useState(0);
   // Remember last selected sort from sidebar so collections list can respect it
@@ -178,6 +182,8 @@ function AppContent() {
   
   const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
   setFilteredModels(visibleModels);
+  // Remember the initial filters for later reapplication
+  setLastFilters({ ...initialFilterState, sortBy: 'none' });
   setIsModelsLoading(false);
         // Load collections list
         try {
@@ -618,6 +624,8 @@ function AppContent() {
     // Special case: collections-only filter is relevant only in main models view
     if (currentView !== 'collection-view') {
       if (incomingFileType === 'collections') {
+        // Persist last filters even when we early-return
+        setLastFilters({ ...filters });
         setFilteredModels([]);
         setLastCategoryFilter(incomingCategory);
         if (isSelectionMode) setSelectedModelIds([]);
@@ -683,6 +691,8 @@ function AppContent() {
     const sortKey = (filters.sortBy || 'none') as SortKey;
     const sorted = sortModels(filtered as any[], sortKey);
     setFilteredModels(sorted);
+  // Persist last applied filters for re-use on navigation and refresh
+  setLastFilters({ ...filters });
     // Reset anchor when the visible list changes order/content
     setSelectionAnchorIndex(null);
     // Update last seen category for future comparisons
@@ -709,10 +719,30 @@ function AppContent() {
       if (!response.ok) {
         throw new Error('Failed to fetch models');
       }
-      const updatedModels = await response.json();
+  const updatedModels = await response.json() as Model[];
 
       setModels(updatedModels);
-      setFilteredModels(updatedModels);
+      // Reapply the last used filters based on the current view
+      if (currentView === 'collection-view' && activeCollection) {
+        const setIds = new Set(activeCollection.modelIds || []);
+        let base = updatedModels.filter(m => setIds.has(m.id));
+        // In collection view, ignore 'collections' fileType filter (not relevant)
+        const filtersForCollection = {
+          ...lastFilters,
+          fileType: lastFilters.fileType?.toLowerCase() === 'collections' ? 'all' : lastFilters.fileType,
+        } as any as FilterState;
+        const filtered = applyFiltersToModels(base, filtersForCollection);
+        const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+        setFilteredModels(sorted);
+      } else {
+        if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
+          setFilteredModels([]);
+        } else {
+          const filtered = applyFiltersToModels(updatedModels, lastFilters as FilterState);
+          const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+          setFilteredModels(sorted);
+        }
+      }
 
       toast("Models reloaded successfully", {
         description: `Loaded ${updatedModels.length} models from existing files`
@@ -829,7 +859,8 @@ function AppContent() {
     try {
       const setIds = new Set(col.modelIds || []);
       const base = models.filter(m => setIds.has(m.id));
-      setFilteredModels(base);
+      // Default behavior is to not show hidden models unless explicitly enabled
+      setFilteredModels(base.filter(m => !m.hidden));
     } catch { /* ignore */ }
     // Reset the sidebar controls to defaults for the new context
     setSidebarResetKey(k => k + 1);
@@ -1099,7 +1130,7 @@ function AppContent() {
                   try {
                     const setIds = new Set(col.modelIds || []);
                     const base = models.filter(m => setIds.has(m.id));
-                    setFilteredModels(base);
+                    setFilteredModels(base.filter(m => !m.hidden));
                   } catch { /* ignore */ }
                   setSidebarResetKey(k => k + 1);
                 }
@@ -1180,7 +1211,14 @@ function AppContent() {
                 if (collectionReturnView === 'models') {
                   // Return to main grid: reset filters and show all models
                   setCurrentView('models');
-                  setFilteredModels(models);
+                  // Reapply last filters so hidden models remain hidden (and other filters persist)
+                  if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
+                    setFilteredModels([]);
+                  } else {
+                    const filtered = applyFiltersToModels(models, lastFilters as FilterState);
+                    const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+                    setFilteredModels(sorted);
+                  }
                   setSidebarResetKey(k => k + 1);
                   setSelectedModelIds([]);
                   setSelectionAnchorIndex(null);
