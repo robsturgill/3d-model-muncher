@@ -1285,7 +1285,7 @@ function AppContent() {
 
             <div className="mt-2 text-sm">
               <h3 className="text-lg">v0.14.x - Release updates</h3>
-              <ul className="list-disc pl-5 list-inside mb-4">
+              <ul className="list-disc pl-5 list-outside mb-4">
                 <li><strong>Collections</strong> - Create groups of models as collections.</li>
                 <li><strong>STL Print Settings</strong> - Edit persisting print settings (layer height, nozzel, infill, printer) for STL files</li>
                 <li><strong>Tag Autocomplete</strong> - Select from existing tags when typing into tag field</li>
@@ -1304,7 +1304,7 @@ function AppContent() {
                   htmlFor="dont-show-release-notes" 
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  Don't show these release notes again for this version
+                  Do not show these notes again for this version
                 </label>
               </div>
             </div>

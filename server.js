@@ -141,7 +141,20 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' })); // Increased limit for large model payloads
 
 // Collections storage helpers (persist under data/collections.json)
-const collectionsFilePath = path.join(process.cwd(), 'data', 'collections.json');
+// Allow override via env var and use a test-specific file when running under Vitest/Node test env.
+const collectionsFilePath = (() => {
+  const defaultPath = path.join(process.cwd(), 'data', 'collections.json');
+  try {
+    const envPath = process.env.COLLECTIONS_FILE;
+    if (envPath && typeof envPath === 'string' && envPath.trim()) {
+      return path.isAbsolute(envPath) ? envPath : path.join(process.cwd(), envPath);
+    }
+    if (process.env.NODE_ENV === 'test') {
+      return path.join(process.cwd(), 'data', 'collections.test.json');
+    }
+  } catch {}
+  return defaultPath;
+})();
 
 function loadCollections() {
   try {

@@ -5,7 +5,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import app from '../../server';
 
 function resetCollections() {
-  const p = path.join(process.cwd(), 'data', 'collections.json');
+  // Respect the same override as server.js to avoid touching the real collections.json
+  const envPath = process.env.COLLECTIONS_FILE;
+  const p = envPath && envPath.trim()
+    ? (path.isAbsolute(envPath) ? envPath : path.join(process.cwd(), envPath))
+    : path.join(process.cwd(), 'data', 'collections.test.json');
   if (fs.existsSync(p)) fs.unlinkSync(p);
 }
 
