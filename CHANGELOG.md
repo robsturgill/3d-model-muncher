@@ -1,3 +1,27 @@
+# [0.14.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.3...v0.14.0) (2025-10-09)
+
+
+### Bug Fixes
+
+* default category to 'Uncategorized' in CollectionEditDrawer ([dd68423](https://github.com/robsturgill/3d-model-muncher/commit/dd68423f5e68ee7e4ad370a4516547a509e7781b))
+* enhance drawer to limit closing when editing ([666fd95](https://github.com/robsturgill/3d-model-muncher/commit/666fd95b8e71888bc8af0f0dfcfa6f5c492bfd5e))
+* file type filter to control collection visibility in model views ([e85c39e](https://github.com/robsturgill/3d-model-muncher/commit/e85c39e2af5c2ea0d6dc3deb46058b1a651b2e73))
+* implement worker-specific config handling to avoid clobbering main config during tests ([8fdd5ae](https://github.com/robsturgill/3d-model-muncher/commit/8fdd5ae22d354039885032c936c4caf38756c72c))
+* issue with hidden model filter when exiting collection view ([2c7c9be](https://github.com/robsturgill/3d-model-muncher/commit/2c7c9be0ccb0960b29480a70ab1c89e4593b9102))
+* persist STL print setting changes when regenerating munchie.json ([5f2f48b](https://github.com/robsturgill/3d-model-muncher/commit/5f2f48be6627411dc75f7fe31d211d2af7a8d5e7))
+* sorting functionality for collections ([1b3c352](https://github.com/robsturgill/3d-model-muncher/commit/1b3c352104dbc183cd083cee5463a31f1d3fa671))
+* update event handling that prevented tag autocomplete selection for collection edits ([3fcfada](https://github.com/robsturgill/3d-model-muncher/commit/3fcfada65660877ea7a47c94ec047a88a005bf2f))
+* update test and server collection file handling ([a6ac813](https://github.com/robsturgill/3d-model-muncher/commit/a6ac8132386b13866ea26cbe671f49c265b8e173))
+
+
+### Features
+
+* add collections feature with CRUD operations ([31422b4](https://github.com/robsturgill/3d-model-muncher/commit/31422b4b9ebf567c7e6138e98a88a1f5fc4ca9ce)), closes [#42](https://github.com/robsturgill/3d-model-muncher/issues/42)
+* add STL-specific print settings fields, disabled or hidden for 3mf files ([04feec4](https://github.com/robsturgill/3d-model-muncher/commit/04feec40ef93a6a1fec66b6ef7d017a877245464))
+* enhance backup and restore functionality to include collections ([1605cf2](https://github.com/robsturgill/3d-model-muncher/commit/1605cf28146984b1bcd634c692fc28786b2db16b))
+* enhance ModelUploadDialog with category and tags support for uploaded models ([16277dc](https://github.com/robsturgill/3d-model-muncher/commit/16277dcfee8d37a67ef4d8d72188aa0217f5575a))
+* enhance TagsInput component for dynamic suggestions (autocomplete) ([5c815cd](https://github.com/robsturgill/3d-model-muncher/commit/5c815cd2efcca21215a89ec7d50d9ecbdf2daf46)), closes [#25](https://github.com/robsturgill/3d-model-muncher/issues/25)
+
 ## [0.13.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.2...v0.13.3) (2025-10-02)
 
 
