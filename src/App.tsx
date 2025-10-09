@@ -1246,10 +1246,12 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
-              <h3 className="text-lg">v0.13.x - Release updates</h3>
+              <h3 className="text-lg">v0.14.x - Release updates</h3>
               <ul className="list-disc pl-5 list-inside mb-4">
-                <li><strong>Bulk image generation</strong> - Create images for models missing images using the bulk editor drawer.</li>
-                <li><strong>Simplified scan log output</strong> - Added verbose logging switch in settings</li>
+                <li><strong>Collections</strong> - Create groups of models as collections.</li>
+                <li><strong>STL Print Settings</strong> - Edit persisting print settings (layer height, nozzel, infill, printer) for STL files</li>
+                <li><strong>Tag Autocomplete</strong> - Select from existing tags when typing into tag field</li>
+                <li><strong>Categorize on Upload</strong> - Add tags and categories when uploading new models</li>
               </ul>
             </div>
 
