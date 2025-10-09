@@ -8,6 +8,17 @@
 			"args": [],
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Run unit tests (vitest)",
+			"type": "shell",
+			"command": "npx vitest run --reporter=verbose",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc",
+				"$eslint-stylish"
+			],
+			"group": "test"
 		}
 	]
 }

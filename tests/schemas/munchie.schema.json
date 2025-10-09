@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/munchie.schema.json",
+  "title": "Munchie Model Metadata",
+  "type": "object",
+  "required": ["id", "name", "fileSize", "hash"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string" },
+    "parsedImages": {
+      "type": "array",
+      "items": { "type": ["string", "object"] }
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "isPrinted": { "type": "boolean" },
+    "printTime": { "type": "string" },
+    "filamentUsed": { "type": "string" },
+    "category": { "type": "string" },
+    "description": { "type": "string" },
+    "fileSize": { "type": "string" },
+    "modelUrl": { "type": "string" },
+    "license": { "type": "string" },
+    "designer": { "type": "string" },
+    "notes": { "type": "string" },
+    "hash": { "type": "string" },
+    "printSettings": {
+      "type": "object",
+      "properties": {
+        "layerHeight": { "type": "string" },
+        "infill": { "type": "string" },
+        "nozzle": { "type": "string" }
+      },
+      "required": ["layerHeight", "infill", "nozzle"]
+    },
+    "price": { "type": "number" },
+    "userDefined": {
+      "type": "object",
+      "properties": {
+        "description": { "type": ["string", "null"] },
+        "thumbnail": { "type": "string" },
+        "images": { "type": "array", "items": { "type": ["string", "object"] } },
+        "imageOrder": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "created": { "type": "string" },
+    "lastModified": { "type": "string" },
+    "filePath": { "type": "string" }
+  },
+  "additionalProperties": true
+}

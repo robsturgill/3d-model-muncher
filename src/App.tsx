@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { ModelGrid } from "./components/ModelGrid";
 import { ModelDetailsDrawer } from "./components/ModelDetailsDrawer";
@@ -7,6 +7,7 @@ import { DonationDialog } from "./components/DonationDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { DemoPage } from "./components/DemoPage";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { TagsProvider } from "./components/TagsContext";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Model } from "./types/model";
 import { Category } from "./types/category";
@@ -15,8 +16,8 @@ import { ConfigManager } from "./utils/configManager";
 // Import package.json to read the last published version (used as previous release)
 import * as pkg from '../package.json';
 import { applyFiltersToModels, FilterState } from "./utils/filterUtils";
-import { sortModels } from "./utils/sortUtils";
-import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload } from "lucide-react";
+import { sortModels, sortCollections, SortKey } from "./utils/sortUtils";
+import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload, List, ArrowLeft } from "lucide-react";
 import ModelUploadDialog from "./components/ModelUploadDialog";
 import { Button } from "./components/ui/button";
 import {
@@ -39,10 +40,12 @@ import {
   AlertDialogTitle,
 } from "./components/ui/alert-dialog";
 import { Separator } from "./components/ui/separator";
+import CollectionGrid from "./components/CollectionGrid";
+import type { Collection } from "./types/collection";
 
 // Function to load model data from JSON files
 // Initial type for view
-type ViewType = 'models' | 'settings' | 'demo';
+type ViewType = 'models' | 'settings' | 'demo' | 'collections' | 'collection-view';
 
 function AppContent() {
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
@@ -72,6 +75,27 @@ function AppContent() {
   const [selectionAnchorIndex, setSelectionAnchorIndex] = useState<number | null>(null);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  // Collections state
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [activeCollection, setActiveCollection] = useState<Collection | null>(null);
+  // Track where to return when leaving a collection view
+  const [collectionReturnView, setCollectionReturnView] = useState<ViewType>('models');
+  // Track last applied filters so we can reapply when navigating back from a collection or after refresh
+  const [lastFilters, setLastFilters] = useState<{ search: string; category: string; printStatus: string; license: string; fileType: string; tags: string[]; showHidden: boolean; sortBy?: string }>(
+    { search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false, sortBy: 'none' }
+  );
+  // Force sidebar to re-mount to reset its internal filter UI when switching contexts
+  const [sidebarResetKey, setSidebarResetKey] = useState(0);
+  // Remember last selected sort from sidebar so collections list can respect it
+  const [currentSortBy, setCurrentSortBy] = useState<SortKey>('none');
+  // When in a collection, this is the full set of models in that collection (used for sidebar tags/categories)
+  const collectionBaseModels = useMemo(() => {
+    if (activeCollection && Array.isArray(activeCollection.modelIds)) {
+      const idSet = new Set(activeCollection.modelIds);
+      return models.filter(m => idSet.has(m.id));
+    }
+    return models;
+  }, [models, activeCollection]);
   
   // Delete file type selection state
   const [includeThreeMfFiles, setIncludeThreeMfFiles] = useState(false);
@@ -142,7 +166,7 @@ function AppContent() {
         if (!response.ok) {
           throw new Error('Failed to fetch models');
         }
-        const loadedModels = await response.json();
+  const loadedModels = await response.json();
         setModels(loadedModels);
         // Apply configured default filters (from appConfig) when initializing filteredModels
         const defaultFilters = config.filters || { defaultCategory: 'all', defaultPrintStatus: 'all', defaultLicense: 'all' };
@@ -158,7 +182,17 @@ function AppContent() {
   
   const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
   setFilteredModels(visibleModels);
+  // Remember the initial filters for later reapplication
+  setLastFilters({ ...initialFilterState, sortBy: 'none' });
   setIsModelsLoading(false);
+        // Load collections list
+        try {
+          const colResp = await fetch('/api/collections');
+          if (colResp.ok) {
+            const data = await colResp.json();
+            if (data && data.success && Array.isArray(data.collections)) setCollections(data.collections);
+          }
+        } catch (e) { /* ignore */ }
       } catch (error) {
         console.error('Failed to load configuration or models:', error);
         // Use default categories if config fails to load
@@ -553,6 +587,9 @@ function AppContent() {
     setIsBulkEditOpen(false);
   };
 
+  // Track current file type filter to control whether collections should be shown
+  const [currentFileType, setCurrentFileType] = useState<string>('all');
+
   const handleFilterChange = (filters: {
     search: string;
     category: string;
@@ -563,6 +600,12 @@ function AppContent() {
     showHidden: boolean;
     sortBy?: string;
   }) => {
+    // Capture sort selection up front so collections views can react even if we early-return
+    const incomingSort = (filters.sortBy || 'none') as SortKey;
+    setCurrentSortBy(incomingSort);
+    // Track the current selected file type (all | 3mf | stl | collections)
+    const incomingFileType = (filters.fileType || 'all').toLowerCase();
+    setCurrentFileType(incomingFileType);
     // If the user is viewing Settings and selects a category in the sidebar,
     // automatically switch to the Models view with that category applied.
     const incomingCategory = (filters.category || 'all');
@@ -573,7 +616,22 @@ function AppContent() {
       setCurrentView('models');
     }
 
-    let filtered = models;
+    // Determine base set: in collection view, filter within the collection's full set (not the current filtered subset)
+    let filtered = (currentView === 'collection-view' && activeCollection)
+      ? collectionBaseModels
+      : models;
+
+    // Special case: collections-only filter is relevant only in main models view
+    if (currentView !== 'collection-view') {
+      if (incomingFileType === 'collections') {
+        // Persist last filters even when we early-return
+        setLastFilters({ ...filters });
+        setFilteredModels([]);
+        setLastCategoryFilter(incomingCategory);
+        if (isSelectionMode) setSelectedModelIds([]);
+        return;
+      }
+    }
 
     // Hidden filter - exclude hidden models unless showHidden is true
     if (!filters.showHidden) {
@@ -630,10 +688,13 @@ function AppContent() {
     }
 
     // Apply sorting via utility
-    const sorted = sortModels(filtered as any[], (filters.sortBy || 'none') as any);
+    const sortKey = (filters.sortBy || 'none') as SortKey;
+    const sorted = sortModels(filtered as any[], sortKey);
     setFilteredModels(sorted);
-  // Reset anchor when the visible list changes order/content
-  setSelectionAnchorIndex(null);
+  // Persist last applied filters for re-use on navigation and refresh
+  setLastFilters({ ...filters });
+    // Reset anchor when the visible list changes order/content
+    setSelectionAnchorIndex(null);
     // Update last seen category for future comparisons
     setLastCategoryFilter(incomingCategory);
     
@@ -658,10 +719,30 @@ function AppContent() {
       if (!response.ok) {
         throw new Error('Failed to fetch models');
       }
-      const updatedModels = await response.json();
+  const updatedModels = await response.json() as Model[];
 
       setModels(updatedModels);
-      setFilteredModels(updatedModels);
+      // Reapply the last used filters based on the current view
+      if (currentView === 'collection-view' && activeCollection) {
+        const setIds = new Set(activeCollection.modelIds || []);
+        let base = updatedModels.filter(m => setIds.has(m.id));
+        // In collection view, ignore 'collections' fileType filter (not relevant)
+        const filtersForCollection = {
+          ...lastFilters,
+          fileType: lastFilters.fileType?.toLowerCase() === 'collections' ? 'all' : lastFilters.fileType,
+        } as any as FilterState;
+        const filtered = applyFiltersToModels(base, filtersForCollection);
+        const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+        setFilteredModels(sorted);
+      } else {
+        if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
+          setFilteredModels([]);
+        } else {
+          const filtered = applyFiltersToModels(updatedModels, lastFilters as FilterState);
+          const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+          setFilteredModels(sorted);
+        }
+      }
 
       toast("Models reloaded successfully", {
         description: `Loaded ${updatedModels.length} models from existing files`
@@ -762,6 +843,54 @@ function AppContent() {
     setCurrentView('models');
   };
 
+  // Collections helpers and effects
+  const openCollectionsList = () => {
+    setCurrentView('collections');
+    setIsDrawerOpen(false);
+    setIsSelectionMode(false);
+  };
+  const openCollection = (col: Collection) => {
+    setActiveCollection(col);
+    setCurrentView('collection-view');
+    setIsDrawerOpen(false);
+    // When opened from the Collections list, return back there
+    setCollectionReturnView('collections');
+    // Initialize filtered models to the collection contents (no filters active)
+    try {
+      const setIds = new Set(col.modelIds || []);
+      const base = models.filter(m => setIds.has(m.id));
+      // Default behavior is to not show hidden models unless explicitly enabled
+      setFilteredModels(base.filter(m => !m.hidden));
+    } catch { /* ignore */ }
+    // Reset the sidebar controls to defaults for the new context
+    setSidebarResetKey(k => k + 1);
+  };
+  const refreshCollections = async () => {
+    try {
+      const r = await fetch('/api/collections');
+      if (r.ok) {
+        const data = await r.json();
+        if (data && data.success && Array.isArray(data.collections)) setCollections(data.collections);
+      }
+    } catch (e) { /* ignore */ }
+  };
+  // Listen for collection-created events from child dialogs
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      try {
+        const anyEv: any = ev as any;
+        const col = anyEv?.detail as Collection | undefined;
+        if (col && Array.isArray(col.modelIds)) {
+          setActiveCollection(col);
+          setCurrentView('collection-view');
+        }
+      } catch { /* ignore */ }
+      refreshCollections();
+    };
+    window.addEventListener('collection-created', handler as any);
+    return () => window.removeEventListener('collection-created', handler as any);
+  }, []);
+
   const handleDonationClick = () => {
     setIsDonationDialogOpen(true);
   };
@@ -777,28 +906,38 @@ function AppContent() {
     }
   };
 
+  // Build a global, deduped, sorted tags list from all models
+  const globalTags = useMemo(() => {
+    const set = new Set<string>();
+    (models || []).forEach(m => (m.tags || []).forEach(t => { if (t) set.add(t); }));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [models]);
+
   // Don't render until config is loaded
   if (!appConfig) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-xl shadow-lg mx-auto">
-            <img
-              src="/images/favicon-32x32.png"
-              alt="3D Model Muncher"
-              className="animate-pulse"
-            />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">Loading 3D Model Muncher</h2>
-            <p className="text-muted-foreground">Initializing configuration...</p>
+      <TagsProvider tags={globalTags}>
+        <div className="flex items-center justify-center h-screen bg-background">
+          <div className="text-center space-y-4">
+            <div className="flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-xl shadow-lg mx-auto">
+              <img
+                src="/images/favicon-32x32.png"
+                alt="3D Model Muncher"
+                className="animate-pulse"
+              />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Loading 3D Model Muncher</h2>
+              <p className="text-muted-foreground">Initializing configuration...</p>
+            </div>
           </div>
         </div>
-      </div>
+      </TagsProvider>
     );
   }
 
   return (
+    <TagsProvider tags={globalTags}>
     <div className="flex h-screen bg-background">
       {/* Mobile Overlay */}
       {isSidebarOpen && (
@@ -819,6 +958,7 @@ function AppContent() {
       onClick={() => !isSidebarOpen && setIsSidebarOpen(true)}
       >
         <FilterSidebar 
+          key={sidebarResetKey}
           onFilterChange={handleFilterChange}
           onCategoryChosen={(label) => {
             // Switch to models view if currently in settings and the user explicitly chose a category
@@ -832,7 +972,9 @@ function AppContent() {
           onClose={() => setIsSidebarOpen(false)}
           onSettingsClick={handleSettingsClick}
           categories={categories}
-          models={models}
+          models={(currentView === 'collection-view' && activeCollection)
+            ? collectionBaseModels
+            : models}
           initialFilters={{
             search: '',
             category: appConfig?.filters?.defaultCategory || 'all',
@@ -845,7 +987,7 @@ function AppContent() {
         />
       </div>
 
-      {/* Main Content */}
+  {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 p-4 border-b bg-card shadow-sm shrink-0">
@@ -904,13 +1046,16 @@ function AppContent() {
               {/* Quick File Actions dropdown (3MF/STL check/generate) */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="p-2 hover:bg-accent transition-colors" title="Actions">
+                  <Button variant="ghost" size="sm" className="p-2 hover:bg-accent transition-colors" title="Actions" aria-label="Actions">
                     <Box className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem onClick={() => { handleRefreshModels(); }} disabled={isRefreshing}>
                     <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openCollectionsList}>
+                    <List className="h-4 w-4 mr-2" /> Collections
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'hash-check', fileType: '3mf' })}> 
                     <FileCheck className="h-4 w-4 mr-2" /> 3MF Check
@@ -971,7 +1116,26 @@ function AppContent() {
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
+              collections={(currentFileType === '3mf' || currentFileType === 'stl') ? [] : sortCollections(collections, currentSortBy)}
+              sortBy={currentSortBy}
               onModelClick={handleModelClick}
+              onOpenCollection={(id) => {
+                const col = collections.find(c => c.id === id);
+                if (col) {
+                  // When opened from the main grid, return to models on back
+                  setCollectionReturnView('models');
+                  setActiveCollection(col);
+                  setCurrentView('collection-view');
+                  // Initialize filtered models to the collection contents (no filters active)
+                  try {
+                    const setIds = new Set(col.modelIds || []);
+                    const base = models.filter(m => setIds.has(m.id));
+                    setFilteredModels(base.filter(m => !m.hidden));
+                  } catch { /* ignore */ }
+                  setSidebarResetKey(k => k + 1);
+                }
+              }}
+              onCollectionChanged={refreshCollections}
               isSelectionMode={isSelectionMode}
               selectedModelIds={selectedModelIds}
               onModelSelection={handleModelSelection}
@@ -997,14 +1161,86 @@ function AppContent() {
               settingsAction={settingsAction}
               onActionHandled={() => setSettingsAction(null)}
             />
+          ) : currentView === 'collections' ? (
+            <div className="h-full flex flex-col">
+              <div className="p-4 lg:p-6 border-b bg-card shadow-sm shrink-0 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="sm" onClick={handleBackToModels} className="gap-2" title="Back to models">
+                    <ArrowLeft className="h-4 w-4" />
+                    Models
+                  </Button>
+                  <div className="font-semibold">Collections</div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={refreshCollections} title="Refresh collections">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="p-4 lg:p-6">
+                {collections.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No collections yet. Select some models and create one from the selection.</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {sortCollections(collections, currentSortBy).map(c => (
+                      <button key={c.id} onClick={() => openCollection(c)} className="p-4 text-left rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-16 h-12 rounded overflow-hidden bg-muted/40 flex-shrink-0">
+                            {Array.isArray(c.images) && c.images.length > 0 ? (
+                              <img src={c.images[0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium truncate">{c.name}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{(c.modelIds || []).length} items</div>
+                            {c.description && <div className="text-xs line-clamp-2 mt-2">{c.description}</div>}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : currentView === 'collection-view' && activeCollection ? (
+            <CollectionGrid
+              name={activeCollection.name}
+              modelIds={activeCollection.modelIds}
+              models={filteredModels}
+              onBack={() => {
+                if (collectionReturnView === 'models') {
+                  // Return to main grid: reset filters and show all models
+                  setCurrentView('models');
+                  // Reapply last filters so hidden models remain hidden (and other filters persist)
+                  if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
+                    setFilteredModels([]);
+                  } else {
+                    const filtered = applyFiltersToModels(models, lastFilters as FilterState);
+                    const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+                    setFilteredModels(sorted);
+                  }
+                  setSidebarResetKey(k => k + 1);
+                  setSelectedModelIds([]);
+                  setSelectionAnchorIndex(null);
+                  setIsSelectionMode(false);
+                  setActiveCollection(null);
+                } else {
+                  // Return to the collections list view
+                  setCurrentView('collections');
+                  setActiveCollection(null);
+                }
+              }}
+              onModelClick={handleModelClick}
+              config={appConfig}
+            />
           ) : (
             <DemoPage onBack={handleBackToModels} />
           )}
         </div>
       </div>
 
-      {/* Model Details Drawer - Show in models and settings view */}
-      {(currentView === 'models' && !isSelectionMode || currentView === 'settings') && (
+      {/* Model Details Drawer - Show in models, collection-view, and settings views */}
+      {(((currentView === 'models') && !isSelectionMode) || currentView === 'settings' || currentView === 'collection-view') && (
         <ModelDetailsDrawer
           model={selectedModel}
           isOpen={isDrawerOpen}
@@ -1048,10 +1284,12 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
-              <h3 className="text-lg">v0.13.x - Release updates</h3>
-              <ul className="list-disc pl-5 list-inside mb-4">
-                <li><strong>Bulk image generation</strong> - Create images for models missing images using the bulk editor drawer.</li>
-                <li><strong>Simplified scan log output</strong> - Added verbose logging switch in settings</li>
+              <h3 className="text-lg">v0.14.x - Release updates</h3>
+              <ul className="list-disc pl-5 list-outside mb-4">
+                <li><strong>Collections</strong> - Create groups of models as collections.</li>
+                <li><strong>STL Print Settings</strong> - Edit persisting print settings (layer height, nozzel, infill, printer) for STL files</li>
+                <li><strong>Tag Autocomplete</strong> - Select from existing tags when typing into tag field</li>
+                <li><strong>Categorize on Upload</strong> - Add tags and categories when uploading new models</li>
               </ul>
             </div>
 
@@ -1066,7 +1304,7 @@ function AppContent() {
                   htmlFor="dont-show-release-notes" 
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  Don't show these release notes again for this version
+                  Do not show these notes again for this version
                 </label>
               </div>
             </div>
@@ -1131,8 +1369,8 @@ function AppContent() {
         onClose={() => setIsUploadDialogOpen(false)}
         onUploaded={() => { handleRefreshModels(); }}
       />
-
     </div>
+    </TagsProvider>
   );
 }
 

@@ -1,11 +1,51 @@
-// Vitest global setup: enable React act env and prepare test DOM for Radix
+// Vitest global setup: polyfills, mocks, and env prep — keep critical polyfills first.
+import { vi } from 'vitest';
 
+// 1) Critical DOM polyfills that some UI libs expect during module init
+if (typeof window !== 'undefined') {
+  // matchMedia (used by toasters/theme libs)
+  if (typeof (window as any).matchMedia !== 'function') {
+    (window as any).matchMedia = (query: string) => {
+      return {
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: () => {}, // deprecated
+        removeListener: () => {}, // deprecated
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      } as MediaQueryList;
+    };
+  }
+
+  // scrollIntoView (used by Radix Select, etc.)
+  const ElementProto = (window as any).Element?.prototype as any;
+  if (ElementProto && typeof ElementProto.scrollIntoView !== 'function') {
+    ElementProto.scrollIntoView = () => {};
+  }
+
+  // ResizeObserver (used by Radix primitives like Slider)
+  const ensureRO = () => {
+    if (typeof (globalThis as any).ResizeObserver !== 'function') {
+      const RO = class {
+        observe() {/* noop */}
+        unobserve() {/* noop */}
+        disconnect() {/* noop */}
+      };
+      try { vi.stubGlobal('ResizeObserver', RO as any); } catch { (globalThis as any).ResizeObserver = RO as any; }
+      try { (window as any).ResizeObserver = (globalThis as any).ResizeObserver; } catch {}
+    }
+  };
+  ensureRO();
+}
+
+// 2) React act environment toggle
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Mock Radix checkbox to a minimal, test-friendly implementation.
 import React from 'react';
-import { vi } from 'vitest';
 
 vi.mock('@radix-ui/react-checkbox', () => {
   return {
@@ -15,6 +55,64 @@ vi.mock('@radix-ui/react-checkbox', () => {
     Indicator: (props: any) => React.createElement('span', props, props.children),
   };
 });
+
+// Mock Radix Select to a simple <select> implementation for tests
+vi.mock('@radix-ui/react-select', () => {
+  const React = require('react') as typeof import('react');
+  return {
+    Root: ({ children, value, onValueChange, ...rest }: any) => (
+      React.createElement(
+        'select',
+        {
+          'data-testid': 'mock-select',
+          value,
+          onChange: (e: any) => onValueChange && onValueChange(e.target.value),
+          ...rest,
+        },
+        children,
+      )
+    ),
+    Group: (props: any) => React.createElement(React.Fragment, null, props.children),
+    Value: ({ placeholder, children }: any) => React.createElement('span', { 'data-testid': 'mock-select-value' }, children || placeholder || ''),
+    Trigger: (props: any) => React.createElement('div', props, props.children),
+    Content: (props: any) => React.createElement(React.Fragment, null, props.children),
+    Item: ({ value, children, ...rest }: any) => React.createElement('option', { value, ...rest }, children),
+    Label: (props: any) => React.createElement('label', props, props.children),
+    Separator: (props: any) => React.createElement('hr', props),
+    ScrollUpButton: (props: any) => React.createElement('div', props, props.children),
+    ScrollDownButton: (props: any) => React.createElement('div', props, props.children),
+    Icon: (props: any) => React.createElement(React.Fragment, null, props.children),
+  };
+});
+
+// Mock Radix Slider to a minimal range input to avoid ResizeObserver usage during tests
+vi.mock('@radix-ui/react-slider', () => {
+  const React = require('react') as typeof import('react');
+  const Root = ({ value, defaultValue, onValueChange, min = 0, max = 100, step = 1, ...rest }: any) => {
+    const valArr = Array.isArray(value) ? value : (Array.isArray(defaultValue) ? defaultValue : [value ?? defaultValue ?? 0]);
+    const current = Number(valArr?.[0] ?? 0);
+    return React.createElement('input', {
+      type: 'range',
+      'aria-label': 'slider',
+      min,
+      max,
+      step,
+      value: current,
+      onChange: (e: any) => onValueChange && onValueChange([Number(e.target.value)]),
+      ...rest,
+    });
+  };
+  const Passthrough = (props: any) => React.createElement('div', props, props.children);
+  return { Root, Track: Passthrough, Range: Passthrough, Thumb: Passthrough };
+});
+
+// Avoid pulling ResizeObserver from Radix size hook by mocking it to a no-op
+vi.mock('@radix-ui/react-use-size', () => {
+  return {
+    useSize: () => undefined,
+  };
+});
+
 
 // Create a portal root for Radix components to mount into during tests.
 if (typeof document !== 'undefined') {

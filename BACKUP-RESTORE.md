@@ -2,7 +2,7 @@
 
 ## Overview
 
-Protect your model metadata (tags, notes, print status, etc.) with automatic backup and restore functionality for all `*-munchie.json` files.
+Protect your model metadata (tags, notes, print status, etc.) with automatic backup and restore functionality for all `*-munchie.json` files. Backups now also include your Collections stored in `data/collections.json`.
 
 ## Quick Start
 
@@ -18,6 +18,9 @@ Protect your model metadata (tags, notes, print status, etc.) with automatic bac
    - **Path Match**: Only restores files at original locations (safest)
    - **Force Restore**: Restores all files, creating directories as needed
 3. Click **"Restore from File"** and select your backup
+4. Collections restore strategy:
+   - **Merge** (default): Combine with existing collections by id (backup wins for conflicts; new items get ids if missing)
+   - **Replace**: Overwrite existing `data/collections.json` with the backup version
 
 ## Common Use Cases
 
@@ -31,5 +34,5 @@ Protect your model metadata (tags, notes, print status, etc.) with automatic bac
 - Creates compressed `.gz` archives (80-90% size reduction)
 - Uses MD5 hashes for reliable file matching
 - Supports both `.gz` and `.json` backup formats
-- Only backs up metadata files, not the actual 3MF models
+- Backs up metadata files and collections; not the actual 3MF/STL model files
 - All operations are local - no data sent to external servers

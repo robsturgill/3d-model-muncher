@@ -75,10 +75,36 @@ function safeLog(...args) {
   console.log.apply(console, sanitized);
 }
 
+// Resolve server-side config path, supporting per-test worker overrides to avoid
+// concurrent test interference. If a worker-specific config exists, prefer it;
+// otherwise fall back to the global data/config.json.
+function getServerConfigPath() {
+  try {
+    const dataDir = path.join(process.cwd(), 'data');
+    const globalPath = path.join(dataDir, 'config.json');
+    // Prefer Vitest worker-specific config when available
+    const vitestWorkerId = process.env.VITEST_WORKER_ID;
+    if (vitestWorkerId) {
+      const workerPath = path.join(dataDir, `config.vitest-${vitestWorkerId}.json`);
+      if (fs.existsSync(workerPath)) return workerPath;
+    }
+    // Fallback: Jest worker (not used here, but safe to include)
+    const jestWorkerId = process.env.JEST_WORKER_ID;
+    if (jestWorkerId) {
+      const workerPath = path.join(dataDir, `config.jest-${jestWorkerId}.json`);
+      if (fs.existsSync(workerPath)) return workerPath;
+    }
+    return globalPath;
+  } catch (e) {
+    // On error, fall back to default global path
+    return path.join(process.cwd(), 'data', 'config.json');
+  }
+}
+
 // Helper: conditional debug logging controlled by server-side config (data/config.json)
 function isServerDebugEnabled() {
   try {
-    const cfgPath = path.join(process.cwd(), 'data', 'config.json');
+    const cfgPath = getServerConfigPath();
     if (fs.existsSync(cfgPath)) {
       const raw = fs.readFileSync(cfgPath, 'utf8');
       const parsed = JSON.parse(raw || '{}');
@@ -114,6 +140,55 @@ const upload = multer({
 app.use(cors());
 app.use(express.json({ limit: '100mb' })); // Increased limit for large model payloads
 
+// Collections storage helpers (persist under data/collections.json)
+// Allow override via env var and use a test-specific file when running under Vitest/Node test env.
+const collectionsFilePath = (() => {
+  const defaultPath = path.join(process.cwd(), 'data', 'collections.json');
+  try {
+    const envPath = process.env.COLLECTIONS_FILE;
+    if (envPath && typeof envPath === 'string' && envPath.trim()) {
+      return path.isAbsolute(envPath) ? envPath : path.join(process.cwd(), envPath);
+    }
+    if (process.env.NODE_ENV === 'test') {
+      return path.join(process.cwd(), 'data', 'collections.test.json');
+    }
+  } catch {}
+  return defaultPath;
+})();
+
+function loadCollections() {
+  try {
+    if (!fs.existsSync(collectionsFilePath)) return [];
+    const raw = fs.readFileSync(collectionsFilePath, 'utf8');
+    if (!raw || raw.trim() === '') return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.collections) ? parsed.collections : []);
+  } catch (e) {
+    console.warn('Failed to load collections.json:', e);
+    return [];
+  }
+}
+
+function saveCollections(collections) {
+  try {
+    const dataDir = path.join(process.cwd(), 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    const tmp = collectionsFilePath + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(collections, null, 2), 'utf8');
+    fs.renameSync(tmp, collectionsFilePath);
+    return true;
+  } catch (e) {
+    console.error('Failed to save collections.json:', e);
+    return false;
+  }
+}
+
+function makeId(prefix = 'col') {
+  const ts = Date.now().toString(36);
+  const rnd = Math.random().toString(36).slice(2, 7);
+  return `${prefix}-${ts}-${rnd}`;
+}
+
 // Health check endpoint for Docker/Unraid
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -122,6 +197,73 @@ app.get('/api/health', (req, res) => {
     uptime: process.uptime(),
     version: '0.1.0'
   });
+});
+
+// --- Collections API ---
+// List all collections
+app.get('/api/collections', (req, res) => {
+  try {
+    const cols = loadCollections();
+    res.json({ success: true, collections: cols });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Failed to load collections' });
+  }
+});
+
+// Create or update a collection
+app.post('/api/collections', (req, res) => {
+  try {
+    const { id, name, description = '', modelIds = [], coverModelId, category = '', tags = [], images = [] } = req.body || {};
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Name is required' });
+    }
+    if (!Array.isArray(modelIds)) {
+      return res.status(400).json({ success: false, error: 'modelIds must be an array' });
+    }
+
+    const now = new Date().toISOString();
+    const normalizedIds = Array.from(new Set(modelIds.filter(x => typeof x === 'string' && x.trim() !== '')));
+
+    const cols = loadCollections();
+    let result;
+    if (id) {
+      const idx = cols.findIndex(c => c.id === id);
+      if (idx === -1) {
+        return res.status(404).json({ success: false, error: 'Collection not found' });
+      }
+      const updated = { ...cols[idx], name, description, modelIds: normalizedIds, coverModelId, lastModified: now };
+      if (typeof category === 'string') updated.category = category;
+      if (Array.isArray(tags)) updated.tags = Array.from(new Set(tags.filter(t => typeof t === 'string')));
+      if (Array.isArray(images)) updated.images = images.filter(s => typeof s === 'string');
+      cols[idx] = updated;
+      if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
+      result = updated;
+    } else {
+      const newCol = { id: makeId(), name, description, modelIds: normalizedIds, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
+      cols.push(newCol);
+      if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
+      result = newCol;
+    }
+    res.json({ success: true, collection: result });
+  } catch (e) {
+    console.error('/api/collections error:', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Delete a collection
+app.delete('/api/collections/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const cols = loadCollections();
+    const idx = cols.findIndex(c => c.id === id);
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Not found' });
+    const removed = cols.splice(idx, 1)[0];
+    if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collections' });
+    res.json({ success: true, deleted: removed });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
 });
 
 // Serve model files from the models directory. The configured directory can be
@@ -153,7 +295,7 @@ app.use('/models', (req, res, next) => {
 function getModelsDirectory() {
   // Prefer server-side `data/config.json` when present (written by /api/save-config).
   try {
-    const serverConfigPath = path.join(process.cwd(), 'data', 'config.json');
+    const serverConfigPath = getServerConfigPath();
     if (fs.existsSync(serverConfigPath)) {
       const raw = fs.readFileSync(serverConfigPath, 'utf8');
       const parsed = JSON.parse(raw || '{}');
@@ -405,6 +547,21 @@ app.post('/api/save-model', async (req, res) => {
 
     // Remove filePath and other computed properties from incomingChanges to prevent them from being saved
     const { filePath: _, modelUrl: __, ...cleanChanges } = incomingChanges;
+
+    // Determine target type based on the resolved filePath (3MF vs STL munchie)
+    const targetIsStlMunchie = typeof filePath === 'string' && /-stl-munchie\.json$/i.test(filePath);
+    const targetIs3mfMunchie = typeof filePath === 'string' && /-munchie\.json$/i.test(filePath) && !/-stl-munchie\.json$/i.test(filePath);
+
+    // Business rule: print settings (layerHeight, infill, nozzle, etc.) are only user-editable for STL models.
+    // For 3MF models, these values are derived from the .3mf and should not be overridden by saves.
+    if (targetIs3mfMunchie && cleanChanges && typeof cleanChanges === 'object' && cleanChanges.printSettings) {
+      // Drop any attempted edits to printSettings for 3MF targets
+      try {
+        delete cleanChanges.printSettings;
+      } catch (e) {
+        // ignore
+      }
+    }
     // Sanitize and log the cleaned changes to help debug whether nested thumbnails
     // were included by the client. Avoid printing base64 images directly.
     try {
@@ -1006,7 +1163,16 @@ app.post('/api/save-config', (req, res) => {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    const configPath = path.join(dataDir, 'config.json');
+    // During tests, prefer writing to a per-worker config to avoid clobbering the real config.json
+    let configPath = (function() {
+      try {
+        const vitestWorkerId = process.env.VITEST_WORKER_ID;
+        if (vitestWorkerId) return path.join(dataDir, `config.vitest-${vitestWorkerId}.json`);
+        const jestWorkerId = process.env.JEST_WORKER_ID;
+        if (jestWorkerId) return path.join(dataDir, `config.jest-${jestWorkerId}.json`);
+      } catch {}
+      return path.join(dataDir, 'config.json');
+    })();
     // Ensure lastModified is updated on server-side save
     const finalConfig = { ...config, lastModified: new Date().toISOString() };
     fs.writeFileSync(configPath, JSON.stringify(finalConfig, null, 2), 'utf8');
@@ -1021,7 +1187,24 @@ app.post('/api/save-config', (req, res) => {
 // API endpoint to load config.json from the data directory
 app.get('/api/load-config', (req, res) => {
   try {
-    const configPath = path.join(process.cwd(), 'data', 'config.json');
+    // Mirror getServerConfigPath behavior: prefer per-worker file when present
+    const dataDir = path.join(process.cwd(), 'data');
+    let configPath;
+    try {
+      const vitestWorkerId = process.env.VITEST_WORKER_ID;
+      if (vitestWorkerId) {
+        const workerPath = path.join(dataDir, `config.vitest-${vitestWorkerId}.json`);
+        if (fs.existsSync(workerPath)) configPath = workerPath;
+      }
+      if (!configPath) {
+        const jestWorkerId = process.env.JEST_WORKER_ID;
+        if (jestWorkerId) {
+          const workerPath = path.join(dataDir, `config.jest-${jestWorkerId}.json`);
+          if (fs.existsSync(workerPath)) configPath = workerPath;
+        }
+      }
+    } catch {}
+    if (!configPath) configPath = path.join(dataDir, 'config.json');
     if (!fs.existsSync(configPath)) {
       return res.status(404).json({ success: false, error: 'No server-side config found' });
     }
@@ -1116,7 +1299,38 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           return { error: 'Unsupported file type' };
         }
 
-        const mergedMetadata = { ...newMetadata, ...userDataBackup, id: idForModel, hash };
+        // Preserve STL printSettings (user-managed) but let 3MF refresh them from parsed metadata
+        let mergedMetadata = { ...newMetadata, ...userDataBackup, id: idForModel, hash };
+        try {
+          const lower = String(modelFilePath).toLowerCase();
+          if (lower.endsWith('.stl')) {
+            // If existing STL had printSettings, prefer those; otherwise keep newMetadata defaults
+            const cd = currentData && currentData.printSettings && typeof currentData.printSettings === 'object' ? currentData.printSettings : undefined;
+            const nd = newMetadata && newMetadata.printSettings && typeof newMetadata.printSettings === 'object' ? newMetadata.printSettings : {};
+            const prefer = (a, b) => {
+              const sa = typeof a === 'string' ? a : '';
+              const sb = typeof b === 'string' ? b : '';
+              return sa.trim() !== '' ? sa : (sb.trim() !== '' ? sb : '');
+            };
+            mergedMetadata.printSettings = {
+              layerHeight: prefer(cd && cd.layerHeight, nd.layerHeight),
+              infill: prefer(cd && cd.infill, nd.infill),
+              nozzle: prefer(cd && cd.nozzle, nd.nozzle),
+              printer: (() => {
+                const cp = cd && cd.printer;
+                const np = nd && nd.printer;
+                return typeof cp === 'string' && cp.trim() !== ''
+                  ? cp
+                  : (typeof np === 'string' && np.trim() !== '' ? np : undefined);
+              })()
+            };
+          } else if (lower.endsWith('.3mf')) {
+            // For 3MF, ensure printSettings come from parsed data, ignoring any previous user-edits
+            // Nothing to do; mergedMetadata already pulls from newMetadata which is parsed.
+          }
+        } catch (e) {
+          // ignore preservation error
+        }
         // Ensure created/lastModified timestamps for regenerated file
         try {
           const now = new Date().toISOString();
@@ -1432,6 +1646,7 @@ app.post('/api/create-model-folder', express.json(), (req, res) => {
 // --- API: Get all -munchie.json files and their hashes ---
 app.get('/api/munchie-files', (req, res) => {
   const modelsDir = getAbsoluteModelsPath();
+  try { console.log('[debug] /api/munchie-files scanning modelsDir=', modelsDir); } catch (e) {}
   let result = [];
   
   function scanDirectory(dir) {
@@ -1447,11 +1662,13 @@ app.get('/api/munchie-files', (req, res) => {
             const json = JSON.parse(data);
             // Get path relative to models directory for the URL
             const relativePath = path.relative(modelsDir, fullPath);
-            result.push({
+            const item = {
               fileName: entry.name,
               hash: json.hash,
               modelUrl: '/models/' + relativePath.replace(/\\/g, '/')
-            });
+            };
+            try { console.log('[debug] /api/munchie-files item', { fileName: item.fileName, hash: item.hash, modelUrl: item.modelUrl }); } catch (e) {}
+            result.push(item);
           } catch (e) {
             // skip unreadable or invalid files
             console.error(`Error reading file ${fullPath}:`, e);
@@ -1465,6 +1682,7 @@ app.get('/api/munchie-files', (req, res) => {
 
   try {
     scanDirectory(modelsDir);
+    try { console.log('[debug] /api/munchie-files found', Array.isArray(result) ? result.length : 0, 'items'); } catch (e) {}
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: 'Failed to read models directory' });
@@ -1476,6 +1694,7 @@ app.post('/api/hash-check', async (req, res) => {
   try {
     const { fileType = "3mf" } = req.body; // "3mf" or "stl" only
     const modelsDir = getAbsoluteModelsPath();
+    try { console.log('[debug] /api/hash-check fileType=', fileType, 'modelsDir=', modelsDir); } catch (e) {}
     const { computeMD5 } = require('./dist-backend/utils/threeMFToJson');
     let result = [];
     let seenHashes = new Set();
@@ -1520,8 +1739,8 @@ app.post('/api/hash-check', async (req, res) => {
       }
     }
 
-    // Start recursive scan
-    scanDirectory(modelsDir);
+  // Start recursive scan
+  scanDirectory(modelsDir);
 
     // Clean up the modelMap to only include entries that have the expected file type
     const cleanedModelMap = {};
@@ -1537,6 +1756,7 @@ app.post('/api/hash-check', async (req, res) => {
     }
 
     // Process all found models
+    try { console.log('[debug] /api/hash-check base entries count=', Object.keys(cleanedModelMap).length); } catch (e) {}
     for (const base in cleanedModelMap) {
       const entry = cleanedModelMap[base];
       const threeMFPath = entry.threeMF ? path.join(modelsDir, entry.threeMF) : null;
@@ -1637,6 +1857,7 @@ app.get('/api/load-model', async (req, res) => {
     const { filePath, id } = req.query;
     // Prefer id-based lookup when provided (more robust)
     const modelsDir = path.resolve(getModelsDirectory());
+    try { console.log('[debug] /api/load-model modelsDir=', modelsDir, 'id=', id); } catch (e) {}
 
     // If `id` provided, try scanning for a munchie.json with matching id
     if (id && typeof id === 'string' && id.trim().length > 0) {
@@ -1654,7 +1875,9 @@ app.get('/api/load-model', async (req, res) => {
               const raw = fs.readFileSync(full, 'utf8');
               if (!raw || raw.trim().length === 0) continue;
               const parsed = JSON.parse(raw);
+               try { console.log('[debug] /api/load-model inspecting', full, 'parsed.id=', parsed && parsed.id, 'parsed.name=', parsed && parsed.name); } catch (e) {}
               if (parsed && (parsed.id === id || parsed.name === id)) {
+                try { console.log('[debug] /api/load-model matched id at', full); } catch (e) {}
                 return full;
               }
             } catch (e) {
@@ -1672,6 +1895,7 @@ app.get('/api/load-model', async (req, res) => {
           const parsed = JSON.parse(content);
           return res.json(parsed);
         }
+        try { console.log('[debug] /api/load-model no match found for id', id); } catch (e) {}
         // If search completed without finding a match, return 404 to indicate not found
         return res.status(404).json({ success: false, error: 'Model not found for id' });
       } catch (e) {
@@ -2095,7 +2319,9 @@ app.post('/api/backup-munchie-files', async (req, res) => {
     const backup = {
       timestamp: new Date().toISOString(),
       version: '1.0.0',
-      files: []
+      files: [],
+      // Include collections.json when present so collections are preserved in backup
+      collections: undefined
     };
 
     // Recursively find all munchie.json files
@@ -2127,13 +2353,31 @@ app.post('/api/backup-munchie-files', async (req, res) => {
 
     findMunchieFiles(modelsDir);
 
+    // Try to include collections.json if it exists
+    try {
+      const collectionsPath = path.join(process.cwd(), 'data', 'collections.json');
+      if (fs.existsSync(collectionsPath)) {
+        const raw = fs.readFileSync(collectionsPath, 'utf8');
+        if (raw && raw.trim() !== '') {
+          const parsed = JSON.parse(raw);
+          // Normalize to an array in case file contains { collections: [...] }
+          const cols = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.collections) ? parsed.collections : []);
+          backup.collections = cols;
+        } else {
+          backup.collections = [];
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to read collections.json for backup:', e && e.message ? e.message : e);
+    }
+
     // Compress the backup data
     const jsonString = JSON.stringify(backup, null, 2);
     const compressed = zlib.gzipSync(Buffer.from(jsonString, 'utf8'));
 
     // Set headers for file download
     const timestamp = backup.timestamp.replace(/[:.]/g, '-').slice(0, 19);
-    const filename = `munchie-backup-${timestamp}.gz`;
+  const filename = `munchie-backup-${timestamp}.gz`;
     
     res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -2141,7 +2385,8 @@ app.post('/api/backup-munchie-files', async (req, res) => {
     
     res.send(compressed);
     
-    console.log(`Backup created: ${backup.files.length} munchie.json files, ${(compressed.length / 1024).toFixed(2)} KB compressed`);
+  const colCount = Array.isArray(backup.collections) ? backup.collections.length : 0;
+  console.log(`Backup created: ${backup.files.length} munchie.json files, ${colCount} collections, ${(compressed.length / 1024).toFixed(2)} KB compressed`);
     
   } catch (error) {
     console.error('Backup creation error:', error);
@@ -2152,7 +2397,7 @@ app.post('/api/backup-munchie-files', async (req, res) => {
 // API endpoint to restore munchie.json files from backup
 app.post('/api/restore-munchie-files', async (req, res) => {
   try {
-    const { backupData, strategy = 'hash-match' } = req.body;
+    const { backupData, strategy = 'hash-match', collectionsStrategy = 'merge' } = req.body;
     
     if (!backupData) {
       return res.status(400).json({ success: false, error: 'No backup data provided' });
@@ -2175,7 +2420,8 @@ app.post('/api/restore-munchie-files', async (req, res) => {
       restored: [],
       skipped: [],
       errors: [],
-      strategy: strategy
+      strategy: strategy,
+      collections: { restored: 0, skipped: 0, strategy: collectionsStrategy }
     };
 
     // Create a map of existing 3MF files by their hashes for hash-based matching
@@ -2217,6 +2463,39 @@ app.post('/api/restore-munchie-files', async (req, res) => {
     }
 
     mapExistingFiles(modelsDir);
+
+    // Restore collections first (optional)
+    try {
+      if (backup.collections && Array.isArray(backup.collections)) {
+        const existing = loadCollections();
+        let next = [];
+        if (collectionsStrategy === 'replace') {
+          next = backup.collections;
+        } else {
+          // merge by id (prefer backup for matching IDs), append new ones
+          const byId = new Map(existing.map(c => [c && c.id, c]).filter(([k]) => typeof k === 'string' && k));
+          for (const c of backup.collections) {
+            if (c && typeof c.id === 'string' && c.id) {
+              byId.set(c.id, c);
+            } else {
+              // no id, assign one to avoid collisions
+              const assigned = { ...c, id: makeId() };
+              next.push(assigned);
+            }
+          }
+          next = [...new Set(next.concat(Array.from(byId.values()).filter(Boolean)))];
+        }
+        if (!Array.isArray(next)) next = [];
+        if (saveCollections(next)) {
+          results.collections.restored = Array.isArray(next) ? next.length : 0;
+        } else {
+          results.collections.skipped = Array.isArray(backup.collections) ? backup.collections.length : 0;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore collections from backup:', e && e.message ? e.message : e);
+      results.errors.push({ originalPath: 'collections.json', error: 'Failed to restore collections: ' + (e && e.message ? e.message : e) });
+    }
 
     // Process each file in the backup
     for (const backupFile of backup.files) {
@@ -2324,7 +2603,7 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
       return res.status(400).json({ success: false, error: 'No backup file provided' });
     }
 
-    const { strategy = 'hash-match' } = req.body;
+  const { strategy = 'hash-match', collectionsStrategy = 'merge' } = req.body;
     let backupData;
 
     // Check if file is gzipped
@@ -2356,7 +2635,8 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
       restored: [],
       skipped: [],
       errors: [],
-      strategy: strategy
+      strategy: strategy,
+      collections: { restored: 0, skipped: 0, strategy: collectionsStrategy }
     };
 
     // Create a map of existing 3MF files by their hashes for hash-based matching
@@ -2398,6 +2678,37 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
     }
 
     mapExistingFiles(modelsDir);
+
+    // Restore collections first (optional)
+    try {
+      if (backup.collections && Array.isArray(backup.collections)) {
+        const existing = loadCollections();
+        let next = [];
+        if (collectionsStrategy === 'replace') {
+          next = backup.collections;
+        } else {
+          const byId = new Map(existing.map(c => [c && c.id, c]).filter(([k]) => typeof k === 'string' && k));
+          for (const c of backup.collections) {
+            if (c && typeof c.id === 'string' && c.id) {
+              byId.set(c.id, c);
+            } else {
+              const assigned = { ...c, id: makeId() };
+              next.push(assigned);
+            }
+          }
+          next = [...new Set(next.concat(Array.from(byId.values()).filter(Boolean)))];
+        }
+        if (!Array.isArray(next)) next = [];
+        if (saveCollections(next)) {
+          results.collections.restored = Array.isArray(next) ? next.length : 0;
+        } else {
+          results.collections.skipped = Array.isArray(backup.collections) ? backup.collections.length : 0;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore collections from uploaded backup:', e && e.message ? e.message : e);
+      results.errors.push({ originalPath: 'collections.json', error: 'Failed to restore collections: ' + (e && e.message ? e.message : e) });
+    }
 
     // Process each file in the backup
     for (const backupFile of backup.files) {

@@ -48,6 +48,7 @@ import {
 import { ImagePlus } from "lucide-react";
 import { RendererPool } from "../utils/rendererPool";
 import { AlertCircle } from "lucide-react";
+import TagsInput from "./TagsInput";
 
 interface BulkEditDrawerProps {
   models: Model[];
@@ -83,6 +84,13 @@ interface BulkEditState {
   price?: number;
   printTime?: string;
   filamentUsed?: string;
+  // STL-only print settings (bulk updates apply only to STL models)
+  printSettings?: {
+    layerHeight?: string;
+    infill?: string;
+    nozzle?: string;
+    printer?: string;
+  };
   // Related files: which model id is primary, whether to hide others, and which ids are included
   relatedPrimary?: string;
   relatedHideOthers?: boolean;
@@ -102,6 +110,7 @@ interface FieldSelection {
   price: boolean;
   printTime: boolean;
   filamentUsed: boolean;
+  printSettings: boolean;
   regenerateMunchie: boolean;
   relatedFiles: boolean;
 }
@@ -136,10 +145,11 @@ export function BulkEditDrawer({
       price: false,
       printTime: false,
       filamentUsed: false,
+      printSettings: false,
       regenerateMunchie: false,
       relatedFiles: false,
     });
-  const [newTag, setNewTag] = useState("");
+  // Tags add UI now handled via shared TagsInput
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [closeRequestedWhileGenerating, setCloseRequestedWhileGenerating] = useState(false);
@@ -264,11 +274,12 @@ export function BulkEditDrawer({
         price: false,
         printTime: false,
         filamentUsed: false,
+        printSettings: false,
         regenerateMunchie: false,
         relatedFiles: false,
       });
-      setNewTag("");
-      setRelatedIncludedIds(models.map((m) => uniqueKeyForModel(m)));
+  // no-op: TagsInput controls add list
+  setRelatedIncludedIds(models.map((m) => uniqueKeyForModel(m)));
       // Clear any leftover image-generation state so alerts don't persist
       setIsGeneratingImages(false);
       setCloseRequestedWhileGenerating(false);
@@ -337,52 +348,7 @@ export function BulkEditDrawer({
 
   // related-files state is managed inline in the UI handlers
 
-  const handleAddTag = () => {
-    if (!newTag.trim()) return;
-
-    const trimmedTag = newTag.trim();
-    setEditState((prev) => {
-      const currentAdds = prev.tags?.add || [];
-      const currentRemoves = prev.tags?.remove || [];
-
-      // Prevent duplicates: check case-insensitively against currentAdds and allTags
-      const lowerNew = trimmedTag.toLowerCase();
-      const existingInAdds = currentAdds.some(t => t.toLowerCase() === lowerNew);
-      const existingInAllTags = allTags.some(t => t.toLowerCase() === lowerNew);
-
-      if (existingInAdds || existingInAllTags) {
-        // If tag is present in remove list, ensure it's removed from remove list
-        return {
-          ...prev,
-          tags: {
-            add: currentAdds,
-            remove: currentRemoves.filter((tag) => tag.toLowerCase() !== lowerNew),
-          },
-        };
-      }
-
-      return {
-        ...prev,
-        tags: {
-          add: [...currentAdds, trimmedTag],
-          remove: currentRemoves.filter((tag) => tag.toLowerCase() !== lowerNew),
-        },
-      };
-    });
-    setNewTag("");
-  };
-
-  const handleRemoveTagFromAdd = (tagToRemove: string) => {
-    setEditState((prev) => ({
-      ...prev,
-      tags: {
-        add: (prev.tags?.add || []).filter(
-          (tag) => tag !== tagToRemove,
-        ),
-        remove: prev.tags?.remove || [],
-      },
-    }));
-  };
+  // Add/remove for add-list now managed via TagsInput onChange
 
   const handleToggleTagRemoval = (tag: string) => {
     setEditState((prev) => {
@@ -464,6 +430,24 @@ export function BulkEditDrawer({
     if (m.userDefined && m.userDefined.images && m.userDefined.images.length > 0) return true;
     return false;
   };
+
+  // Determine if the given model is STL-based (STL-only print settings)
+  const isStlModel = (m: Model): boolean => {
+    const p = (m.filePath || '').toLowerCase();
+    const u = (m.modelUrl || '').toLowerCase();
+    return p.endsWith('.stl') || p.endsWith('-stl-munchie.json') || u.endsWith('.stl');
+  };
+
+  const hasAnyStlSelected = Array.isArray(models) && models.some(isStlModel);
+
+  // If selection changes such that no STL models are present, auto-uncheck the field
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!hasAnyStlSelected && fieldSelection.printSettings) {
+      setFieldSelection(prev => ({ ...prev, printSettings: false }));
+      setEditState(prev => ({ ...prev, printSettings: undefined }));
+    }
+  }, [hasAnyStlSelected, isOpen]);
 
   // ...existing code...
 
@@ -553,6 +537,19 @@ export function BulkEditDrawer({
     
     try {
       const updates: Partial<Model> = {};
+      // Capture selected print settings for STL-only application per model.
+      // Important: in bulk edit, empty inputs mean "no change", not "clear".
+      // So we sanitize to include only non-empty string values.
+      const selectedPrintSettingsRaw = fieldSelection.printSettings ? editState.printSettings : undefined;
+      const selectedPrintSettings = (() => {
+        if (!selectedPrintSettingsRaw || typeof selectedPrintSettingsRaw !== 'object') return undefined;
+        const out: Record<string, string> = {};
+        const entries = Object.entries(selectedPrintSettingsRaw as Record<string, any>);
+        for (const [k, v] of entries) {
+          if (typeof v === 'string' && v.trim() !== '') out[k] = v.trim();
+        }
+        return Object.keys(out).length > 0 ? out : undefined;
+      })();
 
       // Apply selected fields
       if (fieldSelection.category && editState.category) {
@@ -646,8 +643,18 @@ export function BulkEditDrawer({
             onClearSelections();
           }
           
-          // If regeneration was the only action, close and return
-          if (Object.keys(updates).length === 0) {
+          // If regeneration was the only action, close and return —
+          // BUT don't exit early if we still have per-model-only edits to apply
+          // (e.g., STL-only printSettings or Related Files), which are handled
+          // below in the per-model loop and not represented in the top-level
+          // `updates` object.
+          const hasPerModelOnlyChanges = (
+            // STL print settings are applied per-model
+            (fieldSelection.printSettings && !!editState.printSettings) ||
+            // Related files are applied per-model
+            fieldSelection.relatedFiles
+          );
+          if (Object.keys(updates).length === 0 && !hasPerModelOnlyChanges) {
             onClose();
             return;
           }
@@ -818,6 +825,14 @@ export function BulkEditDrawer({
             (updatedModel as any)[key] = (updates as any)[key];
           }
         });
+
+        // Apply print settings only to STL models when selected and sanitized has values
+        if (selectedPrintSettings && isStlModel(model)) {
+          (updatedModel as any).printSettings = {
+            ...(updatedModel as any).printSettings,
+            ...selectedPrintSettings,
+          };
+        }
 
         // Debug: show what will be saved
         console.debug(`[BulkEdit][DEBUG] Saving model ${model.name} -> file: ${updatedModel.filePath}, tagsCount:`, updatedModel.tags?.length || 0);
@@ -1237,58 +1252,23 @@ export function BulkEditDrawer({
                 <div className="ml-6 space-y-4">
                   {/* Add New Tags */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Add Tags
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Add a tag..."
-                        value={newTag}
-                        onChange={(e) =>
-                          setNewTag(e.target.value)
-                        }
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddTag();
-                          }
-                        }}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        onClick={handleAddTag}
-                        disabled={!newTag.trim()}
-                        size="sm"
-                      >
-                        Add
-                      </Button>
-                    </div>
-
-                    {/* Tags to Add */}
-                    {editState.tags?.add &&
-                      editState.tags.add.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            Tags to add:
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {editState.tags.add.map((tag) => (
-                              <Badge
-                                key={tag}
-                                variant="default"
-                                className="text-sm gap-1 cursor-pointer hover:bg-primary/80"
-                                onClick={() =>
-                                  handleRemoveTagFromAdd(tag)
-                                }
-                              >
-                                {tag}
-                                <X className="h-3 w-3" />
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                    <Label className="text-sm font-medium">Add Tags</Label>
+                    <TagsInput
+                      value={editState.tags?.add || []}
+                      onChange={(next) => {
+                        // Always allow adding tags even if some selected models already have them; save step is idempotent.
+                        const cleaned = next;
+                        setEditState(prev => ({
+                          ...prev,
+                          tags: {
+                            add: cleaned,
+                            // If a tag is in add list, ensure it's not also marked for removal
+                            remove: (prev.tags?.remove || []).filter(r => !cleaned.some(t => t.toLowerCase() === r.toLowerCase())),
+                          },
+                        }));
+                      }}
+                      placeholder="Add a tag..."
+                    />
                   </div>
 
                   {/* Remove Existing Tags */}
@@ -1609,6 +1589,81 @@ export function BulkEditDrawer({
                       Current: {commonValues.filamentUsed}
                     </p>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Print Settings (STL-only) */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="print-settings-field"
+                  checked={fieldSelection.printSettings}
+                  onCheckedChange={() => handleFieldToggle("printSettings")}
+                  disabled={!hasAnyStlSelected}
+                />
+                <Label htmlFor="print-settings-field" className="font-medium flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  Print Settings (STL only)
+                </Label>
+              </div>
+
+              {fieldSelection.printSettings && (
+                <div className="ml-6 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    These settings apply only to STL models. 3MF models store print settings internally and will be updated by Regenerate.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Layer Height</Label>
+                      <Input
+                        placeholder="e.g. 0.2mm"
+                        value={editState.printSettings?.layerHeight || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), layerHeight: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Infill</Label>
+                      <Input
+                        placeholder="e.g. 15%"
+                        value={editState.printSettings?.infill || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), infill: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Nozzle</Label>
+                      <Input
+                        placeholder="e.g. 0.4mm"
+                        value={editState.printSettings?.nozzle || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), nozzle: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm">Printer</Label>
+                      <Input
+                        placeholder="e.g. Bambu X1C"
+                        value={editState.printSettings?.printer || ""}
+                        onChange={(e) => setEditState(prev => ({
+                          ...prev,
+                          printSettings: { ...(prev.printSettings || {}), printer: e.target.value }
+                        }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!hasAnyStlSelected && (
+                <div className="ml-6">
+                  <p className="text-xs text-muted-foreground">No STL models selected.</p>
                 </div>
               )}
             </div>

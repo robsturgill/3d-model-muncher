@@ -28,6 +28,14 @@
   - Each model file (`.3mf`, `.stl`) gets a `-munchie.json` file with extracted info, thumbnails, tags, and print settings
   - Duplicate detection via MD5 hash
   - Rescans preserve user data
+
+- **Print Settings Ownership:**
+  - 3MF (`.3mf`) files: printSettings come from the parsed 3MF. Edits to printSettings in the UI are ignored on save, and regenerate will refresh these values from the 3MF.
+  - STL (`.stl`) files: printSettings are user-managed in the `-stl-munchie.json` and must persist across saves and regenerate.
+  - Regenerate behavior: for STL, existing non-empty printSettings fields (layerHeight, infill, nozzle, printer) are preserved over parsed defaults; for 3MF, values always refresh from the file.
+  - UI behavior:
+    - ModelDetailsDrawer: printSettings inputs are shown for STL, hidden for 3MF; the current printer value is displayed as a label.
+    - BulkEditDrawer: printSettings apply only to STL selections. Blank inputs mean “no change” and won’t be sent to avoid unintended clears.
 - **API Endpoints:**
   - See `server.js` for `/api/models`, `/api/save-model`, `/api/scan-models`, `/api/validate-3mf`, `/api/delete-models`
 - **Frontend:**

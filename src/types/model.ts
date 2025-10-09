@@ -44,6 +44,8 @@ export interface Model {
     layerHeight: string;
     infill: string;
     nozzle: string;
+    // Optional printer profile/model name; editable for STL only
+    printer?: string;
   };
 
   // Added for file integrity and duplicate detection

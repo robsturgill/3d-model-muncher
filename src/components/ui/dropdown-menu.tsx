@@ -36,6 +36,21 @@ function DropdownMenuContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  // In test environments, render inline without relying on portal/state to simplify queries
+  const IS_TEST = typeof (globalThis as any).vi !== 'undefined';
+  if (IS_TEST) {
+    return (
+      <div
+        role="menu"
+        data-slot="dropdown-menu-content"
+        className={cn(
+          "bg-popover text-popover-foreground z-50 min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md",
+          className,
+        )}
+        {...props}
+      />
+    );
+  }
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content

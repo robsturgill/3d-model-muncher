@@ -7,6 +7,7 @@ interface PrintSettings {
   layerHeight: string;
   infill: string;
   nozzle: string;
+  printer?: string;
 }
 
 interface ModelMetadata {
@@ -85,7 +86,8 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
     printSettings: {
       layerHeight: "",
       infill: "",
-      nozzle: ""
+      nozzle: "",
+      printer: undefined
     },
     price: 0,
     userDefined: {}
@@ -316,7 +318,8 @@ export async function parseSTL(filePath: string, id: string, precomputedHash?: s
     printSettings: {
       layerHeight: "",
       infill: "",
-      nozzle: ""
+      nozzle: "",
+      printer: undefined
     },
     price: 0,
     userDefined: {}
