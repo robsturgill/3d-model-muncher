@@ -859,8 +859,8 @@ function AppContent() {
     try {
       const setIds = new Set(col.modelIds || []);
       const base = models.filter(m => setIds.has(m.id));
-      // Default behavior is to not show hidden models unless explicitly enabled
-      setFilteredModels(base.filter(m => !m.hidden));
+      // In collection view, show all models in the collection including hidden
+      setFilteredModels(base);
     } catch { /* ignore */ }
     // Reset the sidebar controls to defaults for the new context
     setSidebarResetKey(k => k + 1);
@@ -870,8 +870,45 @@ function AppContent() {
       const r = await fetch('/api/collections');
       if (r.ok) {
         const data = await r.json();
-        if (data && data.success && Array.isArray(data.collections)) setCollections(data.collections);
+        if (data && data.success && Array.isArray(data.collections)) {
+          setCollections(data.collections);
+          // Keep activeCollection in sync with latest modelIds
+          if (activeCollection) {
+            const updatedActive = data.collections.find((c: any) => c.id === activeCollection.id);
+            if (updatedActive) setActiveCollection(updatedActive);
+          }
+        }
       }
+      // Also refresh models so any hidden flags updated by collection creation are reflected in UI
+      try {
+        const resp = await fetch('/api/models');
+        if (resp.ok) {
+          const updatedModels = await resp.json() as Model[];
+          setModels(updatedModels);
+          // Reapply filters based on current view
+          if (currentView === 'collection-view' && activeCollection) {
+            const setIds = new Set(activeCollection.modelIds || []);
+            let base = updatedModels.filter(m => setIds.has(m.id));
+            const filtersForCollection = {
+              ...lastFilters,
+              fileType: lastFilters.fileType?.toLowerCase() === 'collections' ? 'all' : lastFilters.fileType,
+              // In collection view, default to including hidden unless explicitly toggled by user later
+              showHidden: true,
+            } as any as FilterState;
+            const filtered = applyFiltersToModels(base, filtersForCollection);
+            const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+            setFilteredModels(sorted);
+          } else {
+            if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
+              setFilteredModels([]);
+            } else {
+              const filtered = applyFiltersToModels(updatedModels, lastFilters as FilterState);
+              const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
+              setFilteredModels(sorted);
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
     } catch (e) { /* ignore */ }
   };
   // Listen for collection-created events from child dialogs
@@ -890,6 +927,13 @@ function AppContent() {
     window.addEventListener('collection-created', handler as any);
     return () => window.removeEventListener('collection-created', handler as any);
   }, []);
+
+  // Listen for collection-updated events from ModelDetailsDrawer (add/remove)
+  useEffect(() => {
+    const handler = () => { refreshCollections(); };
+    window.addEventListener('collection-updated', handler);
+    return () => window.removeEventListener('collection-updated', handler);
+  }, [activeCollection, lastFilters, currentView]);
 
   const handleDonationClick = () => {
     setIsDonationDialogOpen(true);
@@ -982,7 +1026,8 @@ function AppContent() {
             license: appConfig?.filters?.defaultLicense || 'all',
             fileType: 'all',
             tags: [],
-            showHidden: false,
+            // In collection view, default to showing hidden items so the collection shows everything
+            showHidden: currentView === 'collection-view',
           }}
         />
       </div>
@@ -1130,7 +1175,8 @@ function AppContent() {
                   try {
                     const setIds = new Set(col.modelIds || []);
                     const base = models.filter(m => setIds.has(m.id));
-                    setFilteredModels(base.filter(m => !m.hidden));
+                    // In collection view, include hidden models that belong to the collection
+                    setFilteredModels(base);
                   } catch { /* ignore */ }
                   setSidebarResetKey(k => k + 1);
                 }

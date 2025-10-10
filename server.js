@@ -183,6 +183,55 @@ function saveCollections(collections) {
   }
 }
 
+// Reconcile model hidden flags: any model that is not a member of any collection
+// should not remain hidden. We scan all collections to compute the complete set
+// of member IDs, then iterate munchie files and clear `hidden` when an ID is
+// not present in any collection. This is intended to keep the main library
+// visible unless a model is part of a set/collection.
+function reconcileHiddenFlags() {
+  try {
+    const cols = loadCollections();
+    const inAnyCollection = new Set();
+    for (const c of cols) {
+      const ids = Array.isArray(c?.modelIds) ? c.modelIds : [];
+      for (const id of ids) {
+        if (typeof id === 'string' && id) inAnyCollection.add(id);
+      }
+    }
+
+    const modelsRoot = getAbsoluteModelsPath();
+    (function scan(dir) {
+      let entries = [];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { /* ignore */ }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { scan(full); continue; }
+        if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+          try {
+            const raw = fs.readFileSync(full, 'utf8');
+            const data = raw ? JSON.parse(raw) : null;
+            if (!data || typeof data !== 'object') continue;
+            const id = data.id;
+            if (!id || typeof id !== 'string') continue;
+            // If currently hidden but not in any collection, unhide
+            if (data.hidden === true && !inAnyCollection.has(id)) {
+              data.hidden = false;
+              try { data.lastModified = new Date().toISOString(); } catch {}
+              const safeTarget = protectModelFileWrite(full);
+              const tmp = safeTarget + '.tmp';
+              fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+              fs.renameSync(tmp, safeTarget);
+              try { postProcessMunchieFile(safeTarget); } catch {}
+            }
+          } catch { /* ignore per-file errors */ }
+        }
+      }
+    })(modelsRoot);
+  } catch (e) {
+    console.warn('reconcileHiddenFlags error:', e && e.message ? e.message : e);
+  }
+}
+
 function makeId(prefix = 'col') {
   const ts = Date.now().toString(36);
   const rnd = Math.random().toString(36).slice(2, 7);
@@ -231,17 +280,115 @@ app.post('/api/collections', (req, res) => {
       if (idx === -1) {
         return res.status(404).json({ success: false, error: 'Collection not found' });
       }
-      const updated = { ...cols[idx], name, description, modelIds: normalizedIds, coverModelId, lastModified: now };
+      const prev = cols[idx] || { modelIds: [] };
+      const updated = { ...prev, name, description, modelIds: normalizedIds, coverModelId, lastModified: now };
       if (typeof category === 'string') updated.category = category;
       if (Array.isArray(tags)) updated.tags = Array.from(new Set(tags.filter(t => typeof t === 'string')));
       if (Array.isArray(images)) updated.images = images.filter(s => typeof s === 'string');
       cols[idx] = updated;
       if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
+      // Hide any newly added models (those present in updated.modelIds but not in prev.modelIds)
+      try {
+        const before = new Set(Array.isArray(prev.modelIds) ? prev.modelIds : []);
+        const added = (Array.isArray(updated.modelIds) ? updated.modelIds : []).filter(mid => !before.has(mid));
+        if (added.length > 0) {
+          const modelsRoot = getAbsoluteModelsPath();
+          const idToJsonPath = new Map();
+          (function scan(dir) {
+            let entries = [];
+            try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch {}
+            for (const entry of entries) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) { scan(full); continue; }
+              if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+                try {
+                  const raw = fs.readFileSync(full, 'utf8');
+                  const parsed = raw ? JSON.parse(raw) : null;
+                  if (parsed && typeof parsed.id === 'string') {
+                    idToJsonPath.set(parsed.id, full);
+                  }
+                } catch { /* ignore */ }
+              }
+            }
+          })(modelsRoot);
+          for (const mid of added) {
+            const jsonPath = idToJsonPath.get(mid);
+            if (!jsonPath) continue;
+            try {
+              const raw = fs.existsSync(jsonPath) ? fs.readFileSync(jsonPath, 'utf8') : '';
+              const data = raw ? JSON.parse(raw) : {};
+              if (!data || typeof data !== 'object') continue;
+              if (data.hidden === true) continue;
+              data.hidden = true;
+              try { data.lastModified = new Date().toISOString(); } catch {}
+              const safeTarget = protectModelFileWrite(jsonPath);
+              const tmp = safeTarget + '.tmp';
+              fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+              fs.renameSync(tmp, safeTarget);
+              try { postProcessMunchieFile(safeTarget); } catch {}
+            } catch (e) {
+              console.warn('Failed to mark model hidden when updating collection:', mid, e && e.message ? e.message : e);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Error while marking models hidden during collection update:', e && e.message ? e.message : e);
+      }
+      // After update, ensure models no longer in any collection are unhidden
+      try { reconcileHiddenFlags(); } catch {}
       result = updated;
     } else {
       const newCol = { id: makeId(), name, description, modelIds: normalizedIds, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
       cols.push(newCol);
       if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
+      // Newly created collection: mark included models as hidden in their munchie files
+      try {
+        const modelsRoot = getAbsoluteModelsPath();
+        // Build an index of munchie files by model id for faster lookup
+        const idToJsonPath = new Map();
+        (function scan(dir) {
+          let entries = [];
+          try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch {}
+          for (const entry of entries) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) { scan(full); continue; }
+            if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+              try {
+                const raw = fs.readFileSync(full, 'utf8');
+                const parsed = raw ? JSON.parse(raw) : null;
+                if (parsed && typeof parsed.id === 'string') {
+                  idToJsonPath.set(parsed.id, full);
+                }
+              } catch { /* ignore parse errors */ }
+            }
+          }
+        })(modelsRoot);
+
+        for (const mid of normalizedIds) {
+          const jsonPath = idToJsonPath.get(mid);
+          if (!jsonPath) continue;
+          try {
+            const raw = fs.existsSync(jsonPath) ? fs.readFileSync(jsonPath, 'utf8') : '';
+            const data = raw ? JSON.parse(raw) : {};
+            if (!data || typeof data !== 'object') continue;
+            if (data.hidden === true) continue; // already hidden
+            data.hidden = true;
+            // Keep created if present; update lastModified
+            try { data.lastModified = new Date().toISOString(); } catch {}
+            const safeTarget = protectModelFileWrite(jsonPath);
+            const tmp = safeTarget + '.tmp';
+            fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+            fs.renameSync(tmp, safeTarget);
+            try { postProcessMunchieFile(safeTarget); } catch {}
+          } catch (e) {
+            console.warn('Failed to mark model hidden for collection creation:', mid, e && e.message ? e.message : e);
+          }
+        }
+      } catch (e) {
+        console.warn('Error while marking models hidden during collection creation:', e && e.message ? e.message : e);
+      }
+      // After creation, also reconcile to unhide anything not in any collection
+      try { reconcileHiddenFlags(); } catch {}
       result = newCol;
     }
     res.json({ success: true, collection: result });
@@ -260,6 +407,8 @@ app.delete('/api/collections/:id', (req, res) => {
     if (idx === -1) return res.status(404).json({ success: false, error: 'Not found' });
     const removed = cols.splice(idx, 1)[0];
     if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collections' });
+    // After deletion, some models may no longer belong to any collection; unhide them
+    try { reconcileHiddenFlags(); } catch {}
     res.json({ success: true, deleted: removed });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Server error' });

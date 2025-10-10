@@ -17,10 +17,11 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle } from "lucide-react";
 import TagsInput from "./TagsInput";
 import { Download } from "lucide-react";
 import { toast } from 'sonner';
+import type { Collection } from "../types/collection";
 import { triggerDownload } from "../utils/downloadUtils";
 
 interface ModelDetailsDrawerProps {
@@ -60,6 +61,27 @@ export function ModelDetailsDrawer({
   const originalTopLevelDescriptionRef = useRef<string | null>(null);
   const originalUserDefinedDescriptionRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // Add-to-Collection UI state
+  const [isAddToCollectionOpen, setIsAddToCollectionOpen] = useState(false);
+  const [addTargetCollectionId, setAddTargetCollectionId] = useState<string | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  // Remove-from-Collection UI state
+  const [isRemoveFromCollectionOpen, setIsRemoveFromCollectionOpen] = useState(false);
+  const [removeTargetCollectionId, setRemoveTargetCollectionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Load collections when the drawer opens so we can offer Add-to-Collection.
+    (async () => {
+      try {
+        const resp = await fetch('/api/collections', { cache: 'no-store' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.success && Array.isArray(data.collections)) setCollections(data.collections);
+        }
+      } catch {/* ignore */}
+    })();
+  }, [isOpen]);
 
 
   // Suggested tags for each category - now dynamically based on current categories
@@ -1918,10 +1940,12 @@ export function ModelDetailsDrawer({
                   </Button>
                 </>
               ) : (
-                <Button onClick={startEditing} variant="outline" size="sm" className="gap-2 mr-2">
-                  <Edit3 className="h-4 w-4" />
-                  Edit
-                </Button>
+                <>
+                  <Button onClick={startEditing} variant="outline" size="sm" className="gap-2">
+                    <Edit3 className="h-4 w-4" />
+                    Edit
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -1954,6 +1978,8 @@ export function ModelDetailsDrawer({
               </div>
             </div>
           </div>
+
+          
 
           {/* Model Viewer with Toggle */}
           <div className="space-y-4">
@@ -2166,6 +2192,34 @@ export function ModelDetailsDrawer({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Collection actions placed below the model preview */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+            <Button
+              onClick={() => setIsAddToCollectionOpen(true)}
+              variant="outline"
+              size="sm"
+              className="justify-start gap-2 w-full"
+              title="Add this model to an existing collection"
+              aria-label="Add current to collection"
+              disabled={!collections || collections.length === 0}
+            >
+              <List className="h-4 w-4" />
+              Add to Collection
+            </Button>
+            <Button
+              onClick={() => setIsRemoveFromCollectionOpen(true)}
+              variant="outline"
+              size="sm"
+              className="justify-start gap-2 w-full"
+              title="Remove this model from a collection"
+              aria-label="Remove current from collection"
+              disabled={!collections.some(c => Array.isArray(c.modelIds) && c.modelIds.includes(currentModel.id))}
+            >
+              <MinusCircle className="h-4 w-4" />
+              Remove from Collection
+            </Button>
           </div>
 
           {/* Print Settings */}
@@ -2927,6 +2981,112 @@ export function ModelDetailsDrawer({
           )}
           </div>
         </ScrollArea>
+
+        {/* Add to existing collection modal */}
+        {isAddToCollectionOpen && currentModel && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setIsAddToCollectionOpen(false)}>
+            <div className="bg-card border rounded shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+              <div className="font-semibold mb-3">Add to collection</div>
+              <div className="space-y-2">
+                <Select value={addTargetCollectionId || ''} onValueChange={(val) => setAddTargetCollectionId(val)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a collection" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(collections || []).map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button variant="ghost" size="sm" onClick={() => setIsAddToCollectionOpen(false)}>Cancel</Button>
+                  <Button
+                    size="sm"
+                    disabled={!addTargetCollectionId}
+                    onClick={async () => {
+                      try {
+                        const col = (collections || []).find(c => c.id === addTargetCollectionId);
+                        if (!col) return;
+                        const nextIds = Array.from(new Set([...(col.modelIds || []), currentModel.id]));
+                        const resp = await fetch('/api/collections', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: col.id, name: col.name, description: col.description || '', modelIds: nextIds, category: (col as any).category || '', tags: (col as any).tags || [], images: (col as any).images || [], coverModelId: (col as any).coverModelId })
+                        });
+                        if (resp.ok) {
+                          setIsAddToCollectionOpen(false);
+                          setAddTargetCollectionId(null);
+                          toast.success('Added to collection');
+                          // Optionally refresh collections/models for latest hidden flag
+                          try { await fetch('/api/collections', { cache: 'no-store' }); } catch {}
+                        } else {
+                          toast.error('Failed to add to collection');
+                        }
+                      } catch {
+                        toast.error('Failed to add to collection');
+                      }
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Remove from collection modal */}
+        {isRemoveFromCollectionOpen && currentModel && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setIsRemoveFromCollectionOpen(false)}>
+            <div className="bg-card border rounded shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+              <div className="font-semibold mb-3">Remove from collection</div>
+              <div className="space-y-2">
+                <Select value={removeTargetCollectionId || ''} onValueChange={(val) => setRemoveTargetCollectionId(val)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a collection" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(collections || []).filter(c => Array.isArray(c.modelIds) && c.modelIds.includes(currentModel.id)).map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button variant="ghost" size="sm" onClick={() => setIsRemoveFromCollectionOpen(false)}>Cancel</Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={!removeTargetCollectionId}
+                    onClick={async () => {
+                      try {
+                        const col = (collections || []).find(c => c.id === removeTargetCollectionId);
+                        if (!col) return;
+                        const nextIds = (col.modelIds || []).filter((id: string) => id !== currentModel.id);
+                        const resp = await fetch('/api/collections', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: col.id, name: col.name, description: col.description || '', modelIds: nextIds, category: (col as any).category || '', tags: (col as any).tags || [], images: (col as any).images || [], coverModelId: (col as any).coverModelId })
+                        });
+                        if (resp.ok) {
+                          setIsRemoveFromCollectionOpen(false);
+                          setRemoveTargetCollectionId(null);
+                          toast.success('Removed from collection');
+                          try { window.dispatchEvent(new CustomEvent('collection-updated', { detail: { id: col.id } })); } catch {}
+                        } else {
+                          toast.error('Failed to remove from collection');
+                        }
+                      } catch {
+                        toast.error('Failed to remove from collection');
+                      }
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
