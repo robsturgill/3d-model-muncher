@@ -1,3 +1,10 @@
+## [0.14.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.0...v0.14.1) (2025-10-10)
+
+
+### Bug Fixes
+
+* implement add/remove model from collection functionality and update hidden model handling ([774cada](https://github.com/robsturgill/3d-model-muncher/commit/774cada1e49b78e7c211c181a9b27bc03ad5cd5c))
+
 # [0.14.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.13.3...v0.14.0) (2025-10-09)
 
 
