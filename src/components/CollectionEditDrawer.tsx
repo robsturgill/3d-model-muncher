@@ -18,9 +18,11 @@ interface Props {
   onSaved?: (updated: Collection) => void;
   // When creating a new collection, supply model IDs to include
   initialModelIds?: string[];
+  // Optional: when provided, allows removing selected models from this collection
+  removalCollection?: Collection | null;
 }
 
-export default function CollectionEditDrawer({ open, onOpenChange, collection, categories, onSaved, initialModelIds = [] }: Props) {
+export default function CollectionEditDrawer({ open, onOpenChange, collection, categories, onSaved, initialModelIds = [], removalCollection = null }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   // Default to 'Uncategorized' when not explicitly set
@@ -29,6 +31,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
   const [images, setImages] = useState<string[]>([]);
   // Tags are now edited via shared TagsInput
   const [isSaving, setIsSaving] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
   // Existing collections (for adding selected models to an existing one)
   const [existingCollections, setExistingCollections] = useState<Collection[]>([]);
   const [selectedExistingId, setSelectedExistingId] = useState<string>('');
@@ -145,6 +148,42 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
     }
   };
 
+  const removalTarget = removalCollection ?? collection;
+  const removableIds = Array.isArray(initialModelIds) ? initialModelIds.filter(id => (removalTarget?.modelIds || []).includes(id)) : [];
+  const canRemove = !!removalTarget?.id && removableIds.length > 0 && !isRemoving;
+
+  const handleRemoveSelected = async () => {
+    if (!removalTarget?.id || removableIds.length === 0) return;
+    setIsRemoving(true);
+    try {
+      const remainingIds = (removalTarget.modelIds || []).filter(id => !removableIds.includes(id));
+      const payload = {
+        id: removalTarget.id,
+        name: removalTarget.name,
+        description: removalTarget.description || '',
+        modelIds: remainingIds,
+        category: (removalTarget as any).category || '',
+        tags: (removalTarget as any).tags || [],
+        images: (removalTarget as any).images || [],
+        coverModelId: (removalTarget as any).coverModelId,
+      };
+
+      const resp = await fetch('/api/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const res = await resp.json();
+      if (!resp.ok || !res.success) throw new Error(res?.error || 'Failed to remove items');
+      onSaved?.(res.collection);
+      onOpenChange(false);
+    } catch (err) {
+      console.error('Failed to remove models from collection:', err);
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -194,6 +233,26 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-8rem)] pr-2">
           <div className="space-y-4 p-4">
+            {removalTarget?.id && removableIds.length > 0 && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-destructive">Remove from collection</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Remove {removableIds.length} item{removableIds.length === 1 ? '' : 's'} from "{removalTarget.name}".
+                    This only affects the current collection and won’t delete the model files.
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="gap-2"
+                  onClick={(e) => { e.stopPropagation(); handleRemoveSelected(); }}
+                  disabled={!canRemove}
+                >
+                  {isRemoving ? 'Removing…' : 'Remove selected from collection'}
+                </Button>
+              </div>
+            )}
             {/* Create/Edit mode toggle (create flow only) */}
             {!collection?.id && (
               <div className="flex items-center justify-between">

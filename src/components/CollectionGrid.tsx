@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { Model } from '../types/model';
+import type { Collection } from '../types/collection';
 import { ModelCard } from './ModelCard';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
@@ -16,6 +17,7 @@ interface CollectionGridProps {
   onBack: () => void;
   onModelClick: (model: Model) => void;
   config?: AppConfig | null;
+  activeCollection?: Collection | null;
   isSelectionMode?: boolean;
   selectedModelIds?: string[];
   onModelSelection?: (modelId: string, opts?: { shiftKey?: boolean; index?: number }) => void;
@@ -34,6 +36,7 @@ export default function CollectionGrid({
   onBack,
   onModelClick,
   config,
+  activeCollection,
   isSelectionMode = false,
   selectedModelIds = [],
   onModelSelection,
@@ -140,7 +143,8 @@ export default function CollectionGrid({
         open={isCreateCollectionOpen}
         onOpenChange={setIsCreateCollectionOpen}
         collection={null}
-        categories={config?.categories || []}
+  categories={config?.categories || []}
+  removalCollection={activeCollection ?? null}
         initialModelIds={selectedModelIds}
         onSaved={() => {
           setIsCreateCollectionOpen(false);

@@ -1278,6 +1278,7 @@ function AppContent() {
               }}
               onModelClick={handleModelClick}
               config={appConfig}
+              activeCollection={activeCollection}
               isSelectionMode={isSelectionMode}
               selectedModelIds={selectedModelIds}
               onModelSelection={handleModelSelection}
