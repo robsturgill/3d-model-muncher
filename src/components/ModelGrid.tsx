@@ -4,6 +4,7 @@ import { AppConfig } from "../types/config";
 import type { Collection } from "../types/collection";
 import { ModelCard } from "./ModelCard";
 import { CollectionCard } from "./CollectionCard";
+import { CollectionListRow } from "./CollectionListRow";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 import { ConfigManager } from "../utils/configManager";
@@ -356,24 +357,14 @@ export function ModelGrid({
                   if (it.kind === 'collection') {
                     const c = it.data;
                     return (
-                      <div key={`col-row-${c.id}`} className="flex items-center gap-4 p-4 bg-card rounded-lg border hover:bg-accent/50 hover:border-primary/30 cursor-pointer transition-all duration-200 group shadow-sm hover:shadow-md" onClick={() => onOpenCollection?.(c.id)}>
-                        <div className="flex-shrink-0 pl-1">
-                          <div className="w-14 h-10 rounded bg-muted/40 border border-primary/20 overflow-hidden flex items-center justify-center">
-                            {Array.isArray(c.images) && c.images.length > 0 ? (
-                              <img src={c.images[0]} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-6 h-6 rounded-sm bg-primary/20 border border-primary/40" />
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold">{c.name}</h3>
-                            <Badge variant="secondary">{(c.modelIds || []).length} items</Badge>
-                          </div>
-                          {c.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{c.description}</p>}
-                        </div>
-                      </div>
+                      <CollectionListRow
+                        key={`col-row-${c.id}`}
+                        collection={c}
+                        categories={config.categories || []}
+                        onOpen={(id) => onOpenCollection?.(id)}
+                        onChanged={() => onCollectionChanged?.()}
+                        onDeleted={() => onCollectionChanged?.()}
+                      />
                     );
                   }
                   const model = it.data;
@@ -521,24 +512,14 @@ export function ModelGrid({
               ) : (
                 <>
                   {collections.filter(Boolean).map((c) => (
-                    <div key={`col-row-${c.id}`} className="flex items-center gap-4 p-4 bg-card rounded-lg border hover:bg-accent/50 hover:border-primary/30 cursor-pointer transition-all duration-200 group shadow-sm hover:shadow-md" onClick={() => onOpenCollection?.(c.id)}>
-                      <div className="flex-shrink-0 pl-1">
-                        <div className="w-14 h-10 rounded bg-muted/40 border border-primary/20 overflow-hidden flex items-center justify-center">
-                          {Array.isArray(c.images) && c.images.length > 0 ? (
-                            <img src={c.images[0]} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-sm bg-primary/20 border border-primary/40" />
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-semibold">{c.name}</h3>
-                          <Badge variant="secondary">{(c.modelIds || []).length} items</Badge>
-                        </div>
-                        {c.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{c.description}</p>}
-                      </div>
-                    </div>
+                    <CollectionListRow
+                      key={`col-row-${c.id}`}
+                      collection={c}
+                      categories={config.categories || []}
+                      onOpen={(id) => onOpenCollection?.(id)}
+                      onChanged={() => onCollectionChanged?.()}
+                      onDeleted={() => onCollectionChanged?.()}
+                    />
                   ))}
                   {models.map((model, index) => (
                       <div
