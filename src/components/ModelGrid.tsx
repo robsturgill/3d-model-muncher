@@ -11,10 +11,11 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
-import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive, CheckSquare, Square, Edit, Trash2, X } from "lucide-react";
+import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive } from "lucide-react";
 import { Badge } from "./ui/badge";
 import CollectionEditDrawer from "./CollectionEditDrawer";
 import { SortKey, getModelTimestamp, getCollectionTimestamp } from "../utils/sortUtils";
+import { SelectionModeControls } from "./SelectionModeControls";
 
 interface ModelGridProps {
   models: Model[];
@@ -241,96 +242,17 @@ export function ModelGrid({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Selection Mode Controls */}
-            {isSelectionMode ? (
-              <>
-                <Badge variant="secondary" className="gap-1">
-                  {selectedModelIds.length} selected
-                </Badge>
-                
-                {selectedModelIds.length > 0 && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={onBulkEdit}
-                      className="gap-2"
-                      title="Bulk edit selected models"
-                    >
-                      <Edit className="h-4 w-4" />
-                      <span className="hidden sm:inline">Edit</span>
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsCreateCollectionOpen(true)}
-                      className="gap-2"
-                      title="Create collection from selection"
-                      disabled={selectedModelIds.length === 0}
-                    >
-                      {/* Using List icon to represent grouping */}
-                      <List className="h-4 w-4" />
-                      <span className="hidden sm:inline">Collection</span>
-                    </Button>
-                    
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleBulkDeleteClick}
-                      className="gap-2 text-destructive hover:text-destructive"
-                      title="Delete selected models"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="hidden sm:inline">Delete</span>
-                    </Button>
-                  </>
-                )}
-                
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onSelectAll}
-                    title="Select all visible models"
-                  >
-                    <CheckSquare className="h-4 w-4" />
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onDeselectAll}
-                    title="Deselect all models"
-                  >
-                    <Square className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onToggleSelectionMode}
-                  className="gap-2"
-                  title="Exit selection mode"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="hidden sm:inline">Done</span>
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleSelectionMode}
-                className="gap-2"
-                title="Enter selection mode"
-              >
-                <CheckSquare className="h-4 w-4" />
-                <span className="hidden sm:inline">Select</span>
-              </Button>
-            )}
-
+            <SelectionModeControls
+              isSelectionMode={isSelectionMode}
+              selectedCount={selectedModelIds.length}
+              onEnterSelectionMode={onToggleSelectionMode}
+              onExitSelectionMode={onToggleSelectionMode}
+              onBulkEdit={onBulkEdit}
+              onCreateCollection={() => setIsCreateCollectionOpen(true)}
+              onBulkDelete={onBulkDelete ? handleBulkDeleteClick : undefined}
+              onSelectAll={onSelectAll}
+              onDeselectAll={onDeselectAll}
+            />
             {/* Grid Density Control - Only show in grid mode and not in selection mode */}
             {viewMode === 'grid' && !isSelectionMode && (
               <div className="flex items-center gap-3 min-w-0 hidden md:flex">

@@ -263,12 +263,12 @@ function AppContent() {
   // use centralized applyFiltersToModels from utils/filterUtils
 
   const handleModelClick = (model: Model) => {
-    if (currentView === 'models' && isSelectionMode) {
+    if (isSelectionMode && (currentView === 'models' || currentView === 'collection-view')) {
       handleModelSelection(model.id);
-    } else {
-      setSelectedModel(model);
-      setIsDrawerOpen(true);
+      return;
     }
+    setSelectedModel(model);
+    setIsDrawerOpen(true);
   };
 
   const handleModelUpdate = (updatedModel: Model) => {
@@ -1278,6 +1278,15 @@ function AppContent() {
               }}
               onModelClick={handleModelClick}
               config={appConfig}
+              isSelectionMode={isSelectionMode}
+              selectedModelIds={selectedModelIds}
+              onModelSelection={handleModelSelection}
+              onToggleSelectionMode={toggleSelectionMode}
+              onSelectAll={selectAllModels}
+              onDeselectAll={deselectAllModels}
+              onBulkEdit={handleBulkEdit}
+              onBulkDelete={handleBulkDeleteClick}
+              onCollectionChanged={refreshCollections}
             />
           ) : (
             <DemoPage onBack={handleBackToModels} />
@@ -1286,7 +1295,7 @@ function AppContent() {
       </div>
 
       {/* Model Details Drawer - Show in models, collection-view, and settings views */}
-      {(((currentView === 'models') && !isSelectionMode) || currentView === 'settings' || currentView === 'collection-view') && (
+      {(((currentView === 'models' || currentView === 'collection-view') && !isSelectionMode) || currentView === 'settings') && (
         <ModelDetailsDrawer
           model={selectedModel}
           isOpen={isDrawerOpen}
@@ -1298,8 +1307,8 @@ function AppContent() {
         />
       )}
 
-      {/* Bulk Edit Drawer - Only show in models view */}
-      {currentView === 'models' && (
+      {/* Bulk Edit Drawer - Show in models and collection views */}
+      {(currentView === 'models' || currentView === 'collection-view') && (
         <BulkEditDrawer
           models={getSelectedModels()}
           isOpen={isBulkEditOpen}
