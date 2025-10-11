@@ -43,7 +43,8 @@ import {
   Weight,
   RefreshCw,
   Layers,
-  CircleCheckBig
+  CircleCheckBig,
+  FileCog
 } from "lucide-react";
 import { ImagePlus } from "lucide-react";
 import { RendererPool } from "../utils/rendererPool";
@@ -111,6 +112,7 @@ interface FieldSelection {
   printTime: boolean;
   filamentUsed: boolean;
   printSettings: boolean;
+  generateImages: boolean;
   regenerateMunchie: boolean;
   relatedFiles: boolean;
 }
@@ -146,6 +148,7 @@ export function BulkEditDrawer({
       printTime: false,
       filamentUsed: false,
       printSettings: false,
+      generateImages: false,
       regenerateMunchie: false,
       relatedFiles: false,
     });
@@ -275,6 +278,7 @@ export function BulkEditDrawer({
         printTime: false,
         filamentUsed: false,
         printSettings: false,
+        generateImages: false,
         regenerateMunchie: false,
         relatedFiles: false,
       });
@@ -460,7 +464,10 @@ export function BulkEditDrawer({
   const handleGenerateImages = async (): Promise<Model[]> => {
     if (isGeneratingImages) return [];
     const toProcess = models.filter(m => !modelHasImage(m));
-    if (toProcess.length === 0) return [];
+    if (toProcess.length === 0) {
+      setFieldSelection(prev => ({ ...prev, generateImages: false }));
+      return [];
+    }
 
     // Use the RendererPool to perform offscreen captures; it serializes use of the
     // single WebGL renderer so we don't need to forcibly unregister other viewers.
@@ -518,6 +525,7 @@ export function BulkEditDrawer({
     }
 
     setIsGeneratingImages(false);
+  setFieldSelection(prev => ({ ...prev, generateImages: false }));
 
     // If the user requested close while generation ran, close now
     if (closeRequestedWhileGenerating) {
@@ -879,10 +887,17 @@ export function BulkEditDrawer({
     }
   };
 
+  const hasNonGenerateSelections = Object.entries(fieldSelection).some(
+    ([key, selected]) => key !== 'generateImages' && selected,
+  );
 
+  const hasChanges = hasNonGenerateSelections;
 
-  const hasChanges = Object.values(fieldSelection).some(
-    (selected) => selected,
+  const disableOtherFieldControls = fieldSelection.generateImages || isGeneratingImages;
+  const disableGenerateImagesToggle = isGeneratingImages || hasNonGenerateSelections;
+  const modelsMissingImagesCount = models.reduce(
+    (count, model) => count + (modelHasImage(model) ? 0 : 1),
+    0,
   );
 
   if (models.length === 0) return null;
@@ -917,7 +932,7 @@ export function BulkEditDrawer({
               <div className="flex items-center gap-2">
                   <Button
                     onClick={handleSave}
-                    disabled={!hasChanges || isSaving}
+                    disabled={!hasChanges || isSaving || isGeneratingImages}
                     size="sm"
                     className="gap-2"
                   >
@@ -955,50 +970,13 @@ export function BulkEditDrawer({
             </div>
 
             <Separator />
-
-            {/* Generate Images button */}
-            <div className="space-y-4">
-              <div className="flex items-start">
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={async () => {
-                      const saved = await handleGenerateImages();
-                      // After bulk image generation, refresh model cards using the authoritative saved models
-                      if (onBulkSaved) {
-                        await onBulkSaved(saved);
-                      } else if (onRefresh) {
-                        await onRefresh();
-                      }
-                    }}
-                    // Disabled while generating or when any bulk-edit field is selected
-                    disabled={isGeneratingImages || Object.values(fieldSelection).some(Boolean)}
-                    size="sm"
-                    className="gap-2"
-                  >
-                    {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                    {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : 'Generate Images'}
-                  </Button>
-                </div>
-              </div>
-              <p className="text-sm text-foreground">
-                Only models without existing images will be processed; models that already have images are skipped. This can take some time for large selections and will block other edits — please wait until it completes.
-              </p>
-              {(isGeneratingImages || closeRequestedWhileGenerating) && (
-                <Alert variant="destructive" className="border-red-500 text-red-700 dark:text-red-400">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Image generation in progress</AlertTitle>
-                  <AlertDescription>Images are being generated; the drawer cannot be closed until the operation finishes.</AlertDescription>
-                </Alert>
-              )}
-              <Separator />
-            </div>
-
             {/* Category Field */}
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <Checkbox
                   id="category-field"
                   checked={fieldSelection.category}
+                  disabled={disableOtherFieldControls}
                   onCheckedChange={() =>
                     handleFieldToggle("category")
                   }
@@ -1041,200 +1019,13 @@ export function BulkEditDrawer({
               )}
             </div>
 
-            {/* License Field */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="license-field"
-                  checked={fieldSelection.license}
-                  onCheckedChange={() =>
-                    handleFieldToggle("license")
-                  }
-                />
-                <Label
-                  htmlFor="license-field"
-                  className="font-medium flex items-center gap-2"
-                >
-                  <FileText className="h-4 w-4" />
-                  License
-                </Label>
-              </div>
-
-              {fieldSelection.license && (
-                <div className="ml-6 space-y-2">
-                  <Select
-                    value={editState.license || ""}
-                    onValueChange={handleLicenseChange}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select new license" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableLicenses.map((license) => (
-                        <SelectItem key={license} value={license}>
-                          {license}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {commonValues.license && (
-                    <p className="text-xs text-muted-foreground">
-                      Current: {commonValues.license}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Designer Field */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="designer-field"
-                  checked={fieldSelection.designer}
-                  onCheckedChange={() =>
-                    handleFieldToggle("designer")
-                  }
-                />
-                <Label
-                  htmlFor="designer-field"
-                  className="font-medium flex items-center gap-2"
-                >
-                  <Users className="h-4 w-4" />
-                  Designer
-                </Label>
-              </div>
-
-              {fieldSelection.designer && (
-                <div className="ml-6 space-y-2">
-                  <Input
-                    placeholder="Designer name"
-                    value={editState.designer || ""}
-                    onChange={(e) => handleDesignerChange(e.target.value)}
-                  />
-                  {commonValues.designer && (
-                    <p className="text-xs text-muted-foreground">
-                      Current: {commonValues.designer}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-
-            {/* Print Status Field */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="print-status-field"
-                  checked={fieldSelection.isPrinted}
-                  onCheckedChange={() =>
-                    handleFieldToggle("isPrinted")
-                  }
-                />
-                <Label
-                  htmlFor="print-status-field"
-                  className="font-medium"
-                >
-                  <CircleCheckBig className="h-4 w-4" />
-                  Print Status
-                </Label>
-              </div>
-
-              {fieldSelection.isPrinted && (
-                <div className="ml-6 space-y-2">
-                  <div className="flex items-center space-x-3">
-                    <Switch
-                      checked={editState.isPrinted || false}
-                      onCheckedChange={handlePrintStatusChange}
-                      id="bulk-printed"
-                    />
-                    <Label
-                      htmlFor="bulk-printed"
-                      className="flex items-center gap-2"
-                    >
-                      {editState.isPrinted ? (
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      Mark as{" "}
-                      {editState.isPrinted
-                        ? "Printed"
-                        : "Not Printed"}
-                    </Label>
-                  </div>
-                  {commonValues.isPrinted !== undefined && (
-                    <p className="text-xs text-muted-foreground">
-                      Currently:{" "}
-                      {commonValues.isPrinted
-                        ? "Printed"
-                        : "Not Printed"}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Hidden Status Field */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="hidden-status-field"
-                  checked={fieldSelection.hidden}
-                  onCheckedChange={() =>
-                    handleFieldToggle("hidden")
-                  }
-                />
-                <Label
-                  htmlFor="hidden-status-field"
-                  className="font-medium"
-                >
-                  <Eye className="h-4 w-4" />
-                  Hidden Status
-                </Label>
-              </div>
-
-              {fieldSelection.hidden && (
-                <div className="ml-6 space-y-2">
-                  <div className="flex items-center space-x-3">
-                    <Switch
-                      checked={editState.hidden || false}
-                      onCheckedChange={handleHiddenChange}
-                      id="bulk-hidden"
-                    />
-                    <Label
-                      htmlFor="bulk-hidden"
-                      className="flex items-center gap-2"
-                    >
-                      {editState.hidden ? (
-                        <EyeOff className="h-4 w-4 text-orange-600" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      {editState.hidden
-                        ? "Hide from view"
-                        : "Show in view"}
-                    </Label>
-                  </div>
-                  {commonValues.hidden !== undefined && (
-                    <p className="text-xs text-muted-foreground">
-                      Currently:{" "}
-                      {commonValues.hidden
-                        ? "Hidden"
-                        : "Visible"}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
             {/* Tags Field */}
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <Checkbox
                   id="tags-field"
                   checked={fieldSelection.tags}
+                  disabled={disableOtherFieldControls}
                   onCheckedChange={() =>
                     handleFieldToggle("tags")
                   }
@@ -1312,12 +1103,241 @@ export function BulkEditDrawer({
               )}
             </div>
 
+            {/* Designer Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="designer-field"
+                  checked={fieldSelection.designer}
+                  disabled={disableOtherFieldControls}
+                  onCheckedChange={() =>
+                    handleFieldToggle("designer")
+                  }
+                />
+                <Label
+                  htmlFor="designer-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <Users className="h-4 w-4" />
+                  Designer
+                </Label>
+              </div>
+
+              {fieldSelection.designer && (
+                <div className="ml-6 space-y-2">
+                  <Input
+                    placeholder="Designer name"
+                    value={editState.designer || ""}
+                    onChange={(e) => handleDesignerChange(e.target.value)}
+                  />
+                  {commonValues.designer && (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {commonValues.designer}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* License Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="license-field"
+                  checked={fieldSelection.license}
+                  disabled={disableOtherFieldControls}
+                  onCheckedChange={() =>
+                    handleFieldToggle("license")
+                  }
+                />
+                <Label
+                  htmlFor="license-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  License
+                </Label>
+              </div>
+
+              {fieldSelection.license && (
+                <div className="ml-6 space-y-2">
+                  <Select
+                    value={editState.license || ""}
+                    onValueChange={handleLicenseChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select new license" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableLicenses.map((license) => (
+                        <SelectItem key={license} value={license}>
+                          {license}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {commonValues.license && (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {commonValues.license}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Source Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="source-field"
+                  checked={fieldSelection.source}
+                  disabled={disableOtherFieldControls}
+                  onCheckedChange={() =>
+                    handleFieldToggle("source")
+                  }
+                />
+                <Label
+                  htmlFor="source-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <Globe className="h-4 w-4" />
+                  Source URL
+                </Label>
+              </div>
+
+              {fieldSelection.source && (
+                <div className="ml-6 space-y-2">
+                  <Input
+                    type="url"
+                    placeholder="https://www.thingiverse.com/thing/123456"
+                    value={editState.source || ""}
+                    onChange={(e) =>
+                      handleSourceChange(e.target.value)
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This URL will be set for all selected models
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Print Status Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="print-status-field"
+                  checked={fieldSelection.isPrinted}
+                  disabled={disableOtherFieldControls}
+                  onCheckedChange={() =>
+                    handleFieldToggle("isPrinted")
+                  }
+                />
+                <Label
+                  htmlFor="print-status-field"
+                  className="font-medium"
+                >
+                  <CircleCheckBig className="h-4 w-4" />
+                  Print Status
+                </Label>
+              </div>
+
+              {fieldSelection.isPrinted && (
+                <div className="ml-6 space-y-2">
+                  <div className="flex items-center space-x-3">
+                    <Switch
+                      checked={editState.isPrinted || false}
+                      onCheckedChange={handlePrintStatusChange}
+                      id="bulk-printed"
+                    />
+                    <Label
+                      htmlFor="bulk-printed"
+                      className="flex items-center gap-2"
+                    >
+                      {editState.isPrinted ? (
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      Mark as{" "}
+                      {editState.isPrinted
+                        ? "Printed"
+                        : "Not Printed"}
+                    </Label>
+                  </div>
+                  {commonValues.isPrinted !== undefined && (
+                    <p className="text-xs text-muted-foreground">
+                      Currently:{" "}
+                      {commonValues.isPrinted
+                        ? "Printed"
+                        : "Not Printed"}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Hidden Status Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="hidden-status-field"
+                  checked={fieldSelection.hidden}
+                  disabled={disableOtherFieldControls}
+                  onCheckedChange={() =>
+                    handleFieldToggle("hidden")
+                  }
+                />
+                <Label
+                  htmlFor="hidden-status-field"
+                  className="font-medium"
+                >
+                  <Eye className="h-4 w-4" />
+                  Hidden Status
+                </Label>
+              </div>
+
+              {fieldSelection.hidden && (
+                <div className="ml-6 space-y-2">
+                  <div className="flex items-center space-x-3">
+                    <Switch
+                      checked={editState.hidden || false}
+                      onCheckedChange={handleHiddenChange}
+                      id="bulk-hidden"
+                    />
+                    <Label
+                      htmlFor="bulk-hidden"
+                      className="flex items-center gap-2"
+                    >
+                      {editState.hidden ? (
+                        <EyeOff className="h-4 w-4 text-orange-600" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      {editState.hidden
+                        ? "Hide from view"
+                        : "Show in view"}
+                    </Label>
+                  </div>
+                  {commonValues.hidden !== undefined && (
+                    <p className="text-xs text-muted-foreground">
+                      Currently:{" "}
+                      {commonValues.hidden
+                        ? "Hidden"
+                        : "Visible"}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Notes Field */}
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <Checkbox
                   id="notes-field"
                   checked={fieldSelection.notes}
+                  disabled={disableOtherFieldControls}
                   onCheckedChange={() =>
                     handleFieldToggle("notes")
                   }
@@ -1356,6 +1376,7 @@ export function BulkEditDrawer({
                 <Checkbox
                   id="related-files-field"
                   checked={fieldSelection.relatedFiles}
+                  disabled={disableOtherFieldControls}
                   onCheckedChange={() => handleFieldToggle("relatedFiles")}
                 />
                 <Label htmlFor="related-files-field" className="font-medium flex items-center gap-2">
@@ -1444,84 +1465,6 @@ export function BulkEditDrawer({
               )}
             </div>
 
-            {/* Source Field */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="source-field"
-                  checked={fieldSelection.source}
-                  onCheckedChange={() =>
-                    handleFieldToggle("source")
-                  }
-                />
-                <Label
-                  htmlFor="source-field"
-                  className="font-medium flex items-center gap-2"
-                >
-                  <Globe className="h-4 w-4" />
-                  Source URL
-                </Label>
-              </div>
-
-              {fieldSelection.source && (
-                <div className="ml-6 space-y-2">
-                  <Input
-                    type="url"
-                    placeholder="https://www.thingiverse.com/thing/123456"
-                    value={editState.source || ""}
-                    onChange={(e) =>
-                      handleSourceChange(e.target.value)
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    This URL will be set for all selected models
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Price Field */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Checkbox
-                  id="price-field"
-                  checked={fieldSelection.price}
-                  onCheckedChange={() =>
-                    handleFieldToggle("price")
-                  }
-                />
-                <Label
-                  htmlFor="price-field"
-                  className="font-medium flex items-center gap-2"
-                >
-                  <DollarSign className="h-4 w-4" />
-                  Selling Price
-                </Label>
-              </div>
-
-              {fieldSelection.price && (
-                <div className="ml-6 space-y-2">
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      value={editState.price || ""}
-                      onChange={(e) =>
-                        handlePriceChange(e.target.value)
-                      }
-                      className="pl-9"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    This price will be set for all selected models
-                  </p>
-                </div>
-              )}
-            </div>
-
             {/* Bottom Action Bar */}
             {/* Print Time Field */}
             <div className="space-y-4">
@@ -1529,6 +1472,7 @@ export function BulkEditDrawer({
                 <Checkbox
                   id="print-time-field"
                   checked={fieldSelection.printTime}
+                  disabled={disableOtherFieldControls}
                   onCheckedChange={() =>
                     handleFieldToggle("printTime")
                   }
@@ -1564,6 +1508,7 @@ export function BulkEditDrawer({
                 <Checkbox
                   id="filament-field"
                   checked={fieldSelection.filamentUsed}
+                  disabled={disableOtherFieldControls}
                   onCheckedChange={() =>
                     handleFieldToggle("filamentUsed")
                   }
@@ -1600,10 +1545,10 @@ export function BulkEditDrawer({
                   id="print-settings-field"
                   checked={fieldSelection.printSettings}
                   onCheckedChange={() => handleFieldToggle("printSettings")}
-                  disabled={!hasAnyStlSelected}
+                  disabled={!hasAnyStlSelected || disableOtherFieldControls}
                 />
                 <Label htmlFor="print-settings-field" className="font-medium flex items-center gap-2">
-                  <Layers className="h-4 w-4" />
+                  <FileCog className="h-4 w-4" />
                   Print Settings (STL only)
                 </Label>
               </div>
@@ -1668,12 +1613,113 @@ export function BulkEditDrawer({
               )}
             </div>
 
+            {/* Price Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="price-field"
+                  checked={fieldSelection.price}
+                  disabled={disableOtherFieldControls}
+                  onCheckedChange={() =>
+                    handleFieldToggle("price")
+                  }
+                />
+                <Label
+                  htmlFor="price-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Selling Price
+                </Label>
+              </div>
+
+              {fieldSelection.price && (
+                <div className="ml-6 space-y-2">
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={editState.price || ""}
+                      onChange={(e) =>
+                        handlePriceChange(e.target.value)
+                      }
+                      className="pl-9"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This price will be set for all selected models
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Generate Images Field */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="generate-images-field"
+                  checked={fieldSelection.generateImages}
+                  disabled={disableGenerateImagesToggle}
+                  onCheckedChange={() => handleFieldToggle("generateImages")}
+                />
+                <Label
+                  htmlFor="generate-images-field"
+                  className="font-medium flex items-center gap-2"
+                >
+                  <ImagePlus className="h-4 w-4" />
+                  Generate Images
+                </Label>
+              </div>
+
+              {fieldSelection.generateImages && (
+                <div className="ml-6 space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Only models without existing images will be processed; models that already have images are skipped. This can take some time for large selections and will block other edits until it finishes.
+                  </p>
+                  <div className="flex items-start">
+                    <Button
+                      onClick={async () => {
+                        const saved = await handleGenerateImages();
+                        if (onBulkSaved) {
+                          await onBulkSaved(saved);
+                        } else if (onRefresh) {
+                          await onRefresh();
+                        }
+                      }}
+                      disabled={isGeneratingImages || modelsMissingImagesCount === 0}
+                      size="sm"
+                      className="gap-2"
+                    >
+                      {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                      {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : modelsMissingImagesCount === 0 ? 'No Images Needed' : 'Generate Images'}
+                    </Button>
+                  </div>
+                  {modelsMissingImagesCount === 0 && !isGeneratingImages && (
+                    <p className="text-xs text-muted-foreground">
+                      All selected models already have images. Uncheck this option or select models without images to enable generation.
+                    </p>
+                  )}
+                  {(isGeneratingImages || closeRequestedWhileGenerating) && (
+                    <Alert variant="destructive" className="border-red-500 text-red-700 dark:text-red-400">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Image generation in progress</AlertTitle>
+                      <AlertDescription>Images are being generated; the drawer cannot be closed until the operation finishes.</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Regenerate Munchie Field */}
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <Checkbox
                   id="regenerate-munchie-field"
                   checked={fieldSelection.regenerateMunchie}
+                  disabled={disableOtherFieldControls}
                   onCheckedChange={() =>
                     handleFieldToggle("regenerateMunchie")
                   }
@@ -1708,7 +1754,7 @@ export function BulkEditDrawer({
               </p>
               <Button
                 onClick={handleSave}
-                disabled={!hasChanges || isSaving}
+                disabled={!hasChanges || isSaving || isGeneratingImages}
                 className="gap-2"
               >
                 {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

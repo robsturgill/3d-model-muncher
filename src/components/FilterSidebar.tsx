@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Filter, Layers, X, Settings, FileText, Eye, CircleCheck, FileBox, Tag } from "lucide-react";
+import { Search, Filter, Layers, X, Settings, FileText, Eye, CircleCheckBig, FileBox, Tag } from "lucide-react";
 import * as LucideIcons from 'lucide-react';
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -428,7 +428,7 @@ export function FilterSidebar({
             {/* Print Status */}
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <CircleCheck className="h-4 w-4 text-foreground" />
+                <CircleCheckBig className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">Print Status</label>
               </div>
               <Select value={selectedPrintStatus} onValueChange={handlePrintStatusChange}>
