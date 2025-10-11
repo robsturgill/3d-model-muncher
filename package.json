@@ -1,6 +1,6 @@
 {
       "name": "3d-model-muncher",
-      "version": "0.14.1",
+      "version": "0.14.2",
       "private": true,
       "dependencies": {
             "@google/genai": "^1.20.0",

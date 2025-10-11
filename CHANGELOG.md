@@ -1,3 +1,14 @@
+## [0.14.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.1...v0.14.2) (2025-10-11)
+
+
+### Bug Fixes
+
+* add removal functionality for selected models in collection editing ([b164884](https://github.com/robsturgill/3d-model-muncher/commit/b16488489f7270696c93cb6a8923835d4fe9b711))
+* enhance collection editing with mode toggle, select new or from existing collection ([8dae0cb](https://github.com/robsturgill/3d-model-muncher/commit/8dae0cbb8851f60c1eec7e48099f0792061e7da2)), closes [#50](https://github.com/robsturgill/3d-model-muncher/issues/50)
+* implement selection controls in collection view, refactored select mode to reusable component ([0ab7e70](https://github.com/robsturgill/3d-model-muncher/commit/0ab7e70444782d59c2f8d680a05737db4f6f5e45)), closes [#51](https://github.com/robsturgill/3d-model-muncher/issues/51)
+* improve collection display for list view, added missing actions button for collection ([e818b6a](https://github.com/robsturgill/3d-model-muncher/commit/e818b6a8fb2f1087f11c809fee38242d92cedb8b))
+* reordered bulk edit drawer options, moved image generation into section, updated icons ([acb20d8](https://github.com/robsturgill/3d-model-muncher/commit/acb20d873b493a91c20790e7319654b1940fcf18)), closes [#26](https://github.com/robsturgill/3d-model-muncher/issues/26)
+
 ## [0.14.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.0...v0.14.1) (2025-10-10)
 
 
