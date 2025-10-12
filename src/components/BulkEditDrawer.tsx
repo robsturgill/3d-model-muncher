@@ -308,7 +308,12 @@ export function BulkEditDrawer({
   };
 
   const handleCategoryChange = (value: string) => {
-    setEditState((prev) => ({ ...prev, category: value }));
+    // Normalize to the human-readable label so saved models match ModelDetails behavior
+    const selected = Array.isArray(categories)
+      ? categories.find(c => c.label === value || c.id === value)
+      : undefined;
+    const normalized = selected ? selected.label : value;
+    setEditState((prev) => ({ ...prev, category: normalized }));
   };
 
   const handleLicenseChange = (value: string) => {
@@ -1000,11 +1005,10 @@ export function BulkEditDrawer({
                       <SelectValue placeholder="Select new category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* Render available categories passed in via props. Use category.id as the
-                          value but show the human-friendly label. Include an empty item for
-                          clearing the selection. */}
+                      {/* Render available categories passed in via props. Persist the human-friendly
+                          label so saved models keep the expected casing. */}
                       {Array.isArray(categories) && categories.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
+                        <SelectItem key={c.id} value={c.label}>
                           {c.label}
                         </SelectItem>
                       ))}
