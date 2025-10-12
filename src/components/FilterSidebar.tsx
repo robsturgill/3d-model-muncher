@@ -62,6 +62,7 @@ export function FilterSidebar({
   models
   , initialFilters
 }: FilterSidebarProps) {
+  const TAG_DISPLAY_LIMIT = 25;
   // Initialize filter UI from `initialFilters` (do not persist to localStorage here)
   // Helper to map persisted/default category (which may be id or label) to the category label used by the UI
   const normalizeCategoryToLabel = (raw?: string | null) => {
@@ -103,6 +104,7 @@ export function FilterSidebar({
   const [selectedTags, setSelectedTags] = useState<string[]>(initialFilters?.tags ?? []);
   const [showHidden, setShowHidden] = useState(initialFilters?.showHidden ?? false);
   const [selectedSort, setSelectedSort] = useState<string>(initialFilters?.sortBy ?? 'none');
+  const [showAllTags, setShowAllTags] = useState(false);
 
   // Dynamically get all unique tags from the models
   const getAllTags = (): string[] => {
@@ -129,6 +131,8 @@ export function FilterSidebar({
   };
 
   const availableTags = getAllTags();
+  const remainingTagCount = Math.max(availableTags.length - TAG_DISPLAY_LIMIT, 0);
+  const displayedTags = showAllTags ? availableTags : availableTags.slice(0, TAG_DISPLAY_LIMIT);
 
   // Available licenses (centralized)
   const availableLicenses = LICENSES;
@@ -265,6 +269,7 @@ export function FilterSidebar({
     setSelectedTags([]);
     setShowHidden(false);
     setSelectedSort('none');
+    setShowAllTags(false);
     onFilterChange({
       search: "",
       category: "all",
@@ -525,7 +530,7 @@ export function FilterSidebar({
                 <label className="text-sm font-medium text-foreground">Tags</label>
               </div>
               <div className="flex flex-wrap gap-2">
-                {availableTags.slice(0, 200).map((tag) => (
+                {displayedTags.map((tag) => (
                   <Badge
                     key={tag}
                     variant={selectedTags.includes(tag) ? "default" : "secondary"}
@@ -536,6 +541,16 @@ export function FilterSidebar({
                   </Badge>
                 ))}
               </div>
+              {remainingTagCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllTags((prev) => !prev)}
+                  className="px-2 h-7 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {showAllTags ? "Show fewer tags" : `Show ${remainingTagCount} more`}
+                </Button>
+              )}
               {selectedTags.length > 0 && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs text-muted-foreground">
@@ -556,19 +571,19 @@ export function FilterSidebar({
                 </div>
               )}
             </div>
-
-            <Separator className="bg-border" />
-
-            {/* Clear Filters */}
-            <Button 
-              variant="outline" 
-              onClick={clearFilters}
-              className="w-full bg-background border-border text-foreground hover:bg-accent hover:text-accent-foreground hover:border-primary transition-colors"
-            >
-              Clear All Filters
-            </Button>
           </div>
         </ScrollArea>
+      )}
+      {isOpen && (
+        <div className="p-4 border-t border-sidebar-border bg-sidebar shrink-0">
+          <Button 
+            variant="outline" 
+            onClick={clearFilters}
+            className="w-full bg-background border-border text-foreground hover:bg-accent hover:text-accent-foreground hover:border-primary transition-colors"
+          >
+            Clear All Filters
+          </Button>
+        </div>
       )}
     </div>
   );
