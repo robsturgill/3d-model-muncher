@@ -1,3 +1,14 @@
+## [0.14.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.2...v0.14.3) (2025-10-12)
+
+
+### Bug Fixes
+
+* collections in the main grid now respect the active search, category, and tag filters ([a4e2709](https://github.com/robsturgill/3d-model-muncher/commit/a4e2709298bb4a50cb86e14576858b1a2987064c)), closes [#54](https://github.com/robsturgill/3d-model-muncher/issues/54)
+* drawer handling to close when clicked outside but prevent accidental close when editing ([77ba9eb](https://github.com/robsturgill/3d-model-muncher/commit/77ba9ebf1ed9145b4b4031981fb688019ba595b8))
+* improve dropdown behavior for tag input field, only display after initial character input ([ebe902d](https://github.com/robsturgill/3d-model-muncher/commit/ebe902d5bfd39ef2c51cf8b86f0b97aacdd90233))
+* normalize category selection saved value across edit modes ([60eb2b5](https://github.com/robsturgill/3d-model-muncher/commit/60eb2b57bbb6bc6b6a8aa99e38fadda25aa289d8)), closes [#53](https://github.com/robsturgill/3d-model-muncher/issues/53)
+* toggle for showing more tags in the FilterSidebar, moved clear filter to footer ([8889383](https://github.com/robsturgill/3d-model-muncher/commit/8889383a16e466cd9c251c00aa26bb39b388f989))
+
 ## [0.14.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.1...v0.14.2) (2025-10-11)
 
 
