@@ -45,11 +45,13 @@ const SheetOverlay = React.forwardRef<
       "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
       className,
     )}
-    // Optionally consume interactions so they don't hit underlying UI and to prevent outside-close
-    onPointerDown={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
-    onMouseDown={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
-    onClick={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
-    onDoubleClick={blockInteractions ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
+    // Optionally consume interactions so they don't hit underlying UI and to prevent outside-close.
+    // We only prevent default to keep pointer events bubbling, allowing nested popovers/selects to
+    // detect outside clicks while still avoiding sheet dismissal.
+    onPointerDown={blockInteractions ? (e) => { e.preventDefault(); } : undefined}
+    onMouseDown={blockInteractions ? (e) => { e.preventDefault(); } : undefined}
+    onClick={blockInteractions ? (e) => { e.preventDefault(); } : undefined}
+    onDoubleClick={blockInteractions ? (e) => { e.preventDefault(); } : undefined}
     {...props}
   />
 ));

@@ -188,32 +188,12 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         className="w-full sm:max-w-xl"
+        blockOverlayInteractions={false}
         // Prevent React synthetic events from bubbling through the portal to ancestors (e.g., CollectionCard onClick)
         // Use bubble-phase handlers so child onMouseDown (e.g., TagsInput suggestion items) still fire first.
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
-        onInteractOutside={(e) => {
-          // Prevent accidental close when double-clicking or selecting text
-          e.preventDefault();
-          // Also stop the original event so it doesn't reach underlying cards/grids
-          // @ts-ignore - radix provides originalEvent on detail
-          if ((e as any)?.detail?.originalEvent?.stopPropagation) {
-            // @ts-ignore
-            (e as any).detail.originalEvent.stopPropagation();
-          }
-        }}
-        onPointerDownOutside={(e) => {
-          e.preventDefault();
-          // @ts-ignore
-          if ((e as any)?.detail?.originalEvent?.stopPropagation) {
-            // @ts-ignore
-            (e as any).detail.originalEvent.stopPropagation();
-          }
-        }}
-        onFocusOutside={(e) => {
-          e.preventDefault();
-        }}
         onEscapeKeyDown={(e) => {
           // Avoid losing data accidentally via Escape
           e.preventDefault();

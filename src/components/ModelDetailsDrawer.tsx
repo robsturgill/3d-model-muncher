@@ -1859,6 +1859,10 @@ export function ModelDetailsDrawer({
       setIsWindowFullscreen(false);
       return;
     }
+    if (!open && isEditing) {
+      // Ignore outside-close attempts while editing to prevent losing unsaved work
+      return;
+    }
     if (!open) {
       onClose();
     }
@@ -1906,8 +1910,22 @@ export function ModelDetailsDrawer({
       <SheetContent
         className="w-full sm:max-w-2xl"
         onEscapeKeyDown={handleContentEscapeKeyDown}
-        // Allow outside clicks to close only when not editing and not in fullscreen image mode
-        blockOverlayInteractions={isEditing || isWindowFullscreen}
+        // Allow outside clicks to close unless we're editing or in fullscreen image mode
+        blockOverlayInteractions={isWindowFullscreen}
+        onInteractOutside={(event) => {
+          if (!(isEditing || isWindowFullscreen)) return;
+          const originalEvent = (event as any)?.detail?.originalEvent as Event | undefined;
+          const target = (originalEvent?.target as HTMLElement) || (event.target as HTMLElement | null);
+          // Allow interactions with nested popovers/selects to proceed so their close-on-outside still works
+          if (target && target.closest('[data-slot="select-content"]')) {
+            return;
+          }
+          if (isWindowFullscreenRef.current) {
+            isWindowFullscreenRef.current = false;
+            setIsWindowFullscreen(false);
+          }
+          event.preventDefault();
+        }}
       >
         {/* Sticky Header during editing */}
         <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}> 
