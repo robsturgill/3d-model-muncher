@@ -587,8 +587,6 @@ function AppContent() {
     setIsBulkEditOpen(false);
   };
 
-  // Track current file type filter to control whether collections should be shown
-  const [currentFileType, setCurrentFileType] = useState<string>('all');
 
   const handleFilterChange = (filters: {
     search: string;
@@ -605,7 +603,6 @@ function AppContent() {
     setCurrentSortBy(incomingSort);
     // Track the current selected file type (all | 3mf | stl | collections)
     const incomingFileType = (filters.fileType || 'all').toLowerCase();
-    setCurrentFileType(incomingFileType);
     // If the user is viewing Settings and selects a category in the sidebar,
     // automatically switch to the Models view with that category applied.
     const incomingCategory = (filters.category || 'all');
@@ -957,6 +954,47 @@ function AppContent() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
   }, [models]);
 
+  // Derive the collections that should be visible in the main grid based on current filters
+  const collectionsForDisplay = useMemo(() => {
+    if (!Array.isArray(collections) || collections.length === 0) {
+      return [] as Collection[];
+    }
+
+  const filters = lastFilters;
+    const fileType = (filters.fileType || 'all').toLowerCase();
+    if (fileType === '3mf' || fileType === 'stl') {
+      return [] as Collection[];
+    }
+
+    let filteredList = collections.slice();
+
+    const searchTerm = (filters.search || '').trim().toLowerCase();
+    if (searchTerm) {
+      filteredList = filteredList.filter(col => {
+        const nameMatch = (col.name || '').toLowerCase().includes(searchTerm);
+        const descriptionMatch = (col.description || '').toLowerCase().includes(searchTerm);
+        const tagsMatch = (col.tags || []).some(tag => tag.toLowerCase().includes(searchTerm));
+        return nameMatch || descriptionMatch || tagsMatch;
+      });
+    }
+
+    const hasCategoryFilter = filters.category && filters.category !== 'all';
+    if (hasCategoryFilter) {
+      const targetCategory = (filters.category || '').toLowerCase();
+      filteredList = filteredList.filter(col => (col.category || '').toLowerCase() === targetCategory);
+    }
+
+    if (Array.isArray(filters.tags) && filters.tags.length > 0) {
+      const targetTags = filters.tags.map(tag => tag.toLowerCase());
+      filteredList = filteredList.filter(col => {
+        const collectionTags = (col.tags || []).map(tag => tag.toLowerCase());
+        return targetTags.every(tag => collectionTags.includes(tag));
+      });
+    }
+
+    return filteredList;
+  }, [collections, lastFilters]);
+
   // Don't render until config is loaded
   if (!appConfig) {
     return (
@@ -1161,7 +1199,7 @@ function AppContent() {
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
-              collections={(currentFileType === '3mf' || currentFileType === 'stl') ? [] : sortCollections(collections, currentSortBy)}
+              collections={sortCollections(collectionsForDisplay, currentSortBy)}
               sortBy={currentSortBy}
               onModelClick={handleModelClick}
               onOpenCollection={(id) => {

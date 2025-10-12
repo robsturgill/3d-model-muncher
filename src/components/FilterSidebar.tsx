@@ -443,18 +443,18 @@ export function FilterSidebar({
               </Select>
             </div>
 
-            {/* File Type Filter */}
+            {/* Type Filter */}
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <FileBox className="h-4 w-4 text-foreground" />
-                <label className="text-sm font-medium text-foreground">File Type</label>
+                <label className="text-sm font-medium text-foreground">Type</label>
               </div>
               <Select value={selectedFileType} onValueChange={handleFileTypeChange}>
                 <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
-                  <SelectValue placeholder="All File Types" />
+                  <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Files</SelectItem>
+                  <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="3mf">3MF</SelectItem>
                   <SelectItem value="stl">STL</SelectItem>
                   <SelectItem value="collections">Collections</SelectItem>
