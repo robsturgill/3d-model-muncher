@@ -112,7 +112,13 @@ export default function TagsInput({
     return results;
   }, [suggested, globalTags, baseList, text, caseSensitive]);
 
-  const isOpen = useMemo(() => isFocused && !disabled && filteredSuggestions.length > 0, [isFocused, disabled, filteredSuggestions.length]);
+  // Only open the suggestions dropdown when the input is focused AND
+  // the user has typed at least one non-whitespace character.
+  // This prevents the dropdown from appearing immediately on focus.
+  const isOpen = useMemo(() => {
+    const hasQuery = text.trim().length > 0;
+    return isFocused && !disabled && hasQuery && filteredSuggestions.length > 0;
+  }, [isFocused, disabled, filteredSuggestions.length, text]);
 
   const handleAdd = () => {
     if (disabled) return;
