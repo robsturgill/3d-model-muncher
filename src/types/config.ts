@@ -20,6 +20,7 @@ export interface AppConfig {
     defaultCategory: string;
     defaultPrintStatus: string;
     defaultLicense: string;
+    defaultSortBy?: string;
   };
   lastModified: string;
 }

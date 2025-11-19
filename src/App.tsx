@@ -178,12 +178,15 @@ function AppContent() {
           fileType: 'all',
           tags: [] as string[],
           showHidden: false,
+          sortBy: defaultFilters.defaultSortBy || 'none',
         };
   
   const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
   setFilteredModels(visibleModels);
   // Remember the initial filters for later reapplication
-  setLastFilters({ ...initialFilterState, sortBy: 'none' });
+  setLastFilters(initialFilterState);
+  // Initialize sort state from config
+  setCurrentSortBy((initialFilterState.sortBy || 'none') as SortKey);
   setIsModelsLoading(false);
         // Load collections list
         try {
@@ -1066,6 +1069,7 @@ function AppContent() {
             tags: [],
             // In collection view, default to showing hidden items so the collection shows everything
             showHidden: currentView === 'collection-view',
+            sortBy: appConfig?.filters?.defaultSortBy || 'none',
           }}
         />
       </div>
