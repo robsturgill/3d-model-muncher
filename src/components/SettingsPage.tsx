@@ -1897,6 +1897,25 @@ export function SettingsPage({
                           </SelectContent>
                         </Select>
                       </div>
+
+                      <div className="space-y-2">
+                        <Label>Default Sort By</Label>
+                        <Select 
+                          value={localConfig.filters.defaultSortBy || 'none'}
+                          onValueChange={(value: string) => handleConfigFieldChange('filters.defaultSortBy', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Default</SelectItem>
+                            <SelectItem value="modified_desc">Recently modified (newest)</SelectItem>
+                            <SelectItem value="modified_asc">Modified (oldest)</SelectItem>
+                            <SelectItem value="name_asc">Name A → Z</SelectItem>
+                            <SelectItem value="name_desc">Name Z → A</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>                  
                   <Separator />

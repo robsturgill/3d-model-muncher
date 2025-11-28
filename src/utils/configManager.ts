@@ -29,7 +29,8 @@ export class ConfigManager {
     filters: {
       defaultCategory: "all",
       defaultPrintStatus: "all",
-      defaultLicense: "all"
+      defaultLicense: "all",
+      defaultSortBy: "none"
     },
     lastModified: new Date().toISOString()
   };
@@ -104,7 +105,10 @@ export class ConfigManager {
           : this.defaultConfig.filters.defaultPrintStatus,
         defaultLicense: typeof config?.filters?.defaultLicense === 'string' && config.filters.defaultLicense.trim() !== ''
           ? config.filters.defaultLicense
-          : this.defaultConfig.filters.defaultLicense
+          : this.defaultConfig.filters.defaultLicense,
+        defaultSortBy: typeof config?.filters?.defaultSortBy === 'string' && config.filters.defaultSortBy.trim() !== ''
+          ? config.filters.defaultSortBy
+          : this.defaultConfig.filters.defaultSortBy
       },
       lastModified: config?.lastModified || new Date().toISOString()
     };
