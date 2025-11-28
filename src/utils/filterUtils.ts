@@ -8,6 +8,7 @@ export interface FilterState {
   fileType: string;
   tags: string[];
   showHidden: boolean;
+  showMissingImages: boolean;
 }
 
 export const applyFiltersToModels = (modelsToFilter: Model[], filters: FilterState) => {
@@ -15,6 +16,14 @@ export const applyFiltersToModels = (modelsToFilter: Model[], filters: FilterSta
 
   if (!filters.showHidden) {
     filtered = filtered.filter(model => !model.hidden);
+  }
+
+  if (filters.showMissingImages) {
+    filtered = filtered.filter(model => {
+      const hasParsedImages = model.parsedImages && model.parsedImages.length > 0;
+      const hasUserImages = model.userDefined?.images && model.userDefined.images.length > 0;
+      return !hasParsedImages && !hasUserImages;
+    });
   }
 
   if (filters.search) {

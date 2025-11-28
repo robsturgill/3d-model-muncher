@@ -81,8 +81,8 @@ function AppContent() {
   // Track where to return when leaving a collection view
   const [collectionReturnView, setCollectionReturnView] = useState<ViewType>('models');
   // Track last applied filters so we can reapply when navigating back from a collection or after refresh
-  const [lastFilters, setLastFilters] = useState<{ search: string; category: string; printStatus: string; license: string; fileType: string; tags: string[]; showHidden: boolean; sortBy?: string }>(
-    { search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false, sortBy: 'none' }
+  const [lastFilters, setLastFilters] = useState<{ search: string; category: string; printStatus: string; license: string; fileType: string; tags: string[]; showHidden: boolean; showMissingImages: boolean; sortBy?: string }>(
+    { search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false, showMissingImages: false, sortBy: 'none' }
   );
   // Force sidebar to re-mount to reset its internal filter UI when switching contexts
   const [sidebarResetKey, setSidebarResetKey] = useState(0);
@@ -178,6 +178,7 @@ function AppContent() {
           fileType: 'all',
           tags: [] as string[],
           showHidden: false,
+          showMissingImages: false,
           sortBy: defaultFilters.defaultSortBy || 'none',
         };
   
@@ -599,6 +600,7 @@ function AppContent() {
     fileType: string;
     tags: string[];
     showHidden: boolean;
+    showMissingImages: boolean;
     sortBy?: string;
   }) => {
     // Capture sort selection up front so collections views can react even if we early-return
@@ -636,6 +638,15 @@ function AppContent() {
     // Hidden filter - exclude hidden models unless showHidden is true
     if (!filters.showHidden) {
       filtered = filtered.filter(model => !model.hidden);
+    }
+
+    // Missing images filter - show only models without images
+    if (filters.showMissingImages) {
+      filtered = filtered.filter(model => {
+        const hasParsedImages = model.parsedImages && model.parsedImages.length > 0;
+        const hasUserImages = model.userDefined?.images && model.userDefined.images.length > 0;
+        return !hasParsedImages && !hasUserImages;
+      });
     }
 
     // Search filter - check name and tags
@@ -1069,6 +1080,7 @@ function AppContent() {
             tags: [],
             // In collection view, default to showing hidden items so the collection shows everything
             showHidden: currentView === 'collection-view',
+            showMissingImages: false,
             sortBy: appConfig?.filters?.defaultSortBy || 'none',
           }}
         />

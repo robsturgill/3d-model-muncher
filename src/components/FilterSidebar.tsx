@@ -5,7 +5,6 @@ import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { LICENSES } from '../constants/licenses';
 import { Badge } from "./ui/badge";
-import { Separator } from "./ui/separator";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Category } from "../types/category";
@@ -21,6 +20,7 @@ interface FilterSidebarProps {
     fileType: string;
     tags: string[];
     showHidden: boolean;
+    showMissingImages: boolean;
     sortBy?: string;
   }) => void;
   // Called specifically when a category button is clicked (user intent),
@@ -39,6 +39,7 @@ interface FilterSidebarProps {
     fileType: string;
     tags: string[];
     showHidden: boolean;
+    showMissingImages: boolean;
     sortBy?: string;
   };
 }
@@ -103,6 +104,7 @@ export function FilterSidebar({
   const [selectedFileType, setSelectedFileType] = useState(initialFilters?.fileType ?? "all");
   const [selectedTags, setSelectedTags] = useState<string[]>(initialFilters?.tags ?? []);
   const [showHidden, setShowHidden] = useState(initialFilters?.showHidden ?? false);
+  const [showMissingImages, setShowMissingImages] = useState(initialFilters?.showMissingImages ?? false);
   const [selectedSort, setSelectedSort] = useState<string>(initialFilters?.sortBy ?? 'none');
   const [showAllTags, setShowAllTags] = useState(false);
 
@@ -147,6 +149,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      showMissingImages: showMissingImages,
       sortBy: selectedSort,
     });
   };
@@ -164,6 +167,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      showMissingImages: showMissingImages,
       sortBy: selectedSort,
     });
     // Notify parent explicitly that a category was chosen by user click
@@ -180,6 +184,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      showMissingImages: showMissingImages,
       sortBy: selectedSort,
     });
   };
@@ -194,6 +199,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      showMissingImages: showMissingImages,
       sortBy: selectedSort,
     });
   };
@@ -208,6 +214,7 @@ export function FilterSidebar({
       fileType: value,
       tags: selectedTags,
       showHidden: showHidden,
+      showMissingImages: showMissingImages,
       sortBy: selectedSort,
     });
   };
@@ -222,6 +229,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: showHidden,
+      showMissingImages: showMissingImages,
       sortBy: value,
     });
   };
@@ -242,6 +250,7 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: newSelectedTags,
       showHidden: showHidden,
+      showMissingImages: showMissingImages,
       sortBy: selectedSort,
     });
   };
@@ -256,6 +265,22 @@ export function FilterSidebar({
       fileType: selectedFileType,
       tags: selectedTags,
       showHidden: checked,
+      showMissingImages: showMissingImages,
+      sortBy: selectedSort,
+    });
+  };
+
+  const handleShowMissingImagesChange = (checked: boolean) => {
+    setShowMissingImages(checked);
+    onFilterChange({
+      search: searchTerm,
+      category: selectedCategory,
+      printStatus: selectedPrintStatus,
+      license: selectedLicense,
+      fileType: selectedFileType,
+      tags: selectedTags,
+      showHidden: showHidden,
+      showMissingImages: checked,
       sortBy: selectedSort,
     });
   };
@@ -268,6 +293,7 @@ export function FilterSidebar({
     setSelectedFileType("all");
     setSelectedTags([]);
     setShowHidden(false);
+    setShowMissingImages(false);
     setSelectedSort('none');
     setShowAllTags(false);
     onFilterChange({
@@ -278,6 +304,7 @@ export function FilterSidebar({
       fileType: "all",
       tags: [],
       showHidden: false,
+      showMissingImages: false,
       sortBy: 'none',
     });
   };
@@ -518,6 +545,21 @@ export function FilterSidebar({
                 <Switch
                   checked={showHidden}
                   onCheckedChange={handleShowHiddenChange}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+            </div>
+
+            {/* Show Missing Images */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LucideIcons.ImageOff className="h-4 w-4 text-foreground" />
+                  <label className="text-sm font-medium text-foreground">Show Missing Images</label>
+                </div>
+                <Switch
+                  checked={showMissingImages}
+                  onCheckedChange={handleShowMissingImagesChange}
                   className="data-[state=checked]:bg-primary"
                 />
               </div>

@@ -43,6 +43,7 @@ describe('FilterSidebar sort initialization', () => {
           fileType: 'all',
           tags: [],
           showHidden: false,
+          showMissingImages: false,
           sortBy: 'modified_desc',
         }}
       />

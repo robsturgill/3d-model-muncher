@@ -48,7 +48,7 @@ describe('FilterSidebar file type includes Collections', () => {
         onSettingsClick={() => {}}
         categories={categories}
         models={models}
-        initialFilters={{ search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false }}
+        initialFilters={{ search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false, showMissingImages: false }}
       />
     )
 
