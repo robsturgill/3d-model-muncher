@@ -619,7 +619,7 @@ function AppContent() {
     }
 
     // Determine base set: in collection view, filter within the collection's full set (not the current filtered subset)
-    let filtered = (currentView === 'collection-view' && activeCollection)
+    const baseModels = (currentView === 'collection-view' && activeCollection)
       ? collectionBaseModels
       : models;
 
@@ -635,75 +635,27 @@ function AppContent() {
       }
     }
 
-    // Hidden filter - exclude hidden models unless showHidden is true
-    if (!filters.showHidden) {
-      filtered = filtered.filter(model => !model.hidden);
-    }
-
-    // Missing images filter - show only models without images
-    if (filters.showMissingImages) {
-      filtered = filtered.filter(model => {
-        const hasParsedImages = model.parsedImages && model.parsedImages.length > 0;
-        const hasUserImages = model.userDefined?.images && model.userDefined.images.length > 0;
-        return !hasParsedImages && !hasUserImages;
-      });
-    }
-
-    // Search filter - check name and tags
-    if (filters.search) {
-      filtered = filtered.filter(model =>
-        model.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        (model.tags || []).some(tag => tag.toLowerCase().includes(filters.search.toLowerCase()))
-      );
-    }
-
-    // Category filter
-    if (filters.category && filters.category !== "all") {
-      filtered = filtered.filter(model =>
-        model.category.toLowerCase() === filters.category.toLowerCase()
-      );
-    }
-
-    // Print status filter
-    if (filters.printStatus && filters.printStatus !== "all") {
-      filtered = filtered.filter(model =>
-        filters.printStatus === "printed" ? model.isPrinted : !model.isPrinted
-      );
-    }
-
-    // License filter
-    if (filters.license && filters.license !== "all") {
-      filtered = filtered.filter(model =>
-        model.license === filters.license
-      );
-    }
-
-    // Tag filter - model must have ALL selected tags (AND logic)
-    if (filters.tags && filters.tags.length > 0) {
-      filtered = filtered.filter(model =>
-        filters.tags.every(selectedTag =>
-          (model.tags || []).some(modelTag => 
-            modelTag.toLowerCase() === selectedTag.toLowerCase()
-          )
-        )
-      );
-    }
-
-    // File type filter - check model filePath or modelUrl for extension
-    if (filters.fileType && filters.fileType !== 'all') {
-      const ext = filters.fileType.toLowerCase();
-      filtered = filtered.filter(model => {
-        const path = (model.filePath || model.modelUrl || '').toLowerCase();
-        return path.endsWith('.' + ext);
-      });
-    }
+    // Use centralized filter utility - convert filters to FilterState (excluding sortBy)
+    const filterState: FilterState = {
+      search: filters.search,
+      category: filters.category,
+      printStatus: filters.printStatus,
+      license: filters.license,
+      fileType: filters.fileType,
+      tags: filters.tags,
+      showHidden: filters.showHidden,
+      showMissingImages: filters.showMissingImages,
+    };
+    
+    const filtered = applyFiltersToModels(baseModels, filterState);
 
     // Apply sorting via utility
     const sortKey = (filters.sortBy || 'none') as SortKey;
     const sorted = sortModels(filtered as any[], sortKey);
     setFilteredModels(sorted);
-  // Persist last applied filters for re-use on navigation and refresh
-  setLastFilters({ ...filters });
+    
+    // Persist last applied filters for re-use on navigation and refresh
+    setLastFilters({ ...filters });
     // Reset anchor when the visible list changes order/content
     setSelectionAnchorIndex(null);
     // Update last seen category for future comparisons

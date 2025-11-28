@@ -1,6 +1,33 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, screen } from '@testing-library/react';
+// @vitest-environment jsdom
+import { describe, it, expect, vi } from 'vitest';
+import { render } from '@testing-library/react';
 import React from 'react';
+
+// Mock the local UI Select module used by FilterSidebar to a simple <select>
+vi.mock('../src/components/ui/select', () => {
+  const React = require('react') as typeof import('react')
+  return {
+    Select: ({ children, value, onValueChange, ...rest }: any) => (
+      React.createElement(
+        'div',
+        {
+          'data-testid': 'mock-select-wrapper',
+          'data-select-value': value,
+        },
+        children,
+      )
+    ),
+    SelectTrigger: (props: any) => React.createElement('div', props, props.children),
+    SelectValue: ({ placeholder, children }: any) => React.createElement('span', { 'data-testid': 'mock-select-value' }, children || placeholder || ''),
+    SelectContent: (props: any) => React.createElement(React.Fragment, null, props.children),
+    SelectItem: ({ value, children, ...rest }: any) => React.createElement('option', { value, ...rest }, children),
+    SelectLabel: (props: any) => React.createElement('label', props, props.children),
+    SelectSeparator: (props: any) => React.createElement('hr', props),
+    SelectScrollUpButton: (props: any) => React.createElement('div', props, props.children),
+    SelectScrollDownButton: (props: any) => React.createElement('div', props, props.children),
+  }
+})
+
 import { FilterSidebar } from '../src/components/FilterSidebar';
 import type { Category } from '../src/types/category';
 import type { Model } from '../src/types/model';
@@ -15,15 +42,6 @@ const models: Model[] = [
 ];
 
 describe('FilterSidebar sort initialization', () => {
-  beforeAll(() => {
-    // Ensure a DOM is available even when running this test file alone
-    const { JSDOM } = require('jsdom');
-    const dom = new JSDOM('<!doctype html><html><body></body></html>');
-    // @ts-ignore
-    global.window = dom.window;
-    // @ts-ignore
-    global.document = dom.window.document;
-  });
   it('renders Sort By label and accepts initialFilters.sortBy', () => {
     const onFilterChange = vi.fn();
 
@@ -49,10 +67,14 @@ describe('FilterSidebar sort initialization', () => {
       />
     );
 
-    // Verify the Sort By label is present (basic sanity check)
+    // Verify the Sort By label is present
     expect(getByText('Sort By')).toBeDefined();
 
-    // Interaction with the Select is provided by the ui/select component.
-    // Here we only assert basic render without crashing and label presence.
+    // Verify that the sort select is initialized with the correct value
+    // The Select component is mocked to render a div with data-select-value attribute
+    const selectWrappers = getAllByTestId('mock-select-wrapper');
+    // Find the wrapper with the sort value 'modified_desc'
+    const selectValues = selectWrappers.map((w) => w.getAttribute('data-select-value'));
+    expect(selectValues).toContain('modified_desc');
   });
 });
