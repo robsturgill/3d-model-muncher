@@ -1,3 +1,11 @@
+## [0.14.4](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.3...v0.14.4) (2025-11-28)
+
+
+### Bug Fixes
+
+* add 'Show Missing Images' filter option in FilterSidebar and update related state management ([7fa3a7d](https://github.com/robsturgill/3d-model-muncher/commit/7fa3a7db6d14453355bf089d569fad37161f48f9)), closes [#52](https://github.com/robsturgill/3d-model-muncher/issues/52)
+* add sort by option in settings and update related state management in filters ([32e01c2](https://github.com/robsturgill/3d-model-muncher/commit/32e01c2428b1dc015b84fab9bc2b698439fa7c28))
+
 ## [0.14.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.2...v0.14.3) (2025-10-12)
 
 
