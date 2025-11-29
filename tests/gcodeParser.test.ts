@@ -28,8 +28,8 @@ describe('gcodeParser', () => {
 
     it('should handle hours, minutes, and seconds', () => {
       expect(normalizeTime(3600)).toBe('1h');
-      expect(normalizeTime(3661)).toBe('1h 1m 1s');
-      expect(normalizeTime(5678)).toBe('1h 34m 38s');
+      expect(normalizeTime(3661)).toBe('1h 2m'); // Rounds up 1h 1m 1s -> 1h 2m
+      expect(normalizeTime(5678)).toBe('1h 35m'); // Rounds up 1h 34m 38s -> 1h 35m
     });
 
     it('should handle full day', () => {
@@ -154,7 +154,7 @@ describe('gcodeParser', () => {
       
       const result = parseGcode(content);
       
-      expect(result.printTime).toBe('3h 14m 12s');
+      expect(result.printTime).toBe('3h 15m'); // Rounds up 3h 14m 12s -> 3h 15m
       expect(result.filaments).toHaveLength(4);
       
       // First filament
@@ -201,8 +201,8 @@ describe('gcodeParser', () => {
       
       const result = parseGcode(content);
       
-      // TIME in seconds: 53473 = 14h 51m 13s
-      expect(result.printTime).toBe('14h 51m 13s');
+      // TIME in seconds: 53473 = 14h 51m 13s, rounds up to 14h 52m
+      expect(result.printTime).toBe('14h 52m');
       expect(result.filaments).toHaveLength(1);
       expect(result.filaments[0].length).toBe('22400.00mm'); // 22.4m = 22400mm
     });

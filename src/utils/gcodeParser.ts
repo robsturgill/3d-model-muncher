@@ -16,18 +16,29 @@ export interface GcodeMetadata {
 
 /**
  * Normalize time from seconds to human-readable format (Xh Ym Zs)
+ * If hours are present, rounds up to the next minute and omits seconds
  */
 export function normalizeTime(seconds: number): string {
   if (seconds === 0) return '0s';
   
   const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
+  let minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
   
+  // If hours are present, round up to next minute if there are any seconds
+  if (hours > 0 && secs > 0) {
+    minutes += 1;
+  }
+  
   const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-  if (secs > 0) parts.push(`${secs}s`);
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    // Omit seconds when hours are present
+  } else {
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (secs > 0) parts.push(`${secs}s`);
+  }
   
   return parts.join(' ');
 }
