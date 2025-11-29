@@ -1,3 +1,20 @@
+# [0.15.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.4...v0.15.0) (2025-11-29)
+
+
+### Bug Fixes
+
+* enhance G-code support with improved extraction and file preservation ([48b054a](https://github.com/robsturgill/3d-model-muncher/commit/48b054acbc10edb20de506efe7dd364152a6f4fd))
+* enhance G-code tests, handling with path validation and update README for clarity ([1c14df9](https://github.com/robsturgill/3d-model-muncher/commit/1c14df9d01cac3048809e97252eb85d575417d47))
+* g-code enhancement for storing file with model not just processing ([4243aac](https://github.com/robsturgill/3d-model-muncher/commit/4243aac0ec9e30f7efe83756714802ae2043a2c7))
+* handling related files view button when uploading gcode file types ([6bd80e8](https://github.com/robsturgill/3d-model-muncher/commit/6bd80e85e6efe1fdd502323a43b6e669c51173e0))
+* implement G-code archive filtering in upload and scan processes ([156e689](https://github.com/robsturgill/3d-model-muncher/commit/156e6894a1f070010c92dd8c2233cf1651dd1709))
+* update normalizeTime function to round up minutes when hours are present ([b463f9b](https://github.com/robsturgill/3d-model-muncher/commit/b463f9b507604381e3977dac6ee9a3fbb01c9849))
+
+
+### Features
+
+* add G-code settings and  G-code parsing ([f8283a5](https://github.com/robsturgill/3d-model-muncher/commit/f8283a591f6fe900437167784d546f0acd04f961)), closes [#43](https://github.com/robsturgill/3d-model-muncher/issues/43)
+
 ## [0.14.4](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.3...v0.14.4) (2025-11-28)
 
 
