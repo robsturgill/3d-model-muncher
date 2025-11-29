@@ -126,16 +126,25 @@ export function ModelDetailsDrawer({
   const deriveMunchieCandidate = (raw: string) => {
     let candidate = raw || '';
     try {
+      // G-code files (.gcode and .gcode.3mf) don't have munchie JSON files
+      if (candidate.endsWith('.gcode') || candidate.endsWith('.gcode.3mf')) {
+        return null;
+      }
+      
       if (candidate.endsWith('.3mf')) {
         candidate = candidate.replace(/\.3mf$/i, '-munchie.json');
       } else if (/\.stl$/i.test(candidate)) {
         candidate = candidate.replace(/\.stl$/i, '-stl-munchie.json');
+      } else {
+        // For any other file type, don't try to find a munchie file
+        return null;
       }
       // strip leading /models/ if present
       if (candidate.startsWith('/models/')) candidate = candidate.replace(/^\/models\//, '');
       if (candidate.startsWith('models/')) candidate = candidate.replace(/^models\//, '');
     } catch (e) {
       // ignore and return as-is
+      return null;
     }
     return candidate;
   };
@@ -152,6 +161,11 @@ export function ModelDetailsDrawer({
       await Promise.all(rel.map(async (p: string, idx: number) => {
         try {
           const candidate = deriveMunchieCandidate(p);
+          // If no munchie candidate (e.g., .gcode files), mark as unavailable
+          if (!candidate) {
+            map[idx] = false;
+            return;
+          }
           const url = `/models/${candidate}`;
           // Try a HEAD first to minimize payload; fall back to GET if not allowed
           const resp = await fetch(url, { method: 'HEAD', cache: 'no-store' });
@@ -160,6 +174,10 @@ export function ModelDetailsDrawer({
           try {
             // Fallback to GET check
             const candidate = deriveMunchieCandidate(p);
+            if (!candidate) {
+              map[idx] = false;
+              return;
+            }
             const resp2 = await fetch(`/models/${candidate}`, { method: 'GET', cache: 'no-store' });
             map[idx] = resp2.ok;
           } catch (e2) {
@@ -3130,6 +3148,10 @@ export function ModelDetailsDrawer({
                               e.stopPropagation();
                               try {
                                 let candidate = deriveMunchieCandidate(path);
+                                if (!candidate) {
+                                  try { toast?.error && toast.error('This file type cannot be viewed'); } catch (e) {}
+                                  return;
+                                }
                                 const url = `/models/${candidate}`;
                                 const resp = await fetch(url, { cache: 'no-store' });
                                 if (!resp.ok) {
