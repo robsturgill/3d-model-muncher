@@ -1625,6 +1625,15 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
         const original = (f.originalname || 'upload').replace(/\\/g, '/');
         // sanitize filename
         let base = path.basename(original).replace(/[^a-zA-Z0-9_.\- ]/g, '_');
+        
+        // Check for G-code archives FIRST before general .3mf check (order matters!)
+        const lowerBase = base.toLowerCase();
+        if (lowerBase.endsWith('.gcode.3mf') || lowerBase.endsWith('.3mf.gcode')) {
+          errors.push({ file: original, error: 'G-code archives (.gcode.3mf) should be uploaded via the G-code analysis dialog, not the model upload dialog' });
+          continue;
+        }
+        
+        // Now check for valid extensions
         if (!/\.3mf$/i.test(base) && !/\.stl$/i.test(base)) {
           errors.push({ file: original, error: 'Unsupported file extension' });
           continue;
@@ -2015,11 +2024,16 @@ app.post('/api/hash-check', async (req, res) => {
           
           if (fileType === "3mf") {
             // Only process 3MF files and their JSON companions
-            if (relativePath.toLowerCase().endsWith('.3mf')) {
+            const lowerPath = relativePath.toLowerCase();
+            // Skip G-code archives (.gcode.3mf and .3mf.gcode)
+            if ((lowerPath.endsWith('.gcode.3mf') || lowerPath.endsWith('.3mf.gcode'))) {
+              continue;
+            }
+            if (lowerPath.endsWith('.3mf')) {
               const base = relativePath.replace(/\.3mf$/i, '');
               modelMap[base] = modelMap[base] || {};
               modelMap[base].threeMF = relativePath;
-            } else if (relativePath.toLowerCase().endsWith('-munchie.json')) {
+            } else if (lowerPath.endsWith('-munchie.json')) {
               const base = relativePath.replace(/-munchie\.json$/i, '');
               modelMap[base] = modelMap[base] || {};
               modelMap[base].json = relativePath;
