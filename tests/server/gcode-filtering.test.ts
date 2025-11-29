@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createTempModelsDir, writeJson, setServerModelDir } from './helpers';
+import { createTempModelsDir, setServerModelDir } from './helpers';
 import { scanDirectory } from '../../src/utils/threeMFToJson';
 
 // Import the Express app

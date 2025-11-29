@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
-import { toast } from 'sonner';
 
 // Mock dependencies
 vi.mock('sonner', () => ({
@@ -91,8 +89,6 @@ vi.mock('../src/components/TagsInput', () => ({
     />
   ),
 }));
-
-import { ModelUploadDialog } from '../../src/components/ModelUploadDialog';
 
 describe('ModelUploadDialog - G-code archive filtering', () => {
   beforeEach(() => {

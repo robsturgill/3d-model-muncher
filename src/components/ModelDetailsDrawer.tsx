@@ -789,7 +789,6 @@ export function ModelDetailsDrawer({
       let result;
       try {
         result = await response.json();
-        console.log('[G-code Upload] Server response:', result);
       } catch (parseError) {
         console.error('[G-code Upload] Failed to parse JSON:', parseError);
         toast.error('Server returned invalid response');
@@ -798,7 +797,6 @@ export function ModelDetailsDrawer({
 
       // Check for file exists prompt (can happen with 200 OK status)
       if (result.fileExists && !forceOverwrite) {
-        console.log('[G-code Upload] File exists, showing overwrite dialog');
         setGcodeOverwriteDialog({
           open: true,
           file,
@@ -814,7 +812,6 @@ export function ModelDetailsDrawer({
       }
 
       if (result.success && result.gcodeData) {
-        console.log('[G-code Upload] Successfully parsed G-code data');
         // Build changes object for save-model API
         const changes: any = {
           filePath: currentModel.filePath,
@@ -831,7 +828,14 @@ export function ModelDetailsDrawer({
             ? [...currentModel.related_files] 
             : [];
           
-          if (!relatedFiles.includes(result.gcodeData.gcodeFilePath)) {
+          // Normalize paths for comparison to avoid duplicates with different separators
+          const normalizePath = (p: string) => p.replace(/\\/g, '/').replace(/^\/+/, '');
+          const normalizedNewPath = normalizePath(result.gcodeData.gcodeFilePath);
+          const alreadyExists = relatedFiles.some(
+            (existing: string) => normalizePath(existing) === normalizedNewPath
+          );
+          
+          if (!alreadyExists) {
             relatedFiles.push(result.gcodeData.gcodeFilePath);
             changes.related_files = relatedFiles;
           }
@@ -854,10 +858,8 @@ export function ModelDetailsDrawer({
           toast.error(`Failed to save G-code data: ${saveError.error || saveResp.statusText}`);
         }
       } else {
-        console.error('[G-code Upload] Unexpected response structure:', result);
-        console.error('[G-code Upload] result.success:', result.success);
-        console.error('[G-code Upload] result.gcodeData:', result.gcodeData);
-        toast.error('Unexpected server response - check console for details');
+        console.error('[G-code Upload] Unexpected response:', { success: result.success, hasGcodeData: !!result.gcodeData });
+        toast.error('Unexpected server response');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);

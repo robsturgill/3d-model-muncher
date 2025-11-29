@@ -86,7 +86,8 @@ export function extractGcodeFrom3MF(buffer: Buffer): string {
     }
     
     if (candidates.length === 0) {
-      throw new Error('No .gcode file found in 3MF archive. Expected Metadata/plate_1.gcode or similar.');
+      const foundFiles = Object.keys(unzipped).join(', ');
+      throw new Error(`No .gcode file found in 3MF archive. Expected Metadata/plate_1.gcode or similar. Found files: ${foundFiles}`);
     }
     
     // Sort by priority and use the best match
@@ -144,7 +145,7 @@ export function parseGcode(gcodeContent: string): GcodeMetadata {
       if (match) {
         filamentLengths = parseCSV(match[1]);
       }
-    } else if (trimmed.startsWith(';total filament weight [g]')) {
+    } else if (normalized.startsWith(';total filament weight [g]')) {
       const match = trimmed.match(/:\s*(.+)/);
       if (match) {
         filamentWeights = parseCSV(match[1]);

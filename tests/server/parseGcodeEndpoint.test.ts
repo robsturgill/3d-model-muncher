@@ -1,6 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 
 // Note: These tests are designed to test the /api/parse-gcode endpoint logic
 // In a real implementation, you would use supertest or similar to test the actual endpoint
@@ -358,6 +356,149 @@ describe('parse-gcode API endpoint', () => {
       
       expect(total).toBe(13.5);
       expect(`${total.toFixed(2)}g`).toBe('13.50g');
+    });
+  });
+});
+
+// Integration tests for path traversal security
+import request from 'supertest';
+import app from '../../server';
+import fs from 'fs';
+import { join } from 'path';
+import { createTempModelsDir, setServerModelDir } from './helpers';
+
+describe('/api/parse-gcode path traversal security', () => {
+  const tmp = createTempModelsDir();
+  const modelsDir = tmp.root;
+
+  beforeEach(() => {
+    setServerModelDir(modelsDir);
+    // Create a dummy gcode file for valid access tests
+    const gcodeDir = join(modelsDir, 'test');
+    if (!fs.existsSync(gcodeDir)) fs.mkdirSync(gcodeDir, { recursive: true });
+    fs.writeFileSync(join(gcodeDir, 'valid.gcode'), '; Test G-code\nG28\n', 'utf8');
+  });
+
+  afterEach(() => {
+    // Clean up test files
+    const gcodeFile = join(modelsDir, 'test', 'valid.gcode');
+    if (fs.existsSync(gcodeFile)) fs.unlinkSync(gcodeFile);
+  });
+
+  afterAll(() => tmp.cleanup());
+
+  describe('gcodeFilePath validation', () => {
+    it('should reject paths containing ".."', async () => {
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'test/model.3mf')
+        .field('storageMode', 'parse-only')
+        .field('gcodeFilePath', '../../../etc/passwd');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
+    });
+
+    it('should reject absolute Unix paths', async () => {
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'test/model.3mf')
+        .field('storageMode', 'parse-only')
+        .field('gcodeFilePath', '/etc/passwd');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
+    });
+
+    it('should reject absolute Windows paths', async () => {
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'test/model.3mf')
+        .field('storageMode', 'parse-only')
+        .field('gcodeFilePath', 'C:/Windows/system.ini');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
+    });
+
+    it('should reject UNC paths with forward slashes', async () => {
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'test/model.3mf')
+        .field('storageMode', 'parse-only')
+        .field('gcodeFilePath', '//server/share/file.gcode');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
+    });
+
+    it('should reject UNC paths with backslashes', async () => {
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'test/model.3mf')
+        .field('storageMode', 'parse-only')
+        .field('gcodeFilePath', '\\\\server\\share\\file.gcode');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
+    });
+
+    it('should accept valid relative paths within models directory', async () => {
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'test/model.3mf')
+        .field('storageMode', 'parse-only')
+        .field('gcodeFilePath', 'test/valid.gcode');
+      
+      // Should succeed (200) or at least not be 403
+      expect(res.status).not.toBe(403);
+    });
+  });
+
+  describe('modelFilePath validation in save-and-link mode', () => {
+    it('should reject modelFilePath containing ".."', async () => {
+      const gcodeBuffer = Buffer.from('; Test G-code\nG28\n');
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', '../../../etc/model.3mf')
+        .field('storageMode', 'save-and-link')
+        .attach('file', gcodeBuffer, 'test.gcode');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
+    });
+
+    it('should reject modelFileUrl containing ".."', async () => {
+      const gcodeBuffer = Buffer.from('; Test G-code\nG28\n');
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'test/model.3mf')
+        .field('modelFileUrl', '../../../etc/model.3mf')
+        .field('storageMode', 'save-and-link')
+        .attach('file', gcodeBuffer, 'test.gcode');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
+    });
+
+    it('should reject absolute Windows paths in modelFilePath', async () => {
+      const gcodeBuffer = Buffer.from('; Test G-code\nG28\n');
+      const res = await request(app)
+        .post('/api/parse-gcode')
+        .field('modelFilePath', 'C:/Windows/model.3mf')
+        .field('storageMode', 'save-and-link')
+        .attach('file', gcodeBuffer, 'test.gcode');
+      
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain('Access denied');
     });
   });
 });

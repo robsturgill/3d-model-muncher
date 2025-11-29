@@ -97,6 +97,8 @@ docker-compose up -d
 
 Each 3MF/STL file gets a corresponding `-munchie.json` metadata file containing extracted information like thumbnails, print settings, and user-defined tags. The system uses MD5 hashing for duplicate detection and preserves user data during rescans.
 
+**Note:** G-code files (`.gcode` and `.gcode.3mf`) do **not** get their own munchie.json files. Instead, G-code data is stored in the parent model's munchie.json via the `gcodeData` field, and the G-code file path is added to the `related_files` array when using "save-and-link" mode.
+
 ## G-code Integration
 
 Upload G-code files to automatically extract print metadata including time estimates, filament usage, and material colors.
@@ -109,7 +111,7 @@ Upload G-code files to automatically extract print metadata including time estim
 - Overwrite protection with user prompt
 
 **Data Storage:**
-Parsed G-code data is stored in the model's `gcodeData` field in the munchie.json file. Legacy `printTime` and `filamentUsed` fields are preserved for backward compatibility and manual entry.
+Parsed G-code data is stored in the model's `gcodeData` field in the munchie.json file. G-code files themselves are linked via the `related_files` array (when using save-and-link mode) but do not have separate munchie.json files—all metadata lives in the parent 3MF/STL model's munchie file. Legacy `printTime` and `filamentUsed` fields are preserved for backward compatibility and manual entry.
 
 **Configuration:**
 - **Parse only** (default): Extracts data without saving G-code file

@@ -1768,9 +1768,33 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
     
     // Case 1: Re-analyzing existing G-code file
     if (gcodeFilePath && typeof gcodeFilePath === 'string') {
-      const absGcodePath = path.isAbsolute(gcodeFilePath) 
-        ? gcodeFilePath 
-        : path.join(modelsDir, gcodeFilePath);
+      // Path traversal validation: reject paths containing '..'
+      if (gcodeFilePath.includes('..')) {
+        return res.status(403).json({ success: false, error: 'Access denied: invalid G-code file path' });
+      }
+      
+      // Reject absolute paths (only relative paths within models directory are allowed)
+      if (path.isAbsolute(gcodeFilePath)) {
+        return res.status(403).json({ success: false, error: 'Access denied: absolute paths not allowed' });
+      }
+      
+      // Reject UNC paths (starting with //)
+      if (gcodeFilePath.startsWith('//') || gcodeFilePath.startsWith('\\\\')) {
+        return res.status(403).json({ success: false, error: 'Access denied: UNC paths not allowed' });
+      }
+      
+      // Reject Windows drive paths (e.g., C:/ or C:\)
+      if (/^[a-zA-Z]:[/\\]/.test(gcodeFilePath)) {
+        return res.status(403).json({ success: false, error: 'Access denied: absolute paths not allowed' });
+      }
+      
+      // Resolve path relative to modelsDir and validate it stays within
+      const resolvedModelsDir = path.resolve(modelsDir);
+      const absGcodePath = path.resolve(modelsDir, gcodeFilePath);
+      
+      if (!absGcodePath.startsWith(resolvedModelsDir + path.sep) && absGcodePath !== resolvedModelsDir) {
+        return res.status(403).json({ success: false, error: 'Access denied: path outside models directory' });
+      }
       
       if (!fs.existsSync(absGcodePath)) {
         return res.status(404).json({ success: false, error: 'G-code file not found' });
@@ -1803,16 +1827,30 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
       if (storageMode === 'save-and-link') {
         // Use modelFileUrl (the actual .3mf/.stl path) if provided, otherwise fall back to modelFilePath
         const modelPathForGcode = modelFileUrl || modelFilePath;
-        console.log('[G-code Save] modelFileUrl:', modelFileUrl);
-        console.log('[G-code Save] modelFilePath:', modelFilePath);
-        console.log('[G-code Save] Using path:', modelPathForGcode);
+        serverDebug('[G-code Save] modelFileUrl:', modelFileUrl);
+        serverDebug('[G-code Save] modelFilePath:', modelFilePath);
+        serverDebug('[G-code Save] Using path:', modelPathForGcode);
         
         // Normalize the path: remove leading /models/ or models/ prefix
         let normalizedPath = modelPathForGcode.replace(/^\/models\//, '').replace(/^models\//, '');
-        console.log('[G-code Save] Normalized path:', normalizedPath);
+        serverDebug('[G-code Save] Normalized path:', normalizedPath);
         
-        const absModelPath = path.join(modelsDir, normalizedPath);
-        console.log('[G-code Save] Absolute model path:', absModelPath);
+        // Path traversal validation for modelPathForGcode
+        if (normalizedPath.includes('..')) {
+          return res.status(403).json({ success: false, error: 'Access denied: invalid model file path' });
+        }
+        if (/^[a-zA-Z]:[/\\]/.test(normalizedPath) || normalizedPath.startsWith('//') || normalizedPath.startsWith('\\\\')) {
+          return res.status(403).json({ success: false, error: 'Access denied: absolute paths not allowed' });
+        }
+        
+        const resolvedModelsDir = path.resolve(modelsDir);
+        const absModelPath = path.resolve(modelsDir, normalizedPath);
+        serverDebug('[G-code Save] Absolute model path:', absModelPath);
+        
+        // Validate absModelPath stays within modelsDir
+        if (!absModelPath.startsWith(resolvedModelsDir + path.sep) && absModelPath !== resolvedModelsDir) {
+          return res.status(403).json({ success: false, error: 'Access denied: path outside models directory' });
+        }
         
         const modelDir = path.dirname(absModelPath);
         const modelBasename = path.basename(absModelPath, path.extname(absModelPath));
@@ -1825,11 +1863,11 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
           : '.gcode';
         
         targetGcodePath = path.join(modelDir, `${modelBasename}${gcodeExtension}`);
-        console.log('[G-code Save] Target G-code path:', targetGcodePath);
+        serverDebug('[G-code Save] Target G-code path:', targetGcodePath);
         
         // Check if file exists and overwrite not explicitly approved
         if (fs.existsSync(targetGcodePath) && overwrite !== 'true' && overwrite !== true) {
-          console.log('[G-code Save] File exists, prompting for overwrite');
+          serverDebug('[G-code Save] File exists, prompting for overwrite');
           return res.json({ 
             success: false, 
             fileExists: true,
@@ -1838,12 +1876,12 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
         }
         
         // Save the G-code file
-        console.log('[G-code Save] Writing file to:', targetGcodePath);
+        serverDebug('[G-code Save] Writing file to:', targetGcodePath);
         
         // Ensure the directory exists
         const targetDir = path.dirname(targetGcodePath);
         if (!fs.existsSync(targetDir)) {
-          console.log('[G-code Save] Creating directory:', targetDir);
+          serverDebug('[G-code Save] Creating directory:', targetDir);
           fs.mkdirSync(targetDir, { recursive: true });
         }
         
@@ -1852,15 +1890,15 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
         if ((uploadedName.endsWith('.gcode.3mf') || uploadedName.endsWith('.3mf.gcode')) && buffer) {
           // Preserve the original .gcode.3mf archive as binary
           fs.writeFileSync(targetGcodePath, buffer);
-          console.log('[G-code Save] Saved original .gcode.3mf archive');
+          serverDebug('[G-code Save] Saved original .gcode.3mf archive');
         } else {
           // Save plain text G-code
           fs.writeFileSync(targetGcodePath, gcodeContent, 'utf8');
-          console.log('[G-code Save] Saved plain text G-code');
+          serverDebug('[G-code Save] Saved plain text G-code');
         }
-        console.log('[G-code Save] File written successfully');
+        serverDebug('[G-code Save] File written successfully');
         targetGcodePath = path.relative(modelsDir, targetGcodePath).replace(/\\/g, '/');
-        console.log('[G-code Save] Saved successfully, relative path:', targetGcodePath);
+        serverDebug('[G-code Save] Saved successfully, relative path:', targetGcodePath);
       }
     } else {
       return res.status(400).json({ success: false, error: 'No file uploaded or gcodeFilePath provided' });
