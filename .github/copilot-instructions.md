@@ -41,6 +41,9 @@
 
 - **G-code Integration:**
   - Upload `.gcode` or `.gcode.3mf` files to extract print metadata (time, filament usage, colors)
+  - `.gcode.3mf` files are archives containing G-code in `Metadata/plate_1.gcode` (BambuLab format)
+  - Parser extracts from `Metadata/plate_N.gcode` with fallback to root-level `.gcode` files
+  - **File Preservation:** `.gcode.3mf` archives are saved as-is (binary) to preserve all metadata, thumbnails, and structure; only the internal G-code is extracted for parsing
   - Supports BambuStudio/BambuLab and Cura formats
     - BambuStudio: semicolon-separated for types/colors, comma-separated for numeric values
     - Parser uses case-insensitive matching for comment fields
@@ -49,6 +52,8 @@
   - Storage modes:
     - `parse-only` (default): Extract data without saving file
     - `save-and-link`: Save G-code alongside model and add to `related_files`
+      - `.gcode.3mf` files: Saved with `.gcode.3mf` extension, preserving original archive
+      - `.gcode` files: Saved with `.gcode` extension as plain text
   - Overwrite behavior: `prompt` (default) or `overwrite` (configured in Settings)
   - Data stored in `gcodeData` field in munchie.json (preserves legacy `printTime`/`filamentUsed` for compatibility)
   - UI: ModelDetailsDrawer shows upload/re-analyze buttons, collapsible multi-filament table with color swatches
@@ -78,7 +83,14 @@
 - Backend server must be running for frontend and preview
 - Use `/api/validate-3mf` to check model file integrity
 - For Docker, ensure port 3001 is available and volumes are mounted
-- G-code parser handles case-insensitive comments and distinguishes `filament_colour` from `filament_colour_type`
+- **G-code parser:**
+  - Handles case-insensitive comments and distinguishes `filament_colour` from `filament_colour_type`
+  - Looks for G-code in `Metadata/plate_1.gcode` for `.gcode.3mf` archives (BambuLab format)
+  - When saving `.gcode.3mf` files, the original binary archive is preserved (not converted to plain text)
+- **Build workflow for G-code changes:**
+  1. Edit `src/utils/gcodeParser.ts`
+  2. Run `npm run build:backend` to compile to `dist-backend/utils/`
+  3. Restart server with `npm run server` to load updated code
 
 ## References
 - See `README.md`, `DOCKER-DEPLOYMENT.md`, `UNRAID.md`, and `BACKUP-RESTORE.md` for more details

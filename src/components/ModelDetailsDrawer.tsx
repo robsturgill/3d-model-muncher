@@ -771,26 +771,32 @@ export function ModelDetailsDrawer({
       let result;
       try {
         result = await response.json();
+        console.log('[G-code Upload] Server response:', result);
       } catch (parseError) {
+        console.error('[G-code Upload] Failed to parse JSON:', parseError);
         toast.error('Server returned invalid response');
         return;
       }
 
+      // Check for file exists prompt (can happen with 200 OK status)
+      if (result.fileExists && !forceOverwrite) {
+        console.log('[G-code Upload] File exists, showing overwrite dialog');
+        setGcodeOverwriteDialog({
+          open: true,
+          file,
+          existingPath: result.existingPath || ''
+        });
+        return;
+      }
+
       if (!response.ok) {
-        if (result.fileExists && !forceOverwrite) {
-          // Show overwrite dialog
-          setGcodeOverwriteDialog({
-            open: true,
-            file,
-            existingPath: result.existingPath || ''
-          });
-          return;
-        }
+        console.error('[G-code Upload] Non-OK response:', response.status, result);
         toast.error(result.error || `Server error: ${response.status}`);
         return;
       }
 
       if (result.success && result.gcodeData) {
+        console.log('[G-code Upload] Successfully parsed G-code data');
         // Build changes object for save-model API
         const changes: any = {
           filePath: currentModel.filePath,
@@ -830,7 +836,10 @@ export function ModelDetailsDrawer({
           toast.error(`Failed to save G-code data: ${saveError.error || saveResp.statusText}`);
         }
       } else {
-        toast.error('Unexpected server response');
+        console.error('[G-code Upload] Unexpected response structure:', result);
+        console.error('[G-code Upload] result.success:', result.success);
+        console.error('[G-code Upload] result.gcodeData:', result.gcodeData);
+        toast.error('Unexpected server response - check console for details');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);

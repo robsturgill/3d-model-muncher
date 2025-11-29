@@ -51,19 +51,36 @@ export function estimateWeightFromLength(
 
 /**
  * Extract G-code from a .gcode.3mf file
+ * These files are archives containing G-code in Metadata/plate_N.gcode
  */
 export function extractGcodeFrom3MF(buffer: Buffer): string {
   try {
     const unzipped = unzipSync(new Uint8Array(buffer));
     
     // Look for .gcode file in the archive
+    // Priority order:
+    // 1. Metadata/plate_1.gcode (most common BambuLab format)
+    // 2. Any Metadata/plate_*.gcode file
+    // 3. Any .gcode file at root level (backward compatibility)
+    const candidates: Array<{ path: string; priority: number; data: Uint8Array }> = [];
+    
     for (const [filename, data] of Object.entries(unzipped)) {
-      if (filename.endsWith('.gcode')) {
-        return new TextDecoder().decode(data);
+      if (filename === 'Metadata/plate_1.gcode') {
+        candidates.push({ path: filename, priority: 1, data });
+      } else if (filename.startsWith('Metadata/plate_') && filename.endsWith('.gcode')) {
+        candidates.push({ path: filename, priority: 2, data });
+      } else if (filename.endsWith('.gcode') && !filename.includes('/')) {
+        candidates.push({ path: filename, priority: 3, data });
       }
     }
     
-    throw new Error('No .gcode file found in 3MF archive');
+    if (candidates.length === 0) {
+      throw new Error('No .gcode file found in 3MF archive. Expected Metadata/plate_1.gcode or similar.');
+    }
+    
+    // Sort by priority and use the best match
+    candidates.sort((a, b) => a.priority - b.priority);
+    return new TextDecoder().decode(candidates[0].data);
   } catch (error) {
     throw new Error(`Failed to extract G-code from 3MF: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

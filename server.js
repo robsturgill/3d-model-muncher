@@ -1778,6 +1778,7 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
       // Check if it's a .gcode.3mf file (must check this before generic .3mf check)
       if (originalName.toLowerCase().endsWith('.gcode.3mf') || originalName.toLowerCase().endsWith('.3mf.gcode')) {
         try {
+          // Extract G-code for parsing, but keep the original buffer for saving
           gcodeContent = extractGcodeFrom3MF(buffer);
         } catch (error) {
           return res.status(400).json({ 
@@ -1806,7 +1807,15 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
         
         const modelDir = path.dirname(absModelPath);
         const modelBasename = path.basename(absModelPath, path.extname(absModelPath));
-        targetGcodePath = path.join(modelDir, `${modelBasename}.gcode`);
+        
+        // Determine the G-code file extension based on uploaded filename
+        // If user uploaded .gcode.3mf, preserve that; otherwise use .gcode
+        const uploadedName = originalName.toLowerCase();
+        const gcodeExtension = uploadedName.endsWith('.gcode.3mf') || uploadedName.endsWith('.3mf.gcode') 
+          ? '.gcode.3mf' 
+          : '.gcode';
+        
+        targetGcodePath = path.join(modelDir, `${modelBasename}${gcodeExtension}`);
         console.log('[G-code Save] Target G-code path:', targetGcodePath);
         
         // Check if file exists and overwrite not explicitly approved
@@ -1829,7 +1838,17 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
           fs.mkdirSync(targetDir, { recursive: true });
         }
         
-        fs.writeFileSync(targetGcodePath, gcodeContent, 'utf8');
+        // Write the file: use original buffer for .gcode.3mf, or gcodeContent for plain .gcode
+        // uploadedName already declared above when determining gcodeExtension
+        if ((uploadedName.endsWith('.gcode.3mf') || uploadedName.endsWith('.3mf.gcode')) && buffer) {
+          // Preserve the original .gcode.3mf archive as binary
+          fs.writeFileSync(targetGcodePath, buffer);
+          console.log('[G-code Save] Saved original .gcode.3mf archive');
+        } else {
+          // Save plain text G-code
+          fs.writeFileSync(targetGcodePath, gcodeContent, 'utf8');
+          console.log('[G-code Save] Saved plain text G-code');
+        }
         console.log('[G-code Save] File written successfully');
         targetGcodePath = path.relative(modelsDir, targetGcodePath).replace(/\\/g, '/');
         console.log('[G-code Save] Saved successfully, relative path:', targetGcodePath);

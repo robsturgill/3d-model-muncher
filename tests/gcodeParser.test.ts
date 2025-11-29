@@ -69,7 +69,30 @@ describe('gcodeParser', () => {
   });
 
   describe('extractGcodeFrom3MF', () => {
-    it('should extract gcode from 3MF buffer', () => {
+    it('should extract gcode from Metadata/plate_1.gcode (BambuLab format)', () => {
+      const gcodeContent = '; Test G-code\nG28 ; home\n';
+      const files = {
+        '[Content_Types].xml': new TextEncoder().encode('<?xml version="1.0"?>'),
+        'Metadata/plate_1.gcode': new TextEncoder().encode(gcodeContent)
+      };
+      const buffer = Buffer.from(zipSync(files));
+      
+      const extracted = extractGcodeFrom3MF(buffer);
+      expect(extracted).toBe(gcodeContent);
+    });
+
+    it('should extract gcode from Metadata/plate_2.gcode if plate_1 not found', () => {
+      const gcodeContent = '; Test G-code\nG28 ; home\n';
+      const files = {
+        'Metadata/plate_2.gcode': new TextEncoder().encode(gcodeContent)
+      };
+      const buffer = Buffer.from(zipSync(files));
+      
+      const extracted = extractGcodeFrom3MF(buffer);
+      expect(extracted).toBe(gcodeContent);
+    });
+
+    it('should extract gcode from root level as fallback', () => {
       const gcodeContent = '; Test G-code\nG28 ; home\n';
       const files = {
         'test.gcode': new TextEncoder().encode(gcodeContent)
@@ -78,6 +101,19 @@ describe('gcodeParser', () => {
       
       const extracted = extractGcodeFrom3MF(buffer);
       expect(extracted).toBe(gcodeContent);
+    });
+
+    it('should prioritize Metadata/plate_1.gcode over root files', () => {
+      const preferredContent = '; Preferred G-code\n';
+      const fallbackContent = '; Fallback G-code\n';
+      const files = {
+        'Metadata/plate_1.gcode': new TextEncoder().encode(preferredContent),
+        'test.gcode': new TextEncoder().encode(fallbackContent)
+      };
+      const buffer = Buffer.from(zipSync(files));
+      
+      const extracted = extractGcodeFrom3MF(buffer);
+      expect(extracted).toBe(preferredContent);
     });
 
     it('should throw error if no gcode file found', () => {

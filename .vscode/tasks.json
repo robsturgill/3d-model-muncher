@@ -4,7 +4,7 @@
 		{
 			"label": "tsc: build backend utils",
 			"type": "shell",
-			"command": "npx tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts",
+			"command": "npx tsc --project tsconfig.backend.json",
 			"args": [],
 			"problemMatcher": [],
 			"group": "build"
