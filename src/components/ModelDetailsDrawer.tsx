@@ -19,7 +19,7 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle, Upload, ChevronDown, ChevronUp } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle, Upload, ChevronDown, ChevronUp, Codesandbox } from "lucide-react";
 import TagsInput from "./TagsInput";
 import { Download } from "lucide-react";
 import { toast } from 'sonner';
@@ -730,10 +730,7 @@ export function ModelDetailsDrawer({
 
   // G-code upload handler
   const handleGcodeUpload = async (file: File, forceOverwrite = false) => {
-    console.log('[G-code Upload] Starting upload:', { fileName: file.name, fileSize: file.size, fileType: file.type });
-    
     if (!currentModel?.filePath) {
-      console.error('[G-code Upload] No model filePath found');
       toast.error('Model file path is required');
       return;
     }
@@ -741,8 +738,7 @@ export function ModelDetailsDrawer({
     setIsUploadingGcode(true);
     try {
       // Load config to get storage behavior settings
-      console.log('[G-code Upload] Loading config...');
-      const configResp = await fetch('/api/config');
+      const configResp = await fetch('/api/load-config');
       let storageMode = 'parse-only';
       let autoOverwrite = false;
       
@@ -750,51 +746,38 @@ export function ModelDetailsDrawer({
         const configData = await configResp.json();
         storageMode = configData.config?.settings?.gcodeStorageBehavior || 'parse-only';
         autoOverwrite = configData.config?.settings?.gcodeOverwriteBehavior === 'overwrite';
-        console.log('[G-code Upload] Config loaded:', { storageMode, autoOverwrite });
-      } else {
-        console.warn('[G-code Upload] Failed to load config, using defaults');
       }
 
       // Create form data
       const formData = new FormData();
       formData.append('file', file);
       formData.append('modelFilePath', currentModel.filePath);
+      // Send the actual model file path (from modelUrl) for G-code save location
+      if (currentModel.modelUrl) {
+        formData.append('modelFileUrl', currentModel.modelUrl);
+      }
       formData.append('storageMode', storageMode);
       
       if (forceOverwrite || autoOverwrite) {
         formData.append('overwrite', 'true');
       }
 
-      console.log('[G-code Upload] Uploading to /api/parse-gcode...', { 
-        modelFilePath: currentModel.filePath, 
-        storageMode, 
-        overwrite: forceOverwrite || autoOverwrite 
-      });
-
       // Upload and parse
       const response = await fetch('/api/parse-gcode', {
         method: 'POST',
         body: formData
       });
-
-      console.log('[G-code Upload] Response status:', response.status);
       
       let result;
       try {
         result = await response.json();
-        console.log('[G-code Upload] Response data:', result);
       } catch (parseError) {
-        console.error('[G-code Upload] Failed to parse response JSON:', parseError);
-        const text = await response.text();
-        console.error('[G-code Upload] Response text:', text);
         toast.error('Server returned invalid response');
         return;
       }
 
       if (!response.ok) {
-        console.error('[G-code Upload] Upload failed:', result);
         if (result.fileExists && !forceOverwrite) {
-          console.log('[G-code Upload] File exists, showing overwrite dialog');
           // Show overwrite dialog
           setGcodeOverwriteDialog({
             open: true,
@@ -803,14 +786,11 @@ export function ModelDetailsDrawer({
           });
           return;
         }
-        const errorMsg = result.error || `Server error: ${response.status}`;
-        console.error('[G-code Upload] Error message:', errorMsg);
-        toast.error(errorMsg);
+        toast.error(result.error || `Server error: ${response.status}`);
         return;
       }
 
       if (result.success && result.gcodeData) {
-        console.log('[G-code Upload] Parse successful, saving to model...');
         // Build changes object for save-model API
         const changes: any = {
           filePath: currentModel.filePath,
@@ -833,8 +813,6 @@ export function ModelDetailsDrawer({
           }
         }
 
-        console.log('[G-code Upload] Saving changes:', changes);
-
         // Save updated model using the correct API format
         const saveResp = await fetch('/api/save-model', {
           method: 'POST',
@@ -842,26 +820,19 @@ export function ModelDetailsDrawer({
           body: JSON.stringify(changes)
         });
 
-        console.log('[G-code Upload] Save response status:', saveResp.status);
-
         if (saveResp.ok) {
-          const saveResult = await saveResp.json();
-          console.log('[G-code Upload] Save successful:', saveResult);
           toast.success('G-code parsed and saved successfully');
           // Update the model in UI with the merged changes
           const updatedModel = { ...currentModel, ...changes };
           onModelUpdate(updatedModel);
         } else {
           const saveError = await saveResp.json().catch(() => ({ error: 'Unknown error' }));
-          console.error('[G-code Upload] Save failed:', saveError);
           toast.error(`Failed to save G-code data: ${saveError.error || saveResp.statusText}`);
         }
       } else {
-        console.error('[G-code Upload] Unexpected response format:', result);
         toast.error('Unexpected server response');
       }
     } catch (error) {
-      console.error('[G-code Upload] Exception:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       toast.error(`Upload failed: ${errorMsg}`);
     } finally {
@@ -871,18 +842,13 @@ export function ModelDetailsDrawer({
 
   // Re-analyze existing G-code
   const handleReanalyzeGcode = async () => {
-    console.log('[G-code Re-analyze] Starting re-analysis');
-    
     if (!currentModel?.gcodeData?.gcodeFilePath) {
-      console.error('[G-code Re-analyze] No gcodeFilePath found in model');
       toast.error('No G-code file path found');
       return;
     }
 
     setIsUploadingGcode(true);
     try {
-      console.log('[G-code Re-analyze] Re-analyzing:', currentModel.gcodeData.gcodeFilePath);
-      
       const formData = new FormData();
       formData.append('modelFilePath', currentModel.filePath);
       formData.append('gcodeFilePath', currentModel.gcodeData.gcodeFilePath);
@@ -892,21 +858,16 @@ export function ModelDetailsDrawer({
         method: 'POST',
         body: formData
       });
-
-      console.log('[G-code Re-analyze] Response status:', response.status);
       
       let result;
       try {
         result = await response.json();
-        console.log('[G-code Re-analyze] Response data:', result);
       } catch (parseError) {
-        console.error('[G-code Re-analyze] Failed to parse response JSON:', parseError);
         toast.error('Server returned invalid response');
         return;
       }
 
       if (result.success && result.gcodeData) {
-        console.log('[G-code Re-analyze] Parse successful, saving...');
         // Build changes object for save-model API
         const changes: any = {
           filePath: currentModel.filePath,
@@ -922,26 +883,19 @@ export function ModelDetailsDrawer({
           body: JSON.stringify(changes)
         });
 
-        console.log('[G-code Re-analyze] Save response status:', saveResp.status);
-
         if (saveResp.ok) {
-          const saveResult = await saveResp.json();
-          console.log('[G-code Re-analyze] Save successful:', saveResult);
           toast.success('G-code re-analyzed successfully');
           // Update the model in UI with the merged changes
           const updatedModel = { ...currentModel, ...changes };
           onModelUpdate(updatedModel);
         } else {
           const saveError = await saveResp.json().catch(() => ({ error: 'Unknown error' }));
-          console.error('[G-code Re-analyze] Save failed:', saveError);
           toast.error(`Failed to save re-analyzed G-code data: ${saveError.error || saveResp.statusText}`);
         }
       } else {
-        console.error('[G-code Re-analyze] Parse failed or unexpected response:', result);
         toast.error(result.error || 'Failed to re-analyze G-code');
       }
     } catch (error) {
-      console.error('[G-code Re-analyze] Exception:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       toast.error(`Re-analysis failed: ${errorMsg}`);
     } finally {
@@ -3210,7 +3164,7 @@ export function ModelDetailsDrawer({
               <Separator />
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <Codesandbox className="h-5 w-5 text-muted-foreground" />
                   <h3 className="font-semibold text-lg text-card-foreground">G-code Analysis</h3>
                 </div>
                 

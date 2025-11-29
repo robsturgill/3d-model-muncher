@@ -1740,7 +1740,7 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
 // API endpoint to parse G-code files and extract metadata
 app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
   try {
-    const { modelFilePath, storageMode, overwrite, gcodeFilePath } = req.body;
+    const { modelFilePath, modelFileUrl, storageMode, overwrite, gcodeFilePath } = req.body;
     
     if (!modelFilePath || typeof modelFilePath !== 'string') {
       return res.status(400).json({ success: false, error: 'modelFilePath is required' });
@@ -1791,16 +1791,27 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
       
       // If save-and-link mode, determine target path and check for existing file
       if (storageMode === 'save-and-link') {
-        const absModelPath = path.isAbsolute(modelFilePath) 
-          ? modelFilePath 
-          : path.join(modelsDir, modelFilePath);
+        // Use modelFileUrl (the actual .3mf/.stl path) if provided, otherwise fall back to modelFilePath
+        const modelPathForGcode = modelFileUrl || modelFilePath;
+        console.log('[G-code Save] modelFileUrl:', modelFileUrl);
+        console.log('[G-code Save] modelFilePath:', modelFilePath);
+        console.log('[G-code Save] Using path:', modelPathForGcode);
+        
+        // Normalize the path: remove leading /models/ or models/ prefix
+        let normalizedPath = modelPathForGcode.replace(/^\/models\//, '').replace(/^models\//, '');
+        console.log('[G-code Save] Normalized path:', normalizedPath);
+        
+        const absModelPath = path.join(modelsDir, normalizedPath);
+        console.log('[G-code Save] Absolute model path:', absModelPath);
         
         const modelDir = path.dirname(absModelPath);
         const modelBasename = path.basename(absModelPath, path.extname(absModelPath));
         targetGcodePath = path.join(modelDir, `${modelBasename}.gcode`);
+        console.log('[G-code Save] Target G-code path:', targetGcodePath);
         
         // Check if file exists and overwrite not explicitly approved
         if (fs.existsSync(targetGcodePath) && overwrite !== 'true' && overwrite !== true) {
+          console.log('[G-code Save] File exists, prompting for overwrite');
           return res.json({ 
             success: false, 
             fileExists: true,
@@ -1809,8 +1820,19 @@ app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
         }
         
         // Save the G-code file
+        console.log('[G-code Save] Writing file to:', targetGcodePath);
+        
+        // Ensure the directory exists
+        const targetDir = path.dirname(targetGcodePath);
+        if (!fs.existsSync(targetDir)) {
+          console.log('[G-code Save] Creating directory:', targetDir);
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        
         fs.writeFileSync(targetGcodePath, gcodeContent, 'utf8');
+        console.log('[G-code Save] File written successfully');
         targetGcodePath = path.relative(modelsDir, targetGcodePath).replace(/\\/g, '/');
+        console.log('[G-code Save] Saved successfully, relative path:', targetGcodePath);
       }
     } else {
       return res.status(400).json({ success: false, error: 'No file uploaded or gcodeFilePath provided' });

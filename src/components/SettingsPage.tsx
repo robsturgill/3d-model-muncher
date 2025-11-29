@@ -2001,23 +2001,6 @@ export function SettingsPage({
                   {/* G-code Settings */}
                   <div className="space-y-4">
                     <h3 className="font-medium">G-code Settings</h3>
-                    
-                    {/* Auto-overwrite switch */}
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="gcode-overwrite">Auto-overwrite G-code files</Label>
-                        <p className="text-xs text-muted-foreground">
-                          When enabled, uploading G-code overwrites existing files without prompting
-                        </p>
-                      </div>
-                      <Switch
-                        id="gcode-overwrite"
-                        checked={localConfig.settings?.gcodeOverwriteBehavior === 'overwrite'}
-                        onCheckedChange={(checked) => {
-                          handleConfigFieldChange('settings.gcodeOverwriteBehavior', checked ? 'overwrite' : 'prompt');
-                        }}
-                      />
-                    </div>
 
                     {/* Storage behavior radio group */}
                     <div className="space-y-2">

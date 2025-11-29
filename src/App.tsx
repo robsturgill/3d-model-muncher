@@ -1346,12 +1346,9 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
-              <h3 className="text-lg">v0.14.x - Release updates</h3>
+              <h3 className="text-lg">v0.15.x - Release updates</h3>
               <ul className="list-disc pl-5 list-outside mb-4">
-                <li><strong>Collections</strong> - Create groups of models as collections.</li>
-                <li><strong>STL Print Settings</strong> - Edit persisting print settings (layer height, nozzel, infill, printer) for STL files</li>
-                <li><strong>Tag Autocomplete</strong> - Select from existing tags when typing into tag field</li>
-                <li><strong>Categorize on Upload</strong> - Add tags and categories when uploading new models</li>
+                <li><strong>G-Code Support</strong> - Upload a gcode file to complete filament type, amount and print duration.</li>
               </ul>
             </div>
 
