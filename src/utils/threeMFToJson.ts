@@ -370,6 +370,14 @@ export async function scanDirectory(dir: string, fileType: "3mf" | "stl" = "3mf"
         localSkipped += subResult.skipped;
       } else if (entry.isFile()) {
         if (fileType === "3mf" && entry.name.endsWith(".3mf")) {
+          // Skip .gcode.3mf and .3mf.gcode files (G-code archives, not models)
+          const lowerName = entry.name.toLowerCase();
+          if (lowerName.endsWith(".gcode.3mf") || lowerName.endsWith(".3mf.gcode")) {
+            console.log(`⏭️ Skipping G-code archive: ${fullPath}`);
+            localSkipped++;
+            continue;
+          }
+          
           const outPath = fullPath.replace(/\.3mf$/, "-munchie.json");
           
           // Skip parsing if munchie.json already exists

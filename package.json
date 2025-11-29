@@ -92,7 +92,7 @@
             "build:with-models": "vite build && node copy-models-to-build.js",
             "preview": "vite preview",
             "server": "node server.js",
-            "build:backend": "tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts",
+            "build:backend": "tsc --project tsconfig.backend.json",
             "release": "standard-version",
             "release:minor": "standard-version --release-as minor",
             "release:major": "standard-version --release-as major",

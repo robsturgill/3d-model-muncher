@@ -15,6 +15,8 @@ export interface AppConfig {
     modelCardSecondary: 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price';
     autoSave: boolean;
     modelDirectory: string;
+    gcodeOverwriteBehavior?: 'prompt' | 'overwrite';
+    gcodeStorageBehavior?: 'parse-only' | 'save-and-link';
   };
   filters: {
     defaultCategory: string;

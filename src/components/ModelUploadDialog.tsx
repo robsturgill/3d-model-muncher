@@ -39,24 +39,66 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
     const dt = e.dataTransfer;
     if (!dt) return;
     const arr = Array.from(dt.files as FileList);
-    const list = arr.filter((f: File) => /\.3mf$/i.test(f.name) || /\.stl$/i.test(f.name));
-    if (list.length === 0) {
+    
+    // Filter out .gcode.3mf files and show helpful message
+    const gcodeArchives: File[] = [];
+    const validFiles: File[] = [];
+    
+    arr.forEach((f: File) => {
+      const lowerName = f.name.toLowerCase();
+      if (lowerName.endsWith('.gcode.3mf') || lowerName.endsWith('.3mf.gcode')) {
+        gcodeArchives.push(f);
+      } else if (/\.3mf$/i.test(f.name) || /\.stl$/i.test(f.name)) {
+        validFiles.push(f);
+      }
+    });
+    
+    if (gcodeArchives.length > 0) {
+      const fileNames = gcodeArchives.map(f => f.name).join(', ');
+      toast.error(`G-code archives (${fileNames}) should be uploaded via the G-code analysis dialog in the model details panel`);
+    }
+    
+    if (validFiles.length === 0 && gcodeArchives.length === 0) {
       toast.error('Please drop .3mf or .stl files only');
       return;
     }
-    setFiles(prev => ([...prev, ...list]));
+    
+    if (validFiles.length > 0) {
+      setFiles(prev => ([...prev, ...validFiles]));
+    }
   }, []);
 
   const onDragOver = (e: React.DragEvent) => { e.preventDefault(); };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const arr = Array.from(e.target.files || []) as File[];
-    const list = arr.filter((f: File) => /\.3mf$/i.test(f.name) || /\.stl$/i.test(f.name));
-    if (list.length === 0) {
+    
+    // Filter out .gcode.3mf files and show helpful message
+    const gcodeArchives: File[] = [];
+    const validFiles: File[] = [];
+    
+    arr.forEach((f: File) => {
+      const lowerName = f.name.toLowerCase();
+      if (lowerName.endsWith('.gcode.3mf') || lowerName.endsWith('.3mf.gcode')) {
+        gcodeArchives.push(f);
+      } else if (/\.3mf$/i.test(f.name) || /\.stl$/i.test(f.name)) {
+        validFiles.push(f);
+      }
+    });
+    
+    if (gcodeArchives.length > 0) {
+      const fileNames = gcodeArchives.map(f => f.name).join(', ');
+      toast.error(`G-code archives (${fileNames}) should be uploaded via the G-code analysis dialog in the model details panel`);
+    }
+    
+    if (validFiles.length === 0 && gcodeArchives.length === 0) {
       toast.error('Please select .3mf or .stl files');
       return;
     }
-    setFiles(prev => ([...prev, ...list]));
+    
+    if (validFiles.length > 0) {
+      setFiles(prev => ([...prev, ...validFiles]));
+    }
     if (inputRef.current) inputRef.current.value = '';
   };
 

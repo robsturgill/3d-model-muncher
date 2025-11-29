@@ -8,6 +8,7 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 
 - **3D Model Viewer**: Built-in Three.js viewer for .3mf & .stl files with automatic thumbnails
 - **Capture 3D previews**: Capture the current camera/view from the built-in 3D viewer and save it directly into a model's images (useful for thumbnails or gallery images). While editing a model in the details drawer, use the capture button to add the exact view you want.
+- **G-code Analysis**: Upload .gcode or .gcode.3mf files to automatically extract print time, filament usage, and material colors with multi-material support
 - **Model Management**: Organize, categorize, and track print status
 - **Advanced Search & Filtering**: Search by name, tags, category, print status, and license
 - **Automatic Scanning**: Auto-generate metadata JSON files from 3MF files
@@ -88,12 +89,34 @@ docker-compose up -d
 - `POST /api/scan-models` - Scan models directory
 - `GET /api/validate-3mf` - Validate 3MF & STL file integrity
 - `POST /api/delete-models` - Delete models and files
+- `POST /api/parse-gcode` - Parse G-code files and extract print metadata including filament colors
 - `GET /models/*` - Static model files (3MF, STL, images, etc.)
 - `POST /api/regenerate-munchie-files` - Regenerate munchie.json for specific models (preserves user-managed fields and post-processes files to ensure nested thumbnail/imageOrder defaults)
 
 ## File Structure
 
 Each 3MF/STL file gets a corresponding `-munchie.json` metadata file containing extracted information like thumbnails, print settings, and user-defined tags. The system uses MD5 hashing for duplicate detection and preserves user data during rescans.
+
+**Note:** G-code files (`.gcode` and `.gcode.3mf`) do **not** get their own munchie.json files. Instead, G-code data is stored in the parent model's munchie.json via the `gcodeData` field, and the G-code file path is added to the `related_files` array when using "save-and-link" mode.
+
+## G-code Integration
+
+Upload G-code files to automatically extract print metadata including time estimates, filament usage, and material colors.
+
+**Features:**
+- Multi-filament/multi-color support
+- Automatic weight estimation from filament length
+- Color swatch display for multi-material prints
+- Configurable storage: parse-only or save-and-link
+- Overwrite protection with user prompt
+
+**Data Storage:**
+Parsed G-code data is stored in the model's `gcodeData` field in the munchie.json file. G-code files themselves are linked via the `related_files` array (when using save-and-link mode) but do not have separate munchie.json files—all metadata lives in the parent 3MF/STL model's munchie file. Legacy `printTime` and `filamentUsed` fields are preserved for backward compatibility and manual entry.
+
+**Configuration:**
+- **Parse only** (default): Extracts data without saving G-code file
+- **Save and link**: Saves G-code file alongside model and adds to `related_files`
+- **Overwrite behavior**: Prompt user (default) or auto-overwrite existing files
 
 ## User-defined metadata (preserved on regeneration)
 
@@ -112,14 +135,13 @@ The following fields are preserved and will NOT be overwritten by a regeneration
 - `source` — optional source/origin information entered by the user
 - `price` — user-defined price or cost value
 - `related_files` — array of file paths associated with the model for download
+- `gcodeData` — parsed G-code metadata (print time, filament usage, colors)
 - `userDefined` - user added images, image order, and thumbnail reference
 
 The following fields are computed or extracted from the model file and will be replaced when the munchie JSON is recreated. 
 
 - `hash` — MD5 checksum of the model file (used for duplicate detection)
 - `parsedImages` — embedded thumbnail(s) and auxiliary pictures extracted from the 3MF (stored as base64 data URLs)
-- ~~`images`~~ - [deprecated] - replaced with `parsedImages`. Use migration tool in settings.
-- ~~`thumbnail`~~ - [deprecated] - replaced with `parsedImages`. Use migration tool in settings.
 - `modelUrl` — the path/URL to the model file under the `models/` directory
 - `fileSize` — human-readable file size derived from the model file
 - `name` — title parsed from the 3MF metadata (or derived from the filename for STLs)

@@ -1998,6 +1998,59 @@ export function SettingsPage({
 
                   <Separator />
 
+                  {/* G-code Settings */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium">G-code Settings</h3>
+
+                    {/* Storage behavior radio group */}
+                    <div className="space-y-2">
+                      <Label>G-code Storage Behavior</Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="gcode-parse-only"
+                            name="gcode-storage"
+                            value="parse-only"
+                            checked={!localConfig.settings?.gcodeStorageBehavior || localConfig.settings.gcodeStorageBehavior === 'parse-only'}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                handleConfigFieldChange('settings.gcodeStorageBehavior', 'parse-only');
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <Label htmlFor="gcode-parse-only" className="font-normal cursor-pointer">
+                            Parse only (don't save file)
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="gcode-save-link"
+                            name="gcode-storage"
+                            value="save-and-link"
+                            checked={localConfig.settings?.gcodeStorageBehavior === 'save-and-link'}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                handleConfigFieldChange('settings.gcodeStorageBehavior', 'save-and-link');
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <Label htmlFor="gcode-save-link" className="font-normal cursor-pointer">
+                            Save file and add to related files
+                          </Label>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Choose whether to save G-code files alongside models or just extract the metadata
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">

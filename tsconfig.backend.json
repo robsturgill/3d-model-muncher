@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "es2019",
+    "module": "commonjs",
+    "outDir": "./dist-backend",
+    "skipLibCheck": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  },
+  "files": [
+    "src/utils/gcodeParser.ts",
+    "src/utils/threeMFToJson.ts",
+    "src/utils/configManager.ts"
+  ]
+}

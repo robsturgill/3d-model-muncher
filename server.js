@@ -1625,6 +1625,15 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
         const original = (f.originalname || 'upload').replace(/\\/g, '/');
         // sanitize filename
         let base = path.basename(original).replace(/[^a-zA-Z0-9_.\- ]/g, '_');
+        
+        // Check for G-code archives FIRST before general .3mf check (order matters!)
+        const lowerBase = base.toLowerCase();
+        if (lowerBase.endsWith('.gcode.3mf') || lowerBase.endsWith('.3mf.gcode')) {
+          errors.push({ file: original, error: 'G-code archives (.gcode.3mf) should be uploaded via the G-code analysis dialog, not the model upload dialog' });
+          continue;
+        }
+        
+        // Now check for valid extensions
         if (!/\.3mf$/i.test(base) && !/\.stl$/i.test(base)) {
           errors.push({ file: original, error: 'Unsupported file extension' });
           continue;
@@ -1734,6 +1743,196 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
   } catch (e) {
     console.error('Upload processing error:', e);
     res.status(500).json({ success: false, error: e && e.message ? e.message : String(e) });
+  }
+});
+
+// API endpoint to parse G-code files and extract metadata
+app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
+  try {
+    const { modelFilePath, modelFileUrl, storageMode, overwrite, gcodeFilePath } = req.body;
+    
+    if (!modelFilePath || typeof modelFilePath !== 'string') {
+      return res.status(400).json({ success: false, error: 'modelFilePath is required' });
+    }
+    
+    if (!storageMode || !['parse-only', 'save-and-link'].includes(storageMode)) {
+      return res.status(400).json({ success: false, error: 'storageMode must be "parse-only" or "save-and-link"' });
+    }
+    
+    const modelsDir = getAbsoluteModelsPath();
+    const { parseGcode, extractGcodeFrom3MF } = require('./dist-backend/utils/gcodeParser');
+    
+    let gcodeContent = '';
+    let targetGcodePath = null;
+    const warnings = [];
+    
+    // Case 1: Re-analyzing existing G-code file
+    if (gcodeFilePath && typeof gcodeFilePath === 'string') {
+      // Path traversal validation: reject paths containing '..'
+      if (gcodeFilePath.includes('..')) {
+        return res.status(403).json({ success: false, error: 'Access denied: invalid G-code file path' });
+      }
+      
+      // Reject absolute paths (only relative paths within models directory are allowed)
+      if (path.isAbsolute(gcodeFilePath)) {
+        return res.status(403).json({ success: false, error: 'Access denied: absolute paths not allowed' });
+      }
+      
+      // Reject UNC paths (starting with //)
+      if (gcodeFilePath.startsWith('//') || gcodeFilePath.startsWith('\\\\')) {
+        return res.status(403).json({ success: false, error: 'Access denied: UNC paths not allowed' });
+      }
+      
+      // Reject Windows drive paths (e.g., C:/ or C:\)
+      if (/^[a-zA-Z]:[/\\]/.test(gcodeFilePath)) {
+        return res.status(403).json({ success: false, error: 'Access denied: absolute paths not allowed' });
+      }
+      
+      // Resolve path relative to modelsDir and validate it stays within
+      const resolvedModelsDir = path.resolve(modelsDir);
+      const absGcodePath = path.resolve(modelsDir, gcodeFilePath);
+      
+      if (!absGcodePath.startsWith(resolvedModelsDir + path.sep) && absGcodePath !== resolvedModelsDir) {
+        return res.status(403).json({ success: false, error: 'Access denied: path outside models directory' });
+      }
+      
+      if (!fs.existsSync(absGcodePath)) {
+        return res.status(404).json({ success: false, error: 'G-code file not found' });
+      }
+      
+      gcodeContent = fs.readFileSync(absGcodePath, 'utf8');
+      targetGcodePath = gcodeFilePath;
+    }
+    // Case 2: New file upload
+    else if (req.file && req.file.buffer) {
+      const buffer = req.file.buffer;
+      const originalName = req.file.originalname || 'upload.gcode';
+      
+      // Check if it's a .gcode.3mf file (must check this before generic .3mf check)
+      if (originalName.toLowerCase().endsWith('.gcode.3mf') || originalName.toLowerCase().endsWith('.3mf.gcode')) {
+        try {
+          // Extract G-code for parsing, but keep the original buffer for saving
+          gcodeContent = extractGcodeFrom3MF(buffer);
+        } catch (error) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `Failed to extract G-code from 3MF: ${error.message}` 
+          });
+        }
+      } else {
+        gcodeContent = buffer.toString('utf8');
+      }
+      
+      // If save-and-link mode, determine target path and check for existing file
+      if (storageMode === 'save-and-link') {
+        // Use modelFileUrl (the actual .3mf/.stl path) if provided, otherwise fall back to modelFilePath
+        const modelPathForGcode = modelFileUrl || modelFilePath;
+        serverDebug('[G-code Save] modelFileUrl:', modelFileUrl);
+        serverDebug('[G-code Save] modelFilePath:', modelFilePath);
+        serverDebug('[G-code Save] Using path:', modelPathForGcode);
+        
+        // Normalize the path: remove leading /models/ or models/ prefix
+        let normalizedPath = modelPathForGcode.replace(/^\/models\//, '').replace(/^models\//, '');
+        serverDebug('[G-code Save] Normalized path:', normalizedPath);
+        
+        // Path traversal validation for modelPathForGcode
+        if (normalizedPath.includes('..')) {
+          return res.status(403).json({ success: false, error: 'Access denied: invalid model file path' });
+        }
+        if (/^[a-zA-Z]:[/\\]/.test(normalizedPath) || normalizedPath.startsWith('//') || normalizedPath.startsWith('\\\\')) {
+          return res.status(403).json({ success: false, error: 'Access denied: absolute paths not allowed' });
+        }
+        
+        const resolvedModelsDir = path.resolve(modelsDir);
+        const absModelPath = path.resolve(modelsDir, normalizedPath);
+        serverDebug('[G-code Save] Absolute model path:', absModelPath);
+        
+        // Validate absModelPath stays within modelsDir
+        if (!absModelPath.startsWith(resolvedModelsDir + path.sep) && absModelPath !== resolvedModelsDir) {
+          return res.status(403).json({ success: false, error: 'Access denied: path outside models directory' });
+        }
+        
+        const modelDir = path.dirname(absModelPath);
+        const modelBasename = path.basename(absModelPath, path.extname(absModelPath));
+        
+        // Determine the G-code file extension based on uploaded filename
+        // If user uploaded .gcode.3mf, preserve that; otherwise use .gcode
+        const uploadedName = originalName.toLowerCase();
+        const gcodeExtension = uploadedName.endsWith('.gcode.3mf') || uploadedName.endsWith('.3mf.gcode') 
+          ? '.gcode.3mf' 
+          : '.gcode';
+        
+        targetGcodePath = path.join(modelDir, `${modelBasename}${gcodeExtension}`);
+        serverDebug('[G-code Save] Target G-code path:', targetGcodePath);
+        
+        // Check if file exists and overwrite not explicitly approved
+        if (fs.existsSync(targetGcodePath) && overwrite !== 'true' && overwrite !== true) {
+          serverDebug('[G-code Save] File exists, prompting for overwrite');
+          return res.json({ 
+            success: false, 
+            fileExists: true,
+            existingPath: path.relative(modelsDir, targetGcodePath).replace(/\\/g, '/')
+          });
+        }
+        
+        // Save the G-code file
+        serverDebug('[G-code Save] Writing file to:', targetGcodePath);
+        
+        // Ensure the directory exists
+        const targetDir = path.dirname(targetGcodePath);
+        if (!fs.existsSync(targetDir)) {
+          serverDebug('[G-code Save] Creating directory:', targetDir);
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        
+        // Write the file: use original buffer for .gcode.3mf, or gcodeContent for plain .gcode
+        // uploadedName already declared above when determining gcodeExtension
+        if ((uploadedName.endsWith('.gcode.3mf') || uploadedName.endsWith('.3mf.gcode')) && buffer) {
+          // Preserve the original .gcode.3mf archive as binary
+          fs.writeFileSync(targetGcodePath, buffer);
+          serverDebug('[G-code Save] Saved original .gcode.3mf archive');
+        } else {
+          // Save plain text G-code
+          fs.writeFileSync(targetGcodePath, gcodeContent, 'utf8');
+          serverDebug('[G-code Save] Saved plain text G-code');
+        }
+        serverDebug('[G-code Save] File written successfully');
+        targetGcodePath = path.relative(modelsDir, targetGcodePath).replace(/\\/g, '/');
+        serverDebug('[G-code Save] Saved successfully, relative path:', targetGcodePath);
+      }
+    } else {
+      return res.status(400).json({ success: false, error: 'No file uploaded or gcodeFilePath provided' });
+    }
+    
+    // Parse the G-code content
+    let gcodeData;
+    try {
+      gcodeData = parseGcode(gcodeContent);
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Failed to parse G-code: ${error.message}` 
+      });
+    }
+    
+    // Add gcodeFilePath to the result if we saved it
+    if (targetGcodePath) {
+      gcodeData.gcodeFilePath = targetGcodePath;
+    }
+    
+    res.json({ 
+      success: true, 
+      gcodeData,
+      fileExists: false,
+      warnings
+    });
+    
+  } catch (error) {
+    console.error('G-code parsing error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error && error.message ? error.message : String(error) 
+    });
   }
 });
 
@@ -1863,11 +2062,16 @@ app.post('/api/hash-check', async (req, res) => {
           
           if (fileType === "3mf") {
             // Only process 3MF files and their JSON companions
-            if (relativePath.toLowerCase().endsWith('.3mf')) {
+            const lowerPath = relativePath.toLowerCase();
+            // Skip G-code archives (.gcode.3mf and .3mf.gcode)
+            if ((lowerPath.endsWith('.gcode.3mf') || lowerPath.endsWith('.3mf.gcode'))) {
+              continue;
+            }
+            if (lowerPath.endsWith('.3mf')) {
               const base = relativePath.replace(/\.3mf$/i, '');
               modelMap[base] = modelMap[base] || {};
               modelMap[base].threeMF = relativePath;
-            } else if (relativePath.toLowerCase().endsWith('-munchie.json')) {
+            } else if (lowerPath.endsWith('-munchie.json')) {
               const base = relativePath.replace(/-munchie\.json$/i, '');
               modelMap[base] = modelMap[base] || {};
               modelMap[base].json = relativePath;
