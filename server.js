@@ -1737,6 +1737,117 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
   }
 });
 
+// API endpoint to parse G-code files and extract metadata
+app.post('/api/parse-gcode', upload.single('file'), async (req, res) => {
+  try {
+    const { modelFilePath, storageMode, overwrite, gcodeFilePath } = req.body;
+    
+    if (!modelFilePath || typeof modelFilePath !== 'string') {
+      return res.status(400).json({ success: false, error: 'modelFilePath is required' });
+    }
+    
+    if (!storageMode || !['parse-only', 'save-and-link'].includes(storageMode)) {
+      return res.status(400).json({ success: false, error: 'storageMode must be "parse-only" or "save-and-link"' });
+    }
+    
+    const modelsDir = getAbsoluteModelsPath();
+    const { parseGcode, extractGcodeFrom3MF } = require('./dist-backend/utils/gcodeParser');
+    
+    let gcodeContent = '';
+    let targetGcodePath = null;
+    const warnings = [];
+    
+    // Case 1: Re-analyzing existing G-code file
+    if (gcodeFilePath && typeof gcodeFilePath === 'string') {
+      const absGcodePath = path.isAbsolute(gcodeFilePath) 
+        ? gcodeFilePath 
+        : path.join(modelsDir, gcodeFilePath);
+      
+      if (!fs.existsSync(absGcodePath)) {
+        return res.status(404).json({ success: false, error: 'G-code file not found' });
+      }
+      
+      gcodeContent = fs.readFileSync(absGcodePath, 'utf8');
+      targetGcodePath = gcodeFilePath;
+    }
+    // Case 2: New file upload
+    else if (req.file && req.file.buffer) {
+      const buffer = req.file.buffer;
+      const originalName = req.file.originalname || 'upload.gcode';
+      
+      // Check if it's a .gcode.3mf file (must check this before generic .3mf check)
+      if (originalName.toLowerCase().endsWith('.gcode.3mf') || originalName.toLowerCase().endsWith('.3mf.gcode')) {
+        try {
+          gcodeContent = extractGcodeFrom3MF(buffer);
+        } catch (error) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `Failed to extract G-code from 3MF: ${error.message}` 
+          });
+        }
+      } else {
+        gcodeContent = buffer.toString('utf8');
+      }
+      
+      // If save-and-link mode, determine target path and check for existing file
+      if (storageMode === 'save-and-link') {
+        const absModelPath = path.isAbsolute(modelFilePath) 
+          ? modelFilePath 
+          : path.join(modelsDir, modelFilePath);
+        
+        const modelDir = path.dirname(absModelPath);
+        const modelBasename = path.basename(absModelPath, path.extname(absModelPath));
+        targetGcodePath = path.join(modelDir, `${modelBasename}.gcode`);
+        
+        // Check if file exists and overwrite not explicitly approved
+        if (fs.existsSync(targetGcodePath) && overwrite !== 'true' && overwrite !== true) {
+          return res.json({ 
+            success: false, 
+            fileExists: true,
+            existingPath: path.relative(modelsDir, targetGcodePath).replace(/\\/g, '/')
+          });
+        }
+        
+        // Save the G-code file
+        fs.writeFileSync(targetGcodePath, gcodeContent, 'utf8');
+        targetGcodePath = path.relative(modelsDir, targetGcodePath).replace(/\\/g, '/');
+      }
+    } else {
+      return res.status(400).json({ success: false, error: 'No file uploaded or gcodeFilePath provided' });
+    }
+    
+    // Parse the G-code content
+    let gcodeData;
+    try {
+      gcodeData = parseGcode(gcodeContent);
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Failed to parse G-code: ${error.message}` 
+      });
+    }
+    
+    // Add gcodeFilePath to the result if we saved it
+    if (targetGcodePath) {
+      gcodeData.gcodeFilePath = targetGcodePath;
+    }
+    
+    res.json({ 
+      success: true, 
+      gcodeData,
+      fileExists: false,
+      warnings
+    });
+    
+  } catch (error) {
+    console.error('G-code parsing error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error && error.message ? error.message : String(error) 
+    });
+  }
+});
+
 // API endpoint to list model folders (for upload destination selection)
 app.get('/api/model-folders', (req, res) => {
   try {

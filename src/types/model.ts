@@ -47,6 +47,18 @@ export interface Model {
     // Optional printer profile/model name; editable for STL only
     printer?: string;
   };
+  gcodeData?: {
+    printTime?: string;
+    filaments: Array<{
+      type: string;
+      length: string;
+      weight: string;
+      density?: string;
+      color?: string;
+    }>;
+    totalFilamentWeight?: string;
+    gcodeFilePath?: string;
+  };
 
   // Added for file integrity and duplicate detection
   hash?: string;

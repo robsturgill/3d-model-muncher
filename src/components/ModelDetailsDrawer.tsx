@@ -12,12 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { LICENSES, isKnownLicense } from '../constants/licenses';
 import { Switch } from "./ui/switch";
 import { Separator } from "./ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle, Upload, ChevronDown, ChevronUp } from "lucide-react";
 import TagsInput from "./TagsInput";
 import { Download } from "lucide-react";
 import { toast } from 'sonner';
@@ -68,6 +70,16 @@ export function ModelDetailsDrawer({
   // Remove-from-Collection UI state
   const [isRemoveFromCollectionOpen, setIsRemoveFromCollectionOpen] = useState(false);
   const [removeTargetCollectionId, setRemoveTargetCollectionId] = useState<string | null>(null);
+  
+  // G-code upload state
+  const gcodeInputRef = useRef<HTMLInputElement>(null);
+  const [isGcodeExpanded, setIsGcodeExpanded] = useState(false);
+  const [isUploadingGcode, setIsUploadingGcode] = useState(false);
+  const [gcodeOverwriteDialog, setGcodeOverwriteDialog] = useState<{open: boolean; file: File | null; existingPath: string}>({
+    open: false,
+    file: null,
+    existingPath: ''
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -715,6 +727,245 @@ export function ModelDetailsDrawer({
   }, [selectedImageIndex, isWindowFullscreen]);
 
   const currentModel = editedModel || model;
+
+  // G-code upload handler
+  const handleGcodeUpload = async (file: File, forceOverwrite = false) => {
+    console.log('[G-code Upload] Starting upload:', { fileName: file.name, fileSize: file.size, fileType: file.type });
+    
+    if (!currentModel?.filePath) {
+      console.error('[G-code Upload] No model filePath found');
+      toast.error('Model file path is required');
+      return;
+    }
+
+    setIsUploadingGcode(true);
+    try {
+      // Load config to get storage behavior settings
+      console.log('[G-code Upload] Loading config...');
+      const configResp = await fetch('/api/config');
+      let storageMode = 'parse-only';
+      let autoOverwrite = false;
+      
+      if (configResp.ok) {
+        const configData = await configResp.json();
+        storageMode = configData.config?.settings?.gcodeStorageBehavior || 'parse-only';
+        autoOverwrite = configData.config?.settings?.gcodeOverwriteBehavior === 'overwrite';
+        console.log('[G-code Upload] Config loaded:', { storageMode, autoOverwrite });
+      } else {
+        console.warn('[G-code Upload] Failed to load config, using defaults');
+      }
+
+      // Create form data
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('modelFilePath', currentModel.filePath);
+      formData.append('storageMode', storageMode);
+      
+      if (forceOverwrite || autoOverwrite) {
+        formData.append('overwrite', 'true');
+      }
+
+      console.log('[G-code Upload] Uploading to /api/parse-gcode...', { 
+        modelFilePath: currentModel.filePath, 
+        storageMode, 
+        overwrite: forceOverwrite || autoOverwrite 
+      });
+
+      // Upload and parse
+      const response = await fetch('/api/parse-gcode', {
+        method: 'POST',
+        body: formData
+      });
+
+      console.log('[G-code Upload] Response status:', response.status);
+      
+      let result;
+      try {
+        result = await response.json();
+        console.log('[G-code Upload] Response data:', result);
+      } catch (parseError) {
+        console.error('[G-code Upload] Failed to parse response JSON:', parseError);
+        const text = await response.text();
+        console.error('[G-code Upload] Response text:', text);
+        toast.error('Server returned invalid response');
+        return;
+      }
+
+      if (!response.ok) {
+        console.error('[G-code Upload] Upload failed:', result);
+        if (result.fileExists && !forceOverwrite) {
+          console.log('[G-code Upload] File exists, showing overwrite dialog');
+          // Show overwrite dialog
+          setGcodeOverwriteDialog({
+            open: true,
+            file,
+            existingPath: result.existingPath || ''
+          });
+          return;
+        }
+        const errorMsg = result.error || `Server error: ${response.status}`;
+        console.error('[G-code Upload] Error message:', errorMsg);
+        toast.error(errorMsg);
+        return;
+      }
+
+      if (result.success && result.gcodeData) {
+        console.log('[G-code Upload] Parse successful, saving to model...');
+        // Build changes object for save-model API
+        const changes: any = {
+          filePath: currentModel.filePath,
+          id: currentModel.id,
+          gcodeData: result.gcodeData,
+          // Also update legacy fields for backward compatibility
+          printTime: result.gcodeData.printTime || currentModel.printTime,
+          filamentUsed: result.gcodeData.totalFilamentWeight || currentModel.filamentUsed
+        };
+
+        // If storage mode is save-and-link, add to related_files
+        if (storageMode === 'save-and-link' && result.gcodeData.gcodeFilePath) {
+          const relatedFiles = Array.isArray(currentModel.related_files) 
+            ? [...currentModel.related_files] 
+            : [];
+          
+          if (!relatedFiles.includes(result.gcodeData.gcodeFilePath)) {
+            relatedFiles.push(result.gcodeData.gcodeFilePath);
+            changes.related_files = relatedFiles;
+          }
+        }
+
+        console.log('[G-code Upload] Saving changes:', changes);
+
+        // Save updated model using the correct API format
+        const saveResp = await fetch('/api/save-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(changes)
+        });
+
+        console.log('[G-code Upload] Save response status:', saveResp.status);
+
+        if (saveResp.ok) {
+          const saveResult = await saveResp.json();
+          console.log('[G-code Upload] Save successful:', saveResult);
+          toast.success('G-code parsed and saved successfully');
+          // Update the model in UI with the merged changes
+          const updatedModel = { ...currentModel, ...changes };
+          onModelUpdate(updatedModel);
+        } else {
+          const saveError = await saveResp.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('[G-code Upload] Save failed:', saveError);
+          toast.error(`Failed to save G-code data: ${saveError.error || saveResp.statusText}`);
+        }
+      } else {
+        console.error('[G-code Upload] Unexpected response format:', result);
+        toast.error('Unexpected server response');
+      }
+    } catch (error) {
+      console.error('[G-code Upload] Exception:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      toast.error(`Upload failed: ${errorMsg}`);
+    } finally {
+      setIsUploadingGcode(false);
+    }
+  };
+
+  // Re-analyze existing G-code
+  const handleReanalyzeGcode = async () => {
+    console.log('[G-code Re-analyze] Starting re-analysis');
+    
+    if (!currentModel?.gcodeData?.gcodeFilePath) {
+      console.error('[G-code Re-analyze] No gcodeFilePath found in model');
+      toast.error('No G-code file path found');
+      return;
+    }
+
+    setIsUploadingGcode(true);
+    try {
+      console.log('[G-code Re-analyze] Re-analyzing:', currentModel.gcodeData.gcodeFilePath);
+      
+      const formData = new FormData();
+      formData.append('modelFilePath', currentModel.filePath);
+      formData.append('gcodeFilePath', currentModel.gcodeData.gcodeFilePath);
+      formData.append('storageMode', 'parse-only');
+
+      const response = await fetch('/api/parse-gcode', {
+        method: 'POST',
+        body: formData
+      });
+
+      console.log('[G-code Re-analyze] Response status:', response.status);
+      
+      let result;
+      try {
+        result = await response.json();
+        console.log('[G-code Re-analyze] Response data:', result);
+      } catch (parseError) {
+        console.error('[G-code Re-analyze] Failed to parse response JSON:', parseError);
+        toast.error('Server returned invalid response');
+        return;
+      }
+
+      if (result.success && result.gcodeData) {
+        console.log('[G-code Re-analyze] Parse successful, saving...');
+        // Build changes object for save-model API
+        const changes: any = {
+          filePath: currentModel.filePath,
+          id: currentModel.id,
+          gcodeData: result.gcodeData,
+          printTime: result.gcodeData.printTime || currentModel.printTime,
+          filamentUsed: result.gcodeData.totalFilamentWeight || currentModel.filamentUsed
+        };
+
+        const saveResp = await fetch('/api/save-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(changes)
+        });
+
+        console.log('[G-code Re-analyze] Save response status:', saveResp.status);
+
+        if (saveResp.ok) {
+          const saveResult = await saveResp.json();
+          console.log('[G-code Re-analyze] Save successful:', saveResult);
+          toast.success('G-code re-analyzed successfully');
+          // Update the model in UI with the merged changes
+          const updatedModel = { ...currentModel, ...changes };
+          onModelUpdate(updatedModel);
+        } else {
+          const saveError = await saveResp.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('[G-code Re-analyze] Save failed:', saveError);
+          toast.error(`Failed to save re-analyzed G-code data: ${saveError.error || saveResp.statusText}`);
+        }
+      } else {
+        console.error('[G-code Re-analyze] Parse failed or unexpected response:', result);
+        toast.error(result.error || 'Failed to re-analyze G-code');
+      }
+    } catch (error) {
+      console.error('[G-code Re-analyze] Exception:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      toast.error(`Re-analysis failed: ${errorMsg}`);
+    } finally {
+      setIsUploadingGcode(false);
+    }
+  };
+
+  // Handle drag and drop for G-code
+  const handleGcodeDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleGcodeDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.toLowerCase().endsWith('.gcode') || file.name.toLowerCase().endsWith('.gcode.3mf'))) {
+      handleGcodeUpload(file);
+    } else {
+      toast.error('Please drop a .gcode or .gcode.3mf file');
+    }
+  };
 
   const startEditing = () => {
     // Ensure filePath is present for saving - convert to JSON file path
@@ -2953,6 +3204,153 @@ export function ModelDetailsDrawer({
             </>
           )}
 
+          {/* G-code Data Section (view mode only) */}
+          {!isEditing && (
+            <>
+              <Separator />
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-lg text-card-foreground">G-code Analysis</h3>
+                </div>
+                
+                {/* Hidden file input */}
+                <input
+                  ref={gcodeInputRef}
+                  type="file"
+                  accept=".gcode,.3mf"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleGcodeUpload(file);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                
+                {currentModel.gcodeData ? (
+                  <>
+                    {/* Upload and Re-analyze buttons (when data exists) */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => gcodeInputRef.current?.click()}
+                        disabled={isUploadingGcode}
+                        className="gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        {isUploadingGcode ? 'Uploading...' : 'Upload New G-code'}
+                      </Button>
+                      {currentModel.gcodeData.gcodeFilePath && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleReanalyzeGcode}
+                          disabled={isUploadingGcode}
+                          className="gap-2"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                          Re-analyze
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Summary display */}
+                    <Collapsible open={isGcodeExpanded} onOpenChange={setIsGcodeExpanded}>
+                      <div className="p-4 bg-muted/30 rounded-lg border">
+                        <CollapsibleTrigger className="flex items-center justify-between w-full text-left">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{currentModel.gcodeData.printTime || 'N/A'}</span>
+                            </div>
+                            <div className="text-muted-foreground">|</div>
+                            <div className="flex items-center gap-2">
+                              <Weight className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{currentModel.gcodeData.totalFilamentWeight || 'N/A'}</span>
+                            </div>
+                          </div>
+                          {currentModel.gcodeData.filaments.length > 1 && (
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <span>{currentModel.gcodeData.filaments.length} filaments</span>
+                              {isGcodeExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </div>
+                          )}
+                        </CollapsibleTrigger>
+
+                        {/* Multi-filament details table */}
+                        {currentModel.gcodeData.filaments.length > 1 && (
+                          <CollapsibleContent className="mt-4">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left py-2 px-2">Color</th>
+                                  <th className="text-left py-2 px-2">Type</th>
+                                  <th className="text-right py-2 px-2">Length</th>
+                                  <th className="text-right py-2 px-2">Weight</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {currentModel.gcodeData.filaments.map((filament, idx) => (
+                                  <tr key={idx} className="border-b last:border-0">
+                                    <td className="py-2 px-2">
+                                      <div
+                                        className="w-6 h-6 rounded border"
+                                        style={{ backgroundColor: filament.color || '#888' }}
+                                        title={filament.color || 'No color data'}
+                                      />
+                                    </td>
+                                    <td className="py-2 px-2">{filament.type}</td>
+                                    <td className="text-right py-2 px-2">{filament.length}</td>
+                                    <td className="text-right py-2 px-2">{filament.weight}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </CollapsibleContent>
+                        )}
+                      </div>
+                    </Collapsible>
+                  </>
+                ) : (
+                  <>
+                    {/* Prominent drag-and-drop zone when no data exists */}
+                    <div
+                      className="border-2 border-dashed border-primary/50 rounded-lg p-8 text-center hover:border-primary hover:bg-primary/5 transition-all cursor-pointer"
+                      onDragOver={handleGcodeDragOver}
+                      onDrop={handleGcodeDrop}
+                      onClick={() => gcodeInputRef.current?.click()}
+                    >
+                      <Upload className="h-12 w-12 mx-auto mb-3 text-primary" />
+                      <p className="text-base font-medium mb-2">Upload G-code File</p>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Drag and drop a .gcode or .gcode.3mf file here
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploadingGcode}
+                        className="gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          gcodeInputRef.current?.click();
+                        }}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {isUploadingGcode ? 'Uploading...' : 'Browse Files'}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Analyze print time, filament usage, and multi-color information from your sliced G-code
+                    </p>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
           {currentModel.source && (
             <>
               <Separator />
@@ -3105,6 +3503,33 @@ export function ModelDetailsDrawer({
             </div>
           </div>
         )}
+        
+        {/* G-code overwrite confirmation dialog */}
+        <AlertDialog open={gcodeOverwriteDialog.open} onOpenChange={(open) => !open && setGcodeOverwriteDialog({ open: false, file: null, existingPath: '' })}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>G-code file already exists</AlertDialogTitle>
+              <AlertDialogDescription>
+                A G-code file already exists at: <strong>{gcodeOverwriteDialog.existingPath}</strong>
+                <br /><br />
+                Do you want to overwrite it with the new file?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setGcodeOverwriteDialog({ open: false, file: null, existingPath: '' })}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={() => {
+                if (gcodeOverwriteDialog.file) {
+                  handleGcodeUpload(gcodeOverwriteDialog.file, true);
+                }
+                setGcodeOverwriteDialog({ open: false, file: null, existingPath: '' });
+              }}>
+                Overwrite
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SheetContent>
     </Sheet>
   );
