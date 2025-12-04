@@ -114,5 +114,8 @@
             "commitizen": {
                   "path": "./node_modules/cz-conventional-changelog"
             }
+      },
+      "overrides": {
+            "jws": "^4.0.1"
       }
 }
