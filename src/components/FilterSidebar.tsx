@@ -10,6 +10,7 @@ import { Switch } from "./ui/switch";
 import { Category } from "../types/category";
 import { Model } from "../types/model";
 import { ScrollArea } from "./ui/scroll-area";
+import { ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
 
 interface FilterSidebarProps {
   onFilterChange: (filters: {
@@ -51,6 +52,88 @@ const normalizeIconName = (input?: string) => {
   if (!cleaned) return '';
   const parts = cleaned.split(/[-_\s]+/).filter(Boolean);
   return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+};
+
+// --- Helper: Build Folder Tree ---
+interface FolderNode {
+  name: string;
+  fullPath: string;
+  children: Record<string, FolderNode>;
+  fileCount: number;
+}
+
+const buildFolderTree = (models: Model[]): FolderNode => {
+  const root: FolderNode = { name: 'Root', fullPath: '', children: {}, fileCount: 0 };
+  
+  models.forEach(model => {
+    // Determine path from modelUrl or filePath
+    let pathStr = model.modelUrl || model.filePath || '';
+    // Clean up path: remove /models prefix and standardise slashes
+    pathStr = pathStr.replace(/^(\/)?models\//, '').replace(/\\/g, '/');
+    
+    // Remove filename (last part) to get just the folder path
+    const parts = pathStr.split('/');
+    parts.pop(); 
+    
+    if (parts.length === 0) return; // Root file, no folder
+
+    let current = root;
+    let currentPath = '';
+
+    parts.forEach((part) => {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      if (!current.children[part]) {
+        current.children[part] = { name: part, fullPath: currentPath, children: {}, fileCount: 0 };
+      }
+      current = current.children[part];
+      current.fileCount++;
+    });
+  });
+  return root;
+};
+
+// --- Helper: Recursive Folder Item Component ---
+const FolderTreeItem = ({ node, level, onSelect }: { node: FolderNode, level: number, onSelect: (path: string) => void }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const hasChildren = Object.keys(node.children).length > 0;
+
+  return (
+    <div className="w-full select-none">
+      <div 
+        className={`flex items-center gap-2 py-1 px-2 rounded-md hover:bg-accent cursor-pointer ${level > 0 ? 'ml-3 border-l border-border/50' : ''}`}
+        onClick={(e) => {
+            e.stopPropagation();
+            // Toggle open/close if it has children
+            if(hasChildren) setIsOpen(!isOpen);
+            // Select the folder path
+            onSelect(node.fullPath);
+        }}
+      >
+        {/* Indentation / Arrow */}
+        {hasChildren ? (
+          isOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />
+        ) : <span className="w-3" />}
+        
+        {/* Icon */}
+        {isOpen || (!hasChildren && level > 0) ? <FolderOpen className="h-4 w-4 text-primary" /> : <Folder className="h-4 w-4 text-muted-foreground" />}
+        
+        {/* Label */}
+        <span className="text-sm truncate flex-1">{node.name}</span>
+        
+        {/* Count Badge */}
+        <span className="text-xs text-muted-foreground bg-muted px-1.5 rounded-full">{node.fileCount}</span>
+      </div>
+      
+      {/* Recursive Children */}
+      {isOpen && hasChildren && (
+        <div className="mt-1">
+          {Object.values(node.children).sort((a,b) => a.name.localeCompare(b.name)).map((child) => (
+            <FolderTreeItem key={child.fullPath} node={child} level={level + 1} onSelect={onSelect} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export function FilterSidebar({
@@ -309,6 +392,8 @@ export function FilterSidebar({
     });
   };
 
+  const folderTree = buildFolderTree(models);
+
   return (
     <div className="h-full bg-sidebar flex flex-col">
       {/* Header */}
@@ -412,6 +497,31 @@ export function FilterSidebar({
                     <X className="h-3 w-3" />
                   </Button>
                 )}
+              </div>
+            </div>
+
+            {/* Folders Section */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Folder className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">Folders</label>
+              </div>
+              <div className="border rounded-md p-2 bg-background/50">
+                <div 
+                    className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-accent cursor-pointer mb-2"
+                    onClick={() => handleSearchChange("")} // Reset search/path when clicking "All Models"
+                >
+                    <FolderOpen className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">All Models</span>
+                </div>
+                {Object.values(folderTree.children).map(node => (
+                  <FolderTreeItem 
+                    key={node.fullPath} 
+                    node={node} 
+                    level={0} 
+                    onSelect={(path) => handleSearchChange(path)} // Clicking a folder populates the search bar
+                  />
+                ))}
               </div>
             </div>
 

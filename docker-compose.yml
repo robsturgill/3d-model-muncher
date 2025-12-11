@@ -1,9 +1,13 @@
 services:
   3d-model-muncher:
-    image: ${COMPOSE_IMAGE:-}
+    # 1. PRIMARY: Try to use the pre-built image from your GitHub Registry
+    # Replace 'your-github-username' with your actual username!
+    image: ghcr.io/CNCmarlin/3d-model-muncher:latest
+    
+    # 2. FALLBACK: Build locally if the user explicitly runs 'docker-compose up --build'
     build: 
       context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
+      dockerfile: Dockerfile
     container_name: 3d-model-muncher
     hostname: 3d-model-muncher
     ports:
