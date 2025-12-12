@@ -1173,6 +1173,7 @@ function AppContent() {
             <ModelGrid 
               models={filteredModels} 
               collections={sortCollections(collectionsForDisplay, currentSortBy)}
+              allCollections={collections} // <--- [NEW] Pass full list for the editor
               sortBy={currentSortBy}
               onModelClick={handleModelClick}
               onOpenCollection={(id) => {

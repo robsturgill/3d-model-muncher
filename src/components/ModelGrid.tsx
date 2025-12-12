@@ -21,6 +21,7 @@ import { SelectionModeControls } from "./SelectionModeControls";
 interface ModelGridProps {
   models: Model[];
   collections?: Collection[];
+  allCollections?: Collection[]; // <--- [NEW] Full list for parenting
   onModelClick: (model: Model) => void;
   onOpenCollection?: (collectionId: string) => void;
   onCollectionChanged?: () => void;
@@ -65,6 +66,7 @@ function saveUiPrefs(prefs: any) {
 export function ModelGrid({ 
   models,
   collections = [],
+  allCollections = [],
   onModelClick, 
   onOpenCollection,
   onCollectionChanged,
@@ -674,6 +676,7 @@ export function ModelGrid({
           else setIsCreateCollectionOpen(true);
         }}
         collection={null}
+        collections={allCollections} // <--- [NEW] Pass the full list
         categories={config.categories || []}
         initialModelIds={selectedModelIds}
         onSaved={() => {

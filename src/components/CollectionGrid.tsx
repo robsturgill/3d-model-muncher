@@ -232,8 +232,9 @@ export default function CollectionGrid({
         open={isCreateCollectionOpen}
         onOpenChange={setIsCreateCollectionOpen}
         collection={null}
-  categories={config?.categories || []}
-  removalCollection={activeCollection ?? null}
+        collections={collections}
+        categories={config?.categories || []}
+        removalCollection={activeCollection ?? null}
         initialModelIds={selectedModelIds}
         onSaved={() => {
           setIsCreateCollectionOpen(false);
@@ -242,7 +243,7 @@ export default function CollectionGrid({
           if (isSelectionMode) {
             onToggleSelectionMode?.();
           }
-        }}
+        } }
       />
     </div>
   );
