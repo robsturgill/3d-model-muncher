@@ -11,6 +11,7 @@ import { Category } from "../types/category";
 import { Model } from "../types/model";
 import { ScrollArea } from "./ui/scroll-area";
 import { ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
+import { Collection } from "../types/collection";
 
 interface FilterSidebarProps {
   onFilterChange: (filters: {
@@ -32,6 +33,8 @@ interface FilterSidebarProps {
   onSettingsClick: () => void;
   categories: Category[];
   models: Model[];
+  collections: Collection[];                  // <--- Added
+  onOpenCollection: (col: Collection) => void; // <--- Added
   initialFilters?: {
     search: string;
     category: string;
@@ -136,6 +139,96 @@ const FolderTreeItem = ({ node, level, onSelect }: { node: FolderNode, level: nu
   );
 };
 
+// --- Helper: Build Collection Tree ---
+// Converts flat collection list into a hierarchy based on parentId
+
+interface CollectionNode {
+  id: string;
+  label: string;
+  fullPath: string; // breadcrumb style: "Parent / Child"
+  children: CollectionNode[];
+}
+
+const buildCollectionTree = (collections: Collection[]): CollectionNode[] => {
+  const nodeMap = new Map<string, CollectionNode>();
+  const rootNodes: CollectionNode[] = [];
+
+  // 1. Initialize all nodes
+  collections.forEach(col => {
+    nodeMap.set(col.id, { 
+      id: col.id, 
+      label: col.name, 
+      fullPath: col.name, 
+      children: [] 
+    });
+  });
+
+  // 2. Link parents and children
+  collections.forEach(col => {
+    const node = nodeMap.get(col.id)!;
+    if (col.parentId && nodeMap.has(col.parentId)) {
+      const parent = nodeMap.get(col.parentId)!;
+      parent.children.push(node);
+      // Update path to include parent (simple visual aid)
+      node.fullPath = `${parent.fullPath} / ${node.label}`;
+    } else {
+      rootNodes.push(node);
+    }
+  });
+
+  // 3. Sort alphabetically at every level
+  const sortNodes = (nodes: CollectionNode[]) => {
+    nodes.sort((a, b) => a.label.localeCompare(b.label));
+    nodes.forEach(n => sortNodes(n.children));
+  };
+  sortNodes(rootNodes);
+
+  return rootNodes;
+};
+
+// --- Helper: Recursive Collection Item Component ---
+const CollectionTreeItem = ({ node, level, onSelect }: { 
+  node: CollectionNode, 
+  level: number, 
+  onSelect: () => void 
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const hasChildren = node.children.length > 0;
+
+  return (
+    <div className="w-full select-none">
+      <div 
+        className={`flex items-center gap-2 py-1 px-2 rounded-md hover:bg-accent cursor-pointer ${level > 0 ? 'ml-3 border-l border-border/50' : ''}`}
+        onClick={(e) => {
+            e.stopPropagation();
+            if(hasChildren) setIsOpen(!isOpen);
+            onSelect(); 
+        }}
+      >
+        {hasChildren ? (
+          isOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />
+        ) : <span className="w-3" />}
+        
+        <Layers className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm truncate flex-1">{node.label}</span>
+      </div>
+      
+      {isOpen && hasChildren && (
+        <div className="mt-1">
+          {node.children.map((child) => (
+            <CollectionTreeItem 
+              key={child.id} 
+              node={child} 
+              level={level + 1} 
+              onSelect={onSelect} 
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export function FilterSidebar({
   onFilterChange,
   onCategoryChosen,
@@ -143,8 +236,10 @@ export function FilterSidebar({
   onClose,
   onSettingsClick,
   categories,
-  models
-  , initialFilters
+  models,
+  collections,       // <--- Added
+  onOpenCollection,  // <--- Added
+  initialFilters
 }: FilterSidebarProps) {
   const TAG_DISPLAY_LIMIT = 25;
   // Initialize filter UI from `initialFilters` (do not persist to localStorage here)
@@ -393,6 +488,7 @@ export function FilterSidebar({
   };
 
   const folderTree = buildFolderTree(models);
+  const collectionTree = buildCollectionTree(collections); // <--- Added
 
   return (
     <div className="h-full bg-sidebar flex flex-col">
@@ -522,6 +618,31 @@ export function FilterSidebar({
                     onSelect={(path) => handleSearchChange(path)} // Clicking a folder populates the search bar
                   />
                 ))}
+              </div>
+            </div>
+
+            {/* Collections Tree Section (NEW) */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-foreground" />
+                <label className="text-sm font-medium text-foreground">Collections</label>
+              </div>
+              <div className="border rounded-md p-2 bg-background/50">
+                {collectionTree.length === 0 ? (
+                  <div className="text-xs text-muted-foreground p-2">No collections</div>
+                ) : (
+                  collectionTree.map(node => (
+                    <CollectionTreeItem 
+                      key={node.id} 
+                      node={node} 
+                      level={0} 
+                      onSelect={() => {
+                        const original = collections.find(c => c.id === node.id);
+                        if (original) onOpenCollection(original);
+                      }}
+                    />
+                  ))
+                )}
               </div>
             </div>
 

@@ -1020,6 +1020,11 @@ function AppContent() {
           onClose={() => setIsSidebarOpen(false)}
           onSettingsClick={handleSettingsClick}
           categories={categories}
+
+          // [NEW PROPS ADDED HERE]
+          collections={collections}
+          onOpenCollection={openCollection}
+
           models={(currentView === 'collection-view' && activeCollection)
             ? collectionBaseModels
             : models}
@@ -1259,6 +1264,8 @@ function AppContent() {
               name={activeCollection.name}
               modelIds={activeCollection.modelIds}
               models={filteredModels}
+              collections={collections}
+              onOpenCollection={openCollection}
               onBack={() => {
                 if (collectionReturnView === 'models') {
                   // Return to main grid: reset filters and show all models

@@ -262,8 +262,7 @@ app.get('/api/collections', (req, res) => {
 // Create or update a collection
 app.post('/api/collections', (req, res) => {
   try {
-    const { id, name, description = '', modelIds = [], coverModelId, category = '', tags = [], images = [] } = req.body || {};
-    if (!name || typeof name !== 'string' || name.trim() === '') {
+    const { id, name, description = '', modelIds = [], childCollectionIds = [], parentId = null, coverModelId, category = '', tags = [], images = [] } = req.body || {};    if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ success: false, error: 'Name is required' });
     }
     if (!Array.isArray(modelIds)) {
@@ -281,7 +280,19 @@ app.post('/api/collections', (req, res) => {
         return res.status(404).json({ success: false, error: 'Collection not found' });
       }
       const prev = cols[idx] || { modelIds: [] };
-      const updated = { ...prev, name, description, modelIds: normalizedIds, coverModelId, lastModified: now };
+      // Ensure childCollectionIds is an array of strings
+      const normalizedChildren = Array.isArray(childCollectionIds) ? childCollectionIds.filter(x => typeof x === 'string') : [];
+
+      const updated = { 
+      ...prev, 
+      name, 
+      description, 
+      modelIds: normalizedIds, 
+      childCollectionIds: normalizedChildren,
+      parentId: parentId,
+      coverModelId, 
+      lastModified: now 
+      };
       if (typeof category === 'string') updated.category = category;
       if (Array.isArray(tags)) updated.tags = Array.from(new Set(tags.filter(t => typeof t === 'string')));
       if (Array.isArray(images)) updated.images = images.filter(s => typeof s === 'string');
@@ -338,8 +349,23 @@ app.post('/api/collections', (req, res) => {
       try { reconcileHiddenFlags(); } catch {}
       result = updated;
     } else {
-      const newCol = { id: makeId(), name, description, modelIds: normalizedIds, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
-      cols.push(newCol);
+      // Ensure childCollectionIds is an array of strings
+      const normalizedChildren = Array.isArray(childCollectionIds) ? childCollectionIds.filter(x => typeof x === 'string') : [];
+
+      const newCol = { 
+      id: makeId(), 
+      name, 
+      description, 
+      modelIds: normalizedIds, 
+      childCollectionIds: normalizedChildren,
+      parentId: parentId,
+      coverModelId, 
+      category, 
+      tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], 
+      images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], 
+      created: now, 
+      lastModified: now 
+      };      cols.push(newCol);
       if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
       // Newly created collection: mark included models as hidden in their munchie files
       try {
