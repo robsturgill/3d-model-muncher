@@ -11,6 +11,7 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { LICENSES } from '../constants/licenses';
 import { Switch } from "./ui/switch";
+import { Checkbox } from "./ui/checkbox";
 import { Separator } from "./ui/separator";
 import { Badge } from "./ui/badge";
 import { Alert, AlertDescription } from "./ui/alert";
@@ -221,7 +222,10 @@ export function SettingsPage({
   // Switch to integrity tab and capture fileType to avoid async state races
   setSelectedTab('integrity');
     const actionFileType = settingsAction.fileType;
-    setSelectedFileType(actionFileType);
+    // Only set specific checkboxes if a fileType is provided; otherwise keep default (both true)
+    if (actionFileType) {
+      setSelectedFileTypes({ "3mf": actionFileType === "3mf", "stl": actionFileType === "stl" });
+    }
 
   (async () => {
       try {
@@ -320,8 +324,8 @@ export function SettingsPage({
   // Track which duplicate group's dialog is open (store group.hash or null)
   const [openDuplicateGroupHash, setOpenDuplicateGroupHash] = useState<string | null>(null);
 
-  // File type selection state - "3mf" or "stl" only
-  const [selectedFileType, setSelectedFileType] = useState<"3mf" | "stl">("3mf");
+  // File type selection state - both can be selected, both default to true
+  const [selectedFileTypes, setSelectedFileTypes] = useState<{ "3mf": boolean; "stl": boolean }>({ "3mf": true, "stl": true });
 
   // Lazy load experimental tab component from separate file
   const ExperimentalTab = lazy(() => import('./settings/ExperimentalTab'));
@@ -354,41 +358,60 @@ export function SettingsPage({
   const [generateResult, setGenerateResult] = useState<{ skipped?: number; generated?: number; verified?: number; processed?: number } | null>(null);
   
   const handleGenerateModelJson = async (fileType?: "3mf" | "stl") => {
-    const effectiveFileType = fileType || selectedFileType;
+    // Determine which file types to process
+    const fileTypesToProcess: Array<"3mf" | "stl"> = fileType 
+      ? [fileType] 
+      : [...(selectedFileTypes["3mf"] ? ["3mf" as const] : []), ...(selectedFileTypes["stl"] ? ["stl" as const] : [])];
+    
+    if (fileTypesToProcess.length === 0) return;
+    
     // Clear any previous hash-check results so UI doesn't show stale verified counts
     if (hashCheckResult) setHashCheckResult(null);
     setIsGeneratingJson(true);
     // Clear previous generation result so UI shows fresh status while running
     setGenerateResult(null);
-    const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
-    setStatusMessage(`Generating JSON for all ${fileTypeText} files...`);
+    
     try {
-      // Request streaming progress from backend
-      setIsGeneratingJson(true);
+      let totalProcessed = 0;
+      let totalSkipped = 0;
+      let totalGenerated = 0;
+      let totalVerified = 0;
+      
+      // Process each selected file type sequentially
+      for (const effectiveFileType of fileTypesToProcess) {
+        const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
+        setStatusMessage(`Generating JSON for all ${fileTypeText} files...`);
+        
+        const resp = await fetch('/api/scan-models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileType: effectiveFileType })
+        });
 
-      const resp = await fetch('/api/scan-models', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileType: effectiveFileType })
-      });
+        if (!resp.ok) {
+          const errBody = await resp.text().catch(() => '');
+          throw new Error(`Scan failed for ${fileTypeText}: ${resp.status} ${errBody}`);
+        }
 
-      if (!resp.ok) {
-        const errBody = await resp.text().catch(() => '');
-        throw new Error(`Scan failed: ${resp.status} ${errBody}`);
+        // Read final JSON summary from the server
+        const data = await resp.json().catch(() => ({} as any));
+        if (!data || (data.success === false)) {
+          throw new Error(data?.error || `Scan failed for ${fileTypeText}`);
+        }
+
+        // Accumulate counts from each file type
+        totalProcessed += typeof data.processed === 'number' ? data.processed : 0;
+        totalSkipped += typeof data.skipped === 'number' ? data.skipped : 0;
+        totalGenerated += typeof data.generated === 'number' ? data.generated : 0;
+        totalVerified += typeof data.verified === 'number' ? data.verified : 0;
       }
-
-      // Read final JSON summary from the server
-      const data = await resp.json().catch(() => ({} as any));
-      if (!data || (data.success === false)) {
-        throw new Error(data?.error || 'Scan failed');
-      }
-
-      // Populate generateResult with any counts the server provided
+      
+      // Populate generateResult with accumulated counts
       setGenerateResult({
-        processed: typeof data.processed === 'number' ? data.processed : undefined,
-        skipped: typeof data.skipped === 'number' ? data.skipped : undefined,
-        generated: typeof data.generated === 'number' ? data.generated : undefined,
-        verified: typeof data.verified === 'number' ? data.verified : undefined,
+        processed: totalProcessed > 0 ? totalProcessed : undefined,
+        skipped: totalSkipped > 0 ? totalSkipped : undefined,
+        generated: totalGenerated > 0 ? totalGenerated : undefined,
+        verified: totalVerified > 0 ? totalVerified : undefined,
       });
 
       setSaveStatus('saved');
@@ -1200,33 +1223,30 @@ export function SettingsPage({
   };
 
   // Run scanModelFile for all models, update models, and produce a HashCheckResult for UI compatibility
-  const handleRunHashCheck = (fileType?: "3mf" | "stl") => {
+  const handleRunHashCheck = async (fileType?: "3mf" | "stl") => {
+    // Determine which file types to process
+    const fileTypesToProcess: Array<"3mf" | "stl"> = fileType 
+      ? [fileType] 
+      : [...(selectedFileTypes["3mf"] ? ["3mf" as const] : []), ...(selectedFileTypes["stl"] ? ["stl" as const] : [])];
+    
+    if (fileTypesToProcess.length === 0) return;
+    
     // Clear any previous generate or duplicate results so the UI doesn't show stale counts
     if (generateResult) setGenerateResult(null);
     setDuplicateGroups([]);
     setHashCheckResult(null);
     setIsHashChecking(true);
     setHashCheckProgress(0);
-    const effectiveFileType = fileType || selectedFileType;
-    const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
-    setStatusMessage(`Rescanning ${fileTypeText} files and comparing hashes...`);
-    fetch('/api/hash-check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileType: effectiveFileType })
-    })
-      .then(resp => resp.json())
-      .then(data => {
-      if (!data.success) throw new Error(data.error || 'Hash check failed');
-      // Map backend results to hash check result
-      // Backend may include an overall verified count; prefer it if present
-      let verified = typeof data.verified === 'number' ? data.verified : 0;
-      let corrupted = 0;
-      const corruptedFiles: CorruptedFile[] = [];
-      const duplicateGroups: DuplicateGroup[] = [];
-      const hashToModels: Record<string, Model[]> = {};
-      const updatedModels: Model[] = [];
-      const usedIds = new Set<string>(); // Track used IDs to prevent duplicates
+    
+    try {
+      let allVerified = 0;
+      let allCorrupted = 0;
+      const allCorruptedFiles: CorruptedFile[] = [];
+      const allDuplicateGroups: DuplicateGroup[] = [];
+      const allHashToModels: Record<string, Model[]> = {};
+      const allUpdatedModels: Model[] = [];
+      const usedIds = new Set<string>(); // Track used IDs across both runs
+      
       // Default Model shape for missing fields
       const defaultModel: Model = {
         id: '',
@@ -1237,20 +1257,38 @@ export function SettingsPage({
         isPrinted: false,
         printTime: '',
         filamentUsed: '',
-        category: 'Utility', // Set a default category
+        category: 'Utility',
         description: '',
         fileSize: '',
         modelUrl: '',
         license: '',
         notes: '',
-  printSettings: { layerHeight: '', infill: '', nozzle: '' },
+        printSettings: { layerHeight: '', infill: '', nozzle: '' },
         hash: '',
         lastScanned: '',
         source: '',
         price: 0,
-        filePath: '' // Add required filePath
+        filePath: ''
       };
-      for (const r of data.results) {
+      
+      // Process each selected file type sequentially
+      for (const effectiveFileType of fileTypesToProcess) {
+        const fileTypeText = effectiveFileType === "3mf" ? ".3mf" : ".stl";
+        setStatusMessage(`Rescanning ${fileTypeText} files and comparing hashes...`);
+        
+        const resp = await fetch('/api/hash-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileType: effectiveFileType })
+        });
+        
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || `Hash check failed for ${fileTypeText}`);
+        
+        // Map backend results and accumulate
+        allVerified += typeof data.verified === 'number' ? data.verified : 0;
+        
+        for (const r of data.results) {
         // Try to find the full model in the current models array for images/thumbnails
         const fullModel = models.find(m => {
           // Try multiple matching strategies
@@ -1297,58 +1335,58 @@ export function SettingsPage({
         };
         
 
-        if (r.status === 'ok') {
-          verified++;
-        } else {
-          corrupted++;
-          // Add file info to corruptedFiles
-          const filePath = r.threeMF ? `/models/${r.threeMF}` : r.stl ? `/models/${r.stl}` : '';
-          corruptedFiles.push({
-            model: mergedModel,
-            filePath: filePath,
-            error: r.details || 'Unknown error',
-            actualHash: r.hash || 'UNKNOWN',
-            expectedHash: r.storedHash || 'UNKNOWN'
-          });
-        }
-        if (r.hash) {
-          if (!hashToModels[r.hash]) hashToModels[r.hash] = [];
-          hashToModels[r.hash].push(mergedModel);
-        }
-        updatedModels.push(mergedModel);
-      }
-      // Find duplicate groups
-      for (const hash in hashToModels) {
-        if (hashToModels[hash].length > 1) {
-          duplicateGroups.push({ hash, models: hashToModels[hash], totalSize: '0' });
+          if (r.status === 'ok') {
+            allVerified++;
+          } else {
+            allCorrupted++;
+            const filePath = r.threeMF ? `/models/${r.threeMF}` : r.stl ? `/models/${r.stl}` : '';
+            allCorruptedFiles.push({
+              model: mergedModel,
+              filePath: filePath,
+              error: r.details || 'Unknown error',
+              actualHash: r.hash || 'UNKNOWN',
+              expectedHash: r.storedHash || 'UNKNOWN'
+            });
+          }
+          if (r.hash) {
+            if (!allHashToModels[r.hash]) allHashToModels[r.hash] = [];
+            allHashToModels[r.hash].push(mergedModel);
+          }
+          allUpdatedModels.push(mergedModel);
         }
       }
-      setDuplicateGroups(duplicateGroups);
+      
+      // Find duplicate groups across all file types
+      for (const hash in allHashToModels) {
+        if (allHashToModels[hash].length > 1) {
+          allDuplicateGroups.push({ hash, models: allHashToModels[hash], totalSize: '0' });
+        }
+      }
+      
+      setDuplicateGroups(allDuplicateGroups);
       setHashCheckResult({
-        verified,
-        corrupted,
-        duplicateGroups,
-        corruptedFiles,
-        corruptedFileDetails: corruptedFiles,
+        verified: allVerified,
+        corrupted: allCorrupted,
+        duplicateGroups: allDuplicateGroups,
+        corruptedFiles: allCorruptedFiles,
+        corruptedFileDetails: allCorruptedFiles,
         lastCheck: new Date().toISOString()
       });
-      onModelsUpdate(updatedModels);
+      onModelsUpdate(allUpdatedModels);
       setSaveStatus('saved');
       setStatusMessage('Hash check complete. See results.');
       setTimeout(() => {
         setSaveStatus('idle');
         setStatusMessage('');
       }, 4000);
-      })
-      .catch(error => {
-        setSaveStatus('error');
-        setStatusMessage('Model scan failed');
-        console.error('Model scan error:', error);
-      })
-      .finally(() => {
-        setIsHashChecking(false);
-        setHashCheckProgress(0);
-      });
+    } catch (error) {
+      setSaveStatus('error');
+      setStatusMessage('Model scan failed');
+      console.error('Model scan error:', error);
+    } finally {
+      setIsHashChecking(false);
+      setHashCheckProgress(0);
+    }
   };
 
   const handleRemoveDuplicates = async (group: DuplicateGroup, keepModelId: string): Promise<boolean> => {
@@ -1464,8 +1502,9 @@ export function SettingsPage({
         toast.success('Regenerated munchie data');
       }
 
-      // Re-run the hash check to refresh UI
-      handleRunHashCheck(selectedFileType);
+      // Re-run the hash check to refresh UI with the first selected file type
+      const firstSelectedType = selectedFileTypes["3mf"] ? "3mf" : "stl";
+      handleRunHashCheck(firstSelectedType);
     } catch (e: any) {
       console.error('Regenerate error:', e);
       toast.error(e?.message || 'Failed to regenerate munchie file');
@@ -2684,27 +2723,31 @@ export function SettingsPage({
                           Check for duplicates and verify model metadata
                         </p>
                         <div className="mt-2">
-                          <Label className="text-sm font-medium">File Type</Label>
-                          <RadioGroup 
-                            value={selectedFileType} 
-                            onValueChange={(value: "3mf" | "stl") => setSelectedFileType(value)}
-                            className="flex gap-4 mt-2"
-                          >
+                          <Label className="text-sm font-medium">File Types</Label>
+                          <div className="flex gap-4 mt-2">
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="3mf" id="file-type-3mf" />
-                              <Label htmlFor="file-type-3mf">3MF only</Label>
+                              <Checkbox
+                                id="file-type-3mf"
+                                checked={selectedFileTypes["3mf"]}
+                                onCheckedChange={(checked) => setSelectedFileTypes(prev => ({ ...prev, "3mf": Boolean(checked) }))}
+                              />
+                              <Label htmlFor="file-type-3mf" className="cursor-pointer">3MF</Label>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="stl" id="file-type-stl" />
-                              <Label htmlFor="file-type-stl">STL only</Label>
+                              <Checkbox
+                                id="file-type-stl"
+                                checked={selectedFileTypes["stl"]}
+                                onCheckedChange={(checked) => setSelectedFileTypes(prev => ({ ...prev, "stl": Boolean(checked) }))}
+                              />
+                              <Label htmlFor="file-type-stl" className="cursor-pointer">STL</Label>
                             </div>
-                          </RadioGroup>
+                          </div>
                         </div>
                       </div>
                       <div className="flex gap-2">
                         <Button 
                           onClick={() => handleRunHashCheck()}
-                          disabled={isHashChecking}
+                          disabled={isHashChecking || (!selectedFileTypes["3mf"] && !selectedFileTypes["stl"])}
                           className="gap-2"
                         >
                           {isHashChecking ? (
@@ -2716,7 +2759,7 @@ export function SettingsPage({
                         </Button>
                         <Button
                           onClick={() => handleGenerateModelJson()}
-                          disabled={isGeneratingJson}
+                          disabled={isGeneratingJson || (!selectedFileTypes["3mf"] && !selectedFileTypes["stl"])}
                           className="gap-2"
                           variant="secondary"
                         >
