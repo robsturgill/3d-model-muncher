@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import { describe, it, expect } from 'vitest';
-import { normalizeModelPath, extractFileName } from '../utils/downloadUtils';
+import { normalizeModelPath, extractFileName } from '../src/utils/downloadUtils';
 
 describe('downloadUtils helpers', () => {
   it('normalizeModelPath handles backslashes and missing /models prefix', () => {
