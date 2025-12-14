@@ -17,14 +17,15 @@ vi.mock('../src/components/ui/select', () => {
         children,
       )
     ),
-    SelectTrigger: (props: any) => React.createElement('div', props, props.children),
-    SelectValue: ({ placeholder, children }: any) => React.createElement('span', { 'data-testid': 'mock-select-value' }, children || placeholder || ''),
+    // Return null for wrapper components to keep DOM structure simple
+    SelectTrigger: () => null,
+    SelectValue: () => null,
     SelectContent: (props: any) => React.createElement(React.Fragment, null, props.children),
     SelectItem: ({ value, children, ...rest }: any) => React.createElement('option', { value, ...rest }, children),
-    SelectLabel: (props: any) => React.createElement('label', props, props.children),
-    SelectSeparator: (props: any) => React.createElement('hr', props),
-    SelectScrollUpButton: (props: any) => React.createElement('div', props, props.children),
-    SelectScrollDownButton: (props: any) => React.createElement('div', props, props.children),
+    SelectLabel: () => null,
+    SelectSeparator: () => null,
+    SelectScrollUpButton: () => null,
+    SelectScrollDownButton: () => null,
   }
 })
 

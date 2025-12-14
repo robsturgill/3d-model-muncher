@@ -1102,27 +1102,21 @@ function AppContent() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => setIsUploadDialogOpen(true)}>
+                    <Upload className="h-4 w-4 mr-2" /> Upload Files
+                  </DropdownMenuItem>
+                  <Separator className="mt-2 mb-2" />
                   <DropdownMenuItem onClick={() => { handleRefreshModels(); }} disabled={isRefreshing}>
                     <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={openCollectionsList}>
                     <List className="h-4 w-4 mr-2" /> Collections
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'hash-check', fileType: '3mf' })}> 
-                    <FileCheck className="h-4 w-4 mr-2" /> 3MF Check
+                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'hash-check', fileType: undefined as any })}>
+                    <FileCheck className="h-4 w-4 mr-2" /> File Check
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'hash-check', fileType: 'stl' })}>
-                    <FileCheck className="h-4 w-4 mr-2" /> STL Check
-                  </DropdownMenuItem>                  
-                  <Separator className="mt-2 mb-2" />
-                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'generate', fileType: '3mf' })}>
-                    <Files className="h-4 w-4 mr-2" /> 3MF Generate
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'generate', fileType: 'stl' })}>
-                    <Files className="h-4 w-4 mr-2" /> STL Generate
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setIsUploadDialogOpen(true)}>
-                    <Upload className="h-4 w-4 mr-2" /> Upload Files
+                  <DropdownMenuItem onClick={() => openSettingsOnTab('integrity', { type: 'generate', fileType: undefined as any })}>
+                    <Files className="h-4 w-4 mr-2" /> Generate Munchies
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1348,6 +1342,8 @@ function AppContent() {
             <div className="mt-2 text-sm">
               <h3 className="text-lg">v0.15.x - Release updates</h3>
               <ul className="list-disc pl-5 list-outside mb-4">
+                <li><strong>File Integrity Improvements</strong> - The File Integrity tools now allow selecting both 3MF and STL files simultaneously; checking both will process 3MF then STL sequentially when you run checks or generate munchie files.</li>
+                <li><strong>Bulk Image Generation Cancel</strong> - You can now cancel bulk image generation in progress, allowing you to stop long-running operations and close the bulk edit drawer.</li>
                 <li><strong>G-Code Support</strong> - Upload a gcode file to complete filament type, amount and print duration.</li>
               </ul>
             </div>

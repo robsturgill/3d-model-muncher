@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Model } from "../types/model";
 import { Category } from "../types/category";
 import {
@@ -157,6 +157,8 @@ export function BulkEditDrawer({
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [closeRequestedWhileGenerating, setCloseRequestedWhileGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const cancelImageGenerationRef = useRef(false);
+  const [cancelRequested, setCancelRequested] = useState(false);
   // renderer pool is used for offscreen captures; keep lightweight state for progress
 
   // Track which of the selected models are included in the related-files group
@@ -288,6 +290,8 @@ export function BulkEditDrawer({
       setIsGeneratingImages(false);
       setCloseRequestedWhileGenerating(false);
       setGenerateProgress({ current: 0, total: 0 });
+      cancelImageGenerationRef.current = false;
+      setCancelRequested(false);
     }
   }, [isOpen, models]);
 
@@ -478,10 +482,18 @@ export function BulkEditDrawer({
     // single WebGL renderer so we don't need to forcibly unregister other viewers.
 
     setIsGeneratingImages(true);
+    cancelImageGenerationRef.current = false;
+    setCancelRequested(false);
     setGenerateProgress({ current: 0, total: toProcess.length });
 
     const savedModels: Model[] = [];
     for (let i = 0; i < toProcess.length; i++) {
+      // Check if user requested cancellation
+      if (cancelImageGenerationRef.current) {
+        console.log('[BulkEdit] Image generation cancelled by user');
+        break;
+      }
+
       const model = toProcess[i];
       let modelUrl = model.modelUrl;
       if (!modelUrl && model.filePath) {
@@ -530,11 +542,13 @@ export function BulkEditDrawer({
     }
 
     setIsGeneratingImages(false);
-  setFieldSelection(prev => ({ ...prev, generateImages: false }));
+    setFieldSelection(prev => ({ ...prev, generateImages: false }));
 
-    // If the user requested close while generation ran, close now
-    if (closeRequestedWhileGenerating) {
+    // If the user requested close while generation ran, or cancelled, close now
+    if (closeRequestedWhileGenerating || cancelImageGenerationRef.current) {
       setCloseRequestedWhileGenerating(false);
+      cancelImageGenerationRef.current = false;
+      setCancelRequested(false);
       try {
         onClose();
       } catch (err) {
@@ -1683,7 +1697,7 @@ export function BulkEditDrawer({
                   <p className="text-sm text-muted-foreground">
                     Only models without existing images will be processed; models that already have images are skipped. This can take some time for large selections and will block other edits until it finishes.
                   </p>
-                  <div className="flex items-start">
+                  <div className="flex items-start gap-2">
                     <Button
                       onClick={async () => {
                         const saved = await handleGenerateImages();
@@ -1700,6 +1714,20 @@ export function BulkEditDrawer({
                       {isGeneratingImages ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                       {isGeneratingImages ? `Generating ${generateProgress.current}/${generateProgress.total}` : modelsMissingImagesCount === 0 ? 'No Images Needed' : 'Generate Images'}
                     </Button>
+                    {isGeneratingImages && (
+                      <Button
+                        onClick={() => {
+                          cancelImageGenerationRef.current = true;
+                          setCancelRequested(true);
+                        }}
+                        disabled={cancelRequested}
+                        size="sm"
+                        variant="destructive"
+                        className="gap-2"
+                      >
+                        {cancelRequested ? 'Cancelling...' : 'Cancel'}
+                      </Button>
+                    )}
                   </div>
                   {modelsMissingImagesCount === 0 && !isGeneratingImages && (
                     <p className="text-xs text-muted-foreground">

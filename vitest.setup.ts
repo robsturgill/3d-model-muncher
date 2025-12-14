@@ -1,8 +1,27 @@
 // Vitest global setup: polyfills, mocks, and env prep — keep critical polyfills first.
+
+// ResizeObserver must be set up FIRST, before any imports, as Radix UI modules check for it during runtime
+if (typeof (globalThis as any).ResizeObserver !== 'function') {
+  const RO = class ResizeObserver {
+    observe() {/* noop */}
+    unobserve() {/* noop */}
+    disconnect() {/* noop */}
+  };
+  (globalThis as any).ResizeObserver = RO;
+}
+
 import { vi } from 'vitest';
+
+// Also stub it via vitest to ensure it's available in all scopes
+vi.stubGlobal('ResizeObserver', (globalThis as any).ResizeObserver);
 
 // 1) Critical DOM polyfills that some UI libs expect during module init
 if (typeof window !== 'undefined') {
+  // ResizeObserver on window object (in addition to globalThis)
+  if (typeof (window as any).ResizeObserver !== 'function') {
+    (window as any).ResizeObserver = (globalThis as any).ResizeObserver;
+  }
+
   // matchMedia (used by toasters/theme libs)
   if (typeof (window as any).matchMedia !== 'function') {
     (window as any).matchMedia = (query: string) => {
@@ -24,20 +43,6 @@ if (typeof window !== 'undefined') {
   if (ElementProto && typeof ElementProto.scrollIntoView !== 'function') {
     ElementProto.scrollIntoView = () => {};
   }
-
-  // ResizeObserver (used by Radix primitives like Slider)
-  const ensureRO = () => {
-    if (typeof (globalThis as any).ResizeObserver !== 'function') {
-      const RO = class {
-        observe() {/* noop */}
-        unobserve() {/* noop */}
-        disconnect() {/* noop */}
-      };
-      try { vi.stubGlobal('ResizeObserver', RO as any); } catch { (globalThis as any).ResizeObserver = RO as any; }
-      try { (window as any).ResizeObserver = (globalThis as any).ResizeObserver; } catch {}
-    }
-  };
-  ensureRO();
 }
 
 // 2) React act environment toggle
