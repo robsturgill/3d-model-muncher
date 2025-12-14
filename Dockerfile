@@ -1,5 +1,5 @@
 # Multi-stage build for optimized production image
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -20,7 +20,7 @@ RUN npm run build
 RUN npx tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 # Set working directory
 WORKDIR /app
