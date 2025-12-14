@@ -1,3 +1,12 @@
+## [0.15.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.0...v0.15.1) (2025-12-14)
+
+
+### Bug Fixes
+
+* add bulk image generation cancellation and update release notes dialog ([4ec4a76](https://github.com/robsturgill/3d-model-muncher/commit/4ec4a765b41c6da5f2cb72224065637e29106471))
+* update Node.js version to 22 in workflow and Dockerfile ([8d099ea](https://github.com/robsturgill/3d-model-muncher/commit/8d099ea7e4bb0ef72e05ee381c602d7edd3f6e0c))
+* updated file integrity options to select both 3MF and STL types to run actions ([37cd76f](https://github.com/robsturgill/3d-model-muncher/commit/37cd76f29e7d30168e48860c95a7d7e9fde958b4))
+
 # [0.15.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.14.4...v0.15.0) (2025-11-29)
 
 
