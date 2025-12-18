@@ -62,9 +62,9 @@ describe('POST /api/upload-models', () => {
     expect(Array.isArray(resp.body.saved)).toBe(true);
     expect(resp.body.saved.length).toBeGreaterThan(0);
     
-    // Verify the file was saved with correct case
+    // Verify the file was saved with uppercase extension preserved (may have timestamp added)
     const savedPath = resp.body.saved[0];
-    expect(savedPath).toMatch(/test_UPPERCASE\.STL$/i);
+    expect(savedPath).toMatch(/test_UPPERCASE.*\.STL$/);
     
     // Clean up
     if (resp.body.processed && Array.isArray(resp.body.processed)) {
@@ -96,9 +96,9 @@ describe('POST /api/upload-models', () => {
     expect(Array.isArray(resp.body.saved)).toBe(true);
     expect(resp.body.saved.length).toBeGreaterThan(0);
     
-    // Verify the file was saved with correct case
+    // Verify the file was saved with uppercase extension preserved (may have timestamp added)
     const savedPath = resp.body.saved[0];
-    expect(savedPath).toMatch(/test_UPPERCASE\.3MF$/i);
+    expect(savedPath).toMatch(/test_UPPERCASE.*\.3MF$/);
     
     // Clean up
     if (resp.body.processed && Array.isArray(resp.body.processed)) {

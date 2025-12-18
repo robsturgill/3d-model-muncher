@@ -2880,27 +2880,27 @@ export function SettingsPage({
                             const modelData = corruptedModels[file.filePath];
                             // Better fallback logic - try multiple ways to find the model
                             const fallbackModel = models.find(m => {
-                              // Try exact match first
-                              if (m.modelUrl === file.filePath) return true;
+                              // Try exact match first (normalize slashes)
+                              const normalizedFileP = file.filePath.replace(/\\/g, '/');
+                              const normalizedModelUrl = m.modelUrl?.replace(/\\/g, '/');
+                              if (normalizedModelUrl === normalizedFileP) return true;
                               // Try with /models/ prefix
-                              if (m.modelUrl === `/models/${file.filePath}`) return true;
-                              // Try without /models/ prefix
-                              if (m.modelUrl === file.filePath.replace(/^[/\\]?models[/\\]/, '')) return true;
-                              // Try by comparing just the filename
-                              const fileBaseName = file.filePath.split(/[/\\]/).pop()?.replace(/\.(3mf|stl)$/i, '');
-                              const modelBaseName = m.modelUrl?.split(/[/\\]/).pop()?.replace(/\.(3mf|stl)$/i, '');
-                              return fileBaseName && modelBaseName && fileBaseName === modelBaseName;
+                              if (normalizedModelUrl === `/models/${normalizedFileP}`) return true;
+                              // Try without /models/ prefix from file path
+                              const withoutModelsPrefix = normalizedFileP.replace(/^[/\\]?models[/\\]?/, '');
+                              if (normalizedModelUrl === withoutModelsPrefix || normalizedModelUrl === `/models/${withoutModelsPrefix}`) return true;
+                              return false;
                             });
                             
                             const model = modelData || fallbackModel;
                             
                             return (
-                              <div key={file.filePath || `corrupt-${idx}`} 
+                              <div key={`corrupt-${idx}-${file.filePath.replace(/[^a-zA-Z0-9]/g, '-')}`} 
                                   className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800"
                                 >
                                   <div className="min-w-0 flex-1">
                                   <p className="font-medium text-red-900 dark:text-red-100 truncate">
-                                    {model ? getDisplayPath(model) : file.filePath.split('/').pop()?.replace(/\.(3mf|stl)$/i, '') || 'Unknown'}
+                                    {model ? getDisplayPath(model) : file.filePath.replace(/^[/\\]?models[/\\]?/, '')}
                                   </p>
                                   <p className="text-sm text-red-600 dark:text-red-400">
                                     {file.error || (file.actualHash && file.expectedHash && file.actualHash !== file.expectedHash
