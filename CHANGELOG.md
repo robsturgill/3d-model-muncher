@@ -1,3 +1,12 @@
+## [0.15.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.1...v0.15.2) (2025-12-18)
+
+
+### Bug Fixes
+
+* implement case-insensitive file path comparisons in model handling ([16c6da1](https://github.com/robsturgill/3d-model-muncher/commit/16c6da15cb0a845f693b13697b724c2050c330cd))
+* improve file extension handling for .stl and .3mf in various components and add tests ([9c700c5](https://github.com/robsturgill/3d-model-muncher/commit/9c700c5af55f9e8fafd8075ac795b3a2e8cbcb24)), closes [#62](https://github.com/robsturgill/3d-model-muncher/issues/62)
+* reported path issue with file integrity check and uploadmodel test fix ([a4d8d25](https://github.com/robsturgill/3d-model-muncher/commit/a4d8d251c97a0c69c9684bd49e6bab1e76bb47bd))
+
 ## [0.15.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.0...v0.15.1) (2025-12-14)
 
 
