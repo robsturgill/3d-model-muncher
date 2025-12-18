@@ -170,8 +170,9 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
             try {
               const candidate = allModels.find((m: any) => {
                 if (!m) return false;
-                if (m.filePath && m.filePath.replace(/\\/g, '/') === rel.replace(/\\/g, '/')) return true;
-                if (m.modelUrl && m.modelUrl.endsWith(rel.replace(/\\/g, '/'))) return true;
+                const normalizedRel = rel.replace(/\\/g, '/').toLowerCase();
+                if (m.filePath && m.filePath.replace(/\\/g, '/').toLowerCase() === normalizedRel) return true;
+                if (m.modelUrl && m.modelUrl.toLowerCase().endsWith(normalizedRel)) return true;
                 return false;
               }) || null;
 

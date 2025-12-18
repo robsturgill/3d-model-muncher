@@ -523,8 +523,8 @@ export function BulkEditDrawer({
 
       if (!updatedModel.filePath && updatedModel.modelUrl) {
         let rel = updatedModel.modelUrl.replace('/models/', '');
-        if (rel.endsWith('.3mf')) rel = rel.replace('.3mf', '-munchie.json');
-        else if (rel.endsWith('.stl')) rel = rel.replace('.stl', '-stl-munchie.json');
+        if (/\.3mf$/i.test(rel)) rel = rel.replace(/\.3mf$/i, '-munchie.json');
+        else if (/\.stl$/i.test(rel)) rel = rel.replace(/\.stl$/i, '-stl-munchie.json');
         else rel = `${rel}-munchie.json`;
         updatedModel.filePath = rel;
       }
@@ -703,10 +703,10 @@ export function BulkEditDrawer({
         let jsonFilePath;
         if (model.filePath) {
           // Always convert model file paths to munchie.json paths before saving
-          if (model.filePath.endsWith('.3mf')) {
+          if (/\.3mf$/i.test(model.filePath)) {
             jsonFilePath = model.filePath.replace(/\.3mf$/i, '-munchie.json');
-          } else if (model.filePath.endsWith('.stl') || model.filePath.endsWith('.STL')) {
-            jsonFilePath = model.filePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\.STL$/i, '-stl-munchie.json');
+          } else if (/\.stl$/i.test(model.filePath)) {
+            jsonFilePath = model.filePath.replace(/\.stl$/i, '-stl-munchie.json');
           } else if (model.filePath.endsWith('-munchie.json') || model.filePath.endsWith('-stl-munchie.json')) {
             // Already a JSON path, use as-is
             jsonFilePath = model.filePath;
@@ -718,10 +718,10 @@ export function BulkEditDrawer({
           // Construct the path based on the modelUrl to match the actual JSON file location
           let relativePath = model.modelUrl.replace('/models/', '');
           // Replace .3mf/.stl extension with appropriate -munchie.json
-          if (relativePath.endsWith('.3mf')) {
-            relativePath = relativePath.replace('.3mf', '-munchie.json');
-          } else if (relativePath.endsWith('.stl')) {
-            relativePath = relativePath.replace('.stl', '-stl-munchie.json');
+          if (/\.3mf$/i.test(relativePath)) {
+            relativePath = relativePath.replace(/\.3mf$/i, '-munchie.json');
+          } else if (/\.stl$/i.test(relativePath)) {
+            relativePath = relativePath.replace(/\.stl$/i, '-stl-munchie.json');
           } else if (relativePath.endsWith('-munchie.json') || relativePath.endsWith('-stl-munchie.json')) {
             // Already a JSON path, use as-is
             relativePath = relativePath;
