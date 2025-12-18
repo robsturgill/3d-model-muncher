@@ -170,8 +170,21 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
             try {
               const candidate = allModels.find((m: any) => {
                 if (!m) return false;
-                if (m.filePath && m.filePath.replace(/\\/g, '/') === rel.replace(/\\/g, '/')) return true;
-                if (m.modelUrl && m.modelUrl.endsWith(rel.replace(/\\/g, '/'))) return true;
+                // Normalize paths: convert backslashes to forward slashes and lowercase for comparison
+                const normalizedRel = rel.replace(/\\/g, '/').toLowerCase();
+                
+                // Match by filePath (exact match after normalization)
+                if (m.filePath) {
+                  const normalizedFilePath = m.filePath.replace(/\\/g, '/').toLowerCase();
+                  if (normalizedFilePath === normalizedRel) return true;
+                }
+                
+                // Match by modelUrl (endsWith match after normalization)
+                if (m.modelUrl) {
+                  const normalizedModelUrl = m.modelUrl.replace(/\\/g, '/').toLowerCase();
+                  if (normalizedModelUrl.endsWith(normalizedRel)) return true;
+                }
+                
                 return false;
               }) || null;
 
@@ -221,7 +234,23 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
           const modelsResp = await fetch('/api/models');
           const allModels = modelsResp.ok ? await modelsResp.json() : [];
           for (const rel of savedPaths) {
-            const candidate = allModels.find((m: any) => m && ((m.filePath && m.filePath.replace(/\\/g, '/') === rel.replace(/\\/g, '/')) || (m.modelUrl && m.modelUrl.endsWith(rel.replace(/\\/g, '/'))))) || null;
+            // Use case-insensitive comparison for file systems like Windows/macOS
+            const candidate = allModels.find((m: any) => {
+              if (!m) return false;
+              const normalizedRel = rel.replace(/\\/g, '/').toLowerCase();
+              
+              if (m.filePath) {
+                const normalizedFilePath = m.filePath.replace(/\\/g, '/').toLowerCase();
+                if (normalizedFilePath === normalizedRel) return true;
+              }
+              
+              if (m.modelUrl) {
+                const normalizedModelUrl = m.modelUrl.replace(/\\/g, '/').toLowerCase();
+                if (normalizedModelUrl.endsWith(normalizedRel)) return true;
+              }
+              
+              return false;
+            }) || null;
             await applyCategoryAndTagsTo(rel, candidate);
           }
         } catch (e) {

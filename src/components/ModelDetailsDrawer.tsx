@@ -1654,7 +1654,16 @@ export function ModelDetailsDrawer({
         if (allResp.ok) {
           const all = await allResp.json();
           // Prefer matching by id, fallback to matching by filePath if provided
-          const candidate = all.find((m: any) => (editedForSave.id && m.id === editedForSave.id) || (editedForSave.filePath && m.filePath === editedForSave.filePath));
+          // Use case-insensitive comparison for filePath on case-insensitive file systems
+          const candidate = all.find((m: any) => {
+            if (editedForSave.id && m.id === editedForSave.id) return true;
+            if (editedForSave.filePath && m.filePath) {
+              const normalizedEditedPath = editedForSave.filePath.replace(/\\/g, '/').toLowerCase();
+              const normalizedModelPath = m.filePath.replace(/\\/g, '/').toLowerCase();
+              return normalizedEditedPath === normalizedModelPath;
+            }
+            return false;
+          });
           if (candidate) refreshedModel = candidate as Model;
         }
       } catch (e) {

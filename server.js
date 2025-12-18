@@ -577,14 +577,14 @@ app.post('/api/save-model', async (req, res) => {
   }
 
   // If filePath is a model file (.stl/.3mf), convert to munchie.json
-  if (filePath && (filePath.endsWith('.stl') || filePath.endsWith('.STL'))) {
-    filePath = filePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\.STL$/i, '-stl-munchie.json');
-  } else if (filePath && filePath.endsWith('.3mf')) {
+  if (filePath && /\.stl$/i.test(filePath)) {
+    filePath = filePath.replace(/\.stl$/i, '-stl-munchie.json');
+  } else if (filePath && /\.3mf$/i.test(filePath)) {
     filePath = filePath.replace(/\.3mf$/i, '-munchie.json');
   }
 
   // Refuse to write to raw model files
-  if (filePath && (filePath.endsWith('.stl') || filePath.endsWith('.3mf'))) {
+  if (filePath && (/\.stl$/i.test(filePath) || /\.3mf$/i.test(filePath))) {
     console.error('Refusing to write to model file:', filePath);
     return res.status(400).json({ success: false, error: 'Refusing to write to model file' });
   }
