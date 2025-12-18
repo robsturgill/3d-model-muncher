@@ -1291,23 +1291,25 @@ export function SettingsPage({
         for (const r of data.results) {
         // Try to find the full model in the current models array for images/thumbnails
         const fullModel = models.find(m => {
-          // Try multiple matching strategies
+          // Try multiple matching strategies with case-insensitive comparison for file systems like Windows/macOS
           if (m.name === r.baseName) return true;
-          if (r.threeMF && m.modelUrl.endsWith(r.threeMF)) return true;
-          if (r.stl && m.modelUrl.endsWith(r.stl)) return true;
+          
+          // Normalize paths: convert backslashes to forward slashes and lowercase for comparison
+          const normalizedModelUrl = m.modelUrl.replace(/\\/g, '/').toLowerCase();
+          const file3mf = r.threeMF ? r.threeMF.replace(/\\/g, '/').toLowerCase() : null;
+          const fileStl = r.stl ? r.stl.replace(/\\/g, '/').toLowerCase() : null;
+          
+          // Try endsWith match (handles subdirectories)
+          if (file3mf && normalizedModelUrl.endsWith(file3mf)) return true;
+          if (fileStl && normalizedModelUrl.endsWith(fileStl)) return true;
+          
           // Try with /models/ prefix
-          if (r.threeMF && m.modelUrl === `/models/${r.threeMF}`) return true;
-          if (r.stl && m.modelUrl === `/models/${r.stl}`) return true;
-          // Try comparing the full modelUrl path (handling backslashes)
-          const expectedUrl = r.threeMF ? `/models/${r.threeMF}` : r.stl ? `/models/${r.stl}` : '';
-          if (m.modelUrl === expectedUrl) return true;
-          // Try normalizing paths - convert backslashes to forward slashes
-          const normalizedModelUrl = m.modelUrl.replace(/\\/g, '/');
-          const normalizedExpectedUrl = expectedUrl.replace(/\\/g, '/');
-          if (normalizedModelUrl === normalizedExpectedUrl) return true;
-          // Try comparing just the filename
-          const modelFileName = m.modelUrl?.split(/[/\\]/).pop()?.replace(/\.(3mf|stl)$/i, '');
-          const hashFileName = (r.threeMF?.replace('.3mf', '') || r.stl?.replace('.stl', ''));
+          if (file3mf && normalizedModelUrl === `/models/${file3mf}`) return true;
+          if (fileStl && normalizedModelUrl === `/models/${fileStl}`) return true;
+          
+          // Try comparing just the filename (case-insensitive)
+          const modelFileName = m.modelUrl?.split(/[/\\]/).pop()?.toLowerCase();
+          const hashFileName = (r.threeMF?.split(/[/\\]/).pop() || r.stl?.split(/[/\\]/).pop())?.toLowerCase();
           return modelFileName && hashFileName && modelFileName === hashFileName;
         });
         
@@ -2880,9 +2882,9 @@ export function SettingsPage({
                             const modelData = corruptedModels[file.filePath];
                             // Better fallback logic - try multiple ways to find the model
                             const fallbackModel = models.find(m => {
-                              // Try exact match first (normalize slashes)
-                              const normalizedFileP = file.filePath.replace(/\\/g, '/');
-                              const normalizedModelUrl = m.modelUrl?.replace(/\\/g, '/');
+                              // Try exact match first (normalize slashes and case for comparison)
+                              const normalizedFileP = file.filePath.replace(/\\/g, '/').toLowerCase();
+                              const normalizedModelUrl = m.modelUrl?.replace(/\\/g, '/').toLowerCase();
                               if (normalizedModelUrl === normalizedFileP) return true;
                               // Try with /models/ prefix
                               if (normalizedModelUrl === `/models/${normalizedFileP}`) return true;
