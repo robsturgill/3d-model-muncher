@@ -1,3 +1,10 @@
+## [0.15.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.2...v0.15.3) (2025-12-22)
+
+
+### Bug Fixes
+
+* docker backend build command to correct gcode parsing issue, removed duplicate gcodeParser.js ([f22566e](https://github.com/robsturgill/3d-model-muncher/commit/f22566e1884bc716d98623d2975690fadad96c83))
+
 ## [0.15.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.1...v0.15.2) (2025-12-18)
 
 
