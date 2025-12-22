@@ -17,7 +17,7 @@ COPY . .
 RUN npm run build
 
 # Build the backend utilities
-RUN npx tsc --outDir dist-backend --module commonjs --target es2019 src/utils/threeMFToJson.ts src/utils/configManager.ts
+RUN npm run build:backend
 
 # Production stage
 FROM node:22-alpine AS production
