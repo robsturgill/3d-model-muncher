@@ -1,5 +1,15 @@
 // Vitest global setup: polyfills, mocks, and env prep — keep critical polyfills first.
 
+// Import jest-dom matchers for Vitest
+import '@testing-library/jest-dom/vitest';
+
+// Ensure globals are defined for jsdom environment
+if (typeof global !== 'undefined' && typeof window === 'undefined') {
+  // If we're in Node but jsdom hasn't initialized yet, this will cause issues
+  // Vitest should handle this, but let's be defensive
+  console.warn('Window not defined during setup - jsdom may not be initialized yet');
+}
+
 // ResizeObserver must be set up FIRST, before any imports, as Radix UI modules check for it during runtime
 if (typeof (globalThis as any).ResizeObserver !== 'function') {
   const RO = class ResizeObserver {
@@ -64,6 +74,7 @@ vi.mock('@radix-ui/react-checkbox', () => {
 // Mock Radix Select to a simple <select> implementation for tests
 vi.mock('@radix-ui/react-select', () => {
   const React = require('react') as typeof import('react');
+  const Passthrough = (props: any) => React.createElement(React.Fragment, null, props.children);
   return {
     Root: ({ children, value, onValueChange, ...rest }: any) => (
       React.createElement(
@@ -77,16 +88,20 @@ vi.mock('@radix-ui/react-select', () => {
         children,
       )
     ),
-    Group: (props: any) => React.createElement(React.Fragment, null, props.children),
+    Group: Passthrough,
     Value: ({ placeholder, children }: any) => React.createElement('span', { 'data-testid': 'mock-select-value' }, children || placeholder || ''),
     Trigger: (props: any) => React.createElement('div', props, props.children),
-    Content: (props: any) => React.createElement(React.Fragment, null, props.children),
+    Content: Passthrough,
+    Portal: Passthrough,
     Item: ({ value, children, ...rest }: any) => React.createElement('option', { value, ...rest }, children),
     Label: (props: any) => React.createElement('label', props, props.children),
     Separator: (props: any) => React.createElement('hr', props),
     ScrollUpButton: (props: any) => React.createElement('div', props, props.children),
     ScrollDownButton: (props: any) => React.createElement('div', props, props.children),
-    Icon: (props: any) => React.createElement(React.Fragment, null, props.children),
+    Icon: Passthrough,
+    Viewport: Passthrough,
+    ItemText: Passthrough,
+    ItemIndicator: Passthrough,
   };
 });
 

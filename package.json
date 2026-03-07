@@ -104,12 +104,6 @@
             "commit": "cz",
             "release:local": "node scripts/release.js"
       },
-      "vitest": {
-            "setupFiles": [
-                  "./vitest.setup.ts"
-            ],
-            "environment": "jsdom"
-      },
       "config": {
             "commitizen": {
                   "path": "./node_modules/cz-conventional-changelog"
