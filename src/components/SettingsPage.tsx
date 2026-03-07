@@ -21,7 +21,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Progress } from "./ui/progress";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import * as LucideIcons from 'lucide-react';
-import { SettingsSidebar } from "./settings/SettingsSidebar";
 import { GeneralTab } from "./settings/GeneralTab";
 import { CategoriesTab } from "./settings/CategoriesTab";
 import { TagsTab } from "./settings/TagsTab";
@@ -99,8 +98,9 @@ interface SettingsPageProps {
   onModelsUpdate: (models: Model[]) => void;
   onModelClick?: (model: Model) => void;
   onDonationClick?: () => void;
-  // Optional initial tab to open when the settings page mounts
-  initialTab?: string;
+  // Selected tab (controlled by parent via left sidebar)
+  selectedTab: string;
+  onTabChange: (tab: string) => void;
   // Optional action requested by the parent (open settings and run an action)
   settingsAction?: null | { type: 'hash-check' | 'generate'; fileType: '3mf' | 'stl' };
   // Callback to notify parent that action was handled (or cleared)
@@ -123,7 +123,8 @@ export function SettingsPage({
   onModelsUpdate,
   onModelClick,
   onDonationClick,
-  initialTab,
+  selectedTab,
+  onTabChange,
   settingsAction,
   onActionHandled,
 }: SettingsPageProps) {
@@ -142,6 +143,9 @@ export function SettingsPage({
     const initialConfig = config || ConfigManager.loadConfig();
     return initialConfig;
   });
+
+  // Remove internal selectedTab state as it's now controlled by parent
+  // const [selectedTab, setSelectedTab] = useState<string>(initialTab || 'general');
 
   // Prefer server-side `data/config.json` over local defaults on load
   useEffect(() => {
@@ -214,21 +218,14 @@ export function SettingsPage({
     });
     return Object.keys(counts).map(label => ({ label, count: counts[label] })).sort((a, b) => b.count - a.count);
   }, [models, localCategories]);
-  // Allow parent to control which tab is opened initially (e.g. "integrity")
-  const [selectedTab, setSelectedTab] = useState<string>(initialTab ?? 'general');
 
-  // If the parent changes initialTab while the page is mounted, respect it
-  useEffect(() => {
-    if (initialTab) {
-      setSelectedTab(initialTab);
-    }
-  }, [initialTab]);
+  // selectedTab is now controlled by parent via props (no internal state needed)
 
   // If parent opened settings with an action, run it and then notify parent
   useEffect(() => {
     if (!settingsAction) return;
   // Switch to integrity tab and capture fileType to avoid async state races
-  setSelectedTab('integrity');
+  onTabChange('integrity');
     const actionFileType = settingsAction.fileType;
     // Only set specific checkboxes if a fileType is provided; otherwise keep default (both true)
     if (actionFileType) {
@@ -1669,15 +1666,9 @@ export function SettingsPage({
   };
 
   return (
-    <div className="h-full bg-background flex" data-testid="settings-page">
-      {/* Settings Sidebar */}
-      <SettingsSidebar
-        selectedTab={selectedTab}
-        onTabChange={setSelectedTab}
-      />
-
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden">
+    <div className="h-full bg-background" data-testid="settings-page">
+      {/* Main Content Area - sidebar is now in App.tsx */}
+      <div className="h-full overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-6 max-w-6xl mx-auto space-y-8">
             {/* Header */}

@@ -42,6 +42,7 @@ import {
 import { Separator } from "./components/ui/separator";
 import CollectionGrid from "./components/CollectionGrid";
 import type { Collection } from "./types/collection";
+import { SettingsSidebar } from './components/settings/SettingsSidebar';
 
 // Function to load model data from JSON files
 // Initial type for view
@@ -1000,42 +1001,53 @@ function AppContent() {
         fixed lg:relative z-30 lg:z-0
         h-full bg-sidebar border-r border-sidebar-border shadow-xl
         transform transition-all duration-300 ease-in-out
-        ${isSidebarOpen ? 'w-80 translate-x-0' : 'w-0 lg:w-12 -translate-x-full lg:translate-x-0'}
+        ${currentView === 'settings' 
+          ? (isSidebarOpen ? 'w-64 translate-x-0' : 'w-0 lg:w-16 -translate-x-full lg:translate-x-0')
+          : (isSidebarOpen ? 'w-80 translate-x-0' : 'w-0 lg:w-12 -translate-x-full lg:translate-x-0')}
         overflow-hidden
       `}
       onClick={() => !isSidebarOpen && setIsSidebarOpen(true)}
       >
-        <FilterSidebar 
-          key={sidebarResetKey}
-          onFilterChange={handleFilterChange}
-          onCategoryChosen={(label) => {
-            // Switch to models view if currently in settings and the user explicitly chose a category
-            if (currentView === 'settings') {
-              setCurrentView('models');
-            }
-            // Also remember the category so the filter stays consistent
-            setLastCategoryFilter(label || 'all');
-          }}
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
-          onSettingsClick={handleSettingsClick}
-          categories={categories}
-          models={(currentView === 'collection-view' && activeCollection)
-            ? collectionBaseModels
-            : models}
-          initialFilters={{
-            search: '',
-            category: appConfig?.filters?.defaultCategory || 'all',
-            printStatus: appConfig?.filters?.defaultPrintStatus || 'all',
-            license: appConfig?.filters?.defaultLicense || 'all',
-            fileType: 'all',
-            tags: [],
-            // In collection view, default to showing hidden items so the collection shows everything
-            showHidden: currentView === 'collection-view',
-            showMissingImages: false,
-            sortBy: appConfig?.filters?.defaultSortBy || 'none',
-          }}
-        />
+        {currentView === 'settings' ? (
+          <SettingsSidebar
+            selectedTab={settingsInitialTab || 'general'}
+            onTabChange={(tab) => setSettingsInitialTab(tab)}
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+          />
+        ) : (
+          <FilterSidebar 
+            key={sidebarResetKey}
+            onFilterChange={handleFilterChange}
+            onCategoryChosen={(label) => {
+              // Switch to models view if currently in settings and the user explicitly chose a category
+              if (currentView === 'settings') {
+                setCurrentView('models');
+              }
+              // Also remember the category so the filter stays consistent
+              setLastCategoryFilter(label || 'all');
+            }}
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+            onSettingsClick={handleSettingsClick}
+            categories={categories}
+            models={(currentView === 'collection-view' && activeCollection)
+              ? collectionBaseModels
+              : models}
+            initialFilters={{
+              search: '',
+              category: appConfig?.filters?.defaultCategory || 'all',
+              printStatus: appConfig?.filters?.defaultPrintStatus || 'all',
+              license: appConfig?.filters?.defaultLicense || 'all',
+              fileType: 'all',
+              tags: [],
+              // In collection view, default to showing hidden items so the collection shows everything
+              showHidden: currentView === 'collection-view',
+              showMissingImages: false,
+              sortBy: appConfig?.filters?.defaultSortBy || 'none',
+            }}
+          />
+        )}
       </div>
 
   {/* Main Content */}
@@ -1203,7 +1215,8 @@ function AppContent() {
               onModelsUpdate={handleBulkModelsUpdate}
               onModelClick={handleModelClick}
               onDonationClick={handleDonationClick}
-              initialTab={settingsInitialTab}
+              selectedTab={settingsInitialTab || 'general'}
+              onTabChange={(tab) => setSettingsInitialTab(tab)}
               settingsAction={settingsAction}
               onActionHandled={() => setSettingsAction(null)}
             />

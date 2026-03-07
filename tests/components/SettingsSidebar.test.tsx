@@ -7,6 +7,8 @@ describe('SettingsSidebar', () => {
   const mockProps = {
     selectedTab: 'general',
     onTabChange: vi.fn(),
+    isOpen: true,
+    onClose: vi.fn(),
   };
 
   it('renders the settings sidebar', () => {
@@ -48,7 +50,7 @@ describe('SettingsSidebar', () => {
     
     expect(screen.getByTestId('settings-tab-general')).toHaveClass('bg-primary');
     
-    rerender(<SettingsSidebar selectedTab="tags" onTabChange={mockProps.onTabChange} />);
+    rerender(<SettingsSidebar selectedTab="tags" onTabChange={mockProps.onTabChange} isOpen={true} onClose={mockProps.onClose} />);
     
     expect(screen.getByTestId('settings-tab-tags')).toHaveClass('bg-primary');
   });
