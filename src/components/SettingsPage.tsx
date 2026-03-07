@@ -29,14 +29,6 @@ import { BackupTab } from "./settings/BackupTab";
 import { IntegrityTab } from "./settings/IntegrityTab";
 import { ConfigTab } from "./settings/ConfigTab";
 import { SupportTab } from "./settings/SupportTab";
-import { SettingsSidebar } from "./settings/SettingsSidebar";
-import { GeneralTab } from "./settings/GeneralTab";
-import { CategoriesTab } from "./settings/CategoriesTab";
-import { TagsTab } from "./settings/TagsTab";
-import { BackupTab } from "./settings/BackupTab";
-import { IntegrityTab } from "./settings/IntegrityTab";
-import { ConfigTab } from "./settings/ConfigTab";
-import { SupportTab } from "./settings/SupportTab";
 const {
   ArrowLeft,
   GripVertical,

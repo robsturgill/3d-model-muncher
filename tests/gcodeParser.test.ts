@@ -7,7 +7,19 @@ import {
   estimateWeightFromLength,
   extractGcodeFrom3MF 
 } from '../src/utils/gcodeParser';
-import { zipSync } from 'fflate';
+import { zipSync, strToU8 } from 'fflate';
+
+// Helper to properly create zippable content
+function createZip(files: Record<string, string>): Uint8Array {
+  const zippableFiles: Record<string, Uint8Array> = {};
+  for (const [path, content] of Object.entries(files)) {
+    // Create a proper Uint8Array for each file, not an object
+    const arr = strToU8(content);
+    // Ensure it's a real Uint8Array, not an array-like object
+    zippableFiles[path] = new Uint8Array(arr);
+  }
+  return zipSync(zippableFiles, { level: 0 });
+}
 
 describe('gcodeParser', () => {
   describe('normalizeTime', () => {
@@ -71,11 +83,10 @@ describe('gcodeParser', () => {
   describe('extractGcodeFrom3MF', () => {
     it('should extract gcode from Metadata/plate_1.gcode (BambuLab format)', () => {
       const gcodeContent = '; Test G-code\nG28 ; home\n';
-      const files = {
-        '[Content_Types].xml': new TextEncoder().encode('<?xml version="1.0"?>'),
-        'Metadata/plate_1.gcode': new TextEncoder().encode(gcodeContent)
-      };
-      const buffer = Buffer.from(zipSync(files));
+      const buffer = Buffer.from(createZip({
+        '[Content_Types].xml': '<?xml version="1.0"?>',
+        'Metadata/plate_1.gcode': gcodeContent
+      }));
       
       const extracted = extractGcodeFrom3MF(buffer);
       expect(extracted).toBe(gcodeContent);
@@ -83,10 +94,9 @@ describe('gcodeParser', () => {
 
     it('should extract gcode from Metadata/plate_2.gcode if plate_1 not found', () => {
       const gcodeContent = '; Test G-code\nG28 ; home\n';
-      const files = {
-        'Metadata/plate_2.gcode': new TextEncoder().encode(gcodeContent)
-      };
-      const buffer = Buffer.from(zipSync(files));
+      const buffer = Buffer.from(createZip({
+        'Metadata/plate_2.gcode': gcodeContent
+      }));
       
       const extracted = extractGcodeFrom3MF(buffer);
       expect(extracted).toBe(gcodeContent);
@@ -94,10 +104,9 @@ describe('gcodeParser', () => {
 
     it('should extract gcode from root level as fallback', () => {
       const gcodeContent = '; Test G-code\nG28 ; home\n';
-      const files = {
-        'test.gcode': new TextEncoder().encode(gcodeContent)
-      };
-      const buffer = Buffer.from(zipSync(files));
+      const buffer = Buffer.from(createZip({
+        'test.gcode': gcodeContent
+      }));
       
       const extracted = extractGcodeFrom3MF(buffer);
       expect(extracted).toBe(gcodeContent);
@@ -106,21 +115,19 @@ describe('gcodeParser', () => {
     it('should prioritize Metadata/plate_1.gcode over root files', () => {
       const preferredContent = '; Preferred G-code\n';
       const fallbackContent = '; Fallback G-code\n';
-      const files = {
-        'Metadata/plate_1.gcode': new TextEncoder().encode(preferredContent),
-        'test.gcode': new TextEncoder().encode(fallbackContent)
-      };
-      const buffer = Buffer.from(zipSync(files));
+      const buffer = Buffer.from(createZip({
+        'Metadata/plate_1.gcode': preferredContent,
+        'test.gcode': fallbackContent
+      }));
       
       const extracted = extractGcodeFrom3MF(buffer);
       expect(extracted).toBe(preferredContent);
     });
 
     it('should throw error if no gcode file found', () => {
-      const files = {
-        'model.stl': new TextEncoder().encode('dummy')
-      };
-      const buffer = Buffer.from(zipSync(files));
+      const buffer = Buffer.from(createZip({
+        'model.stl': 'dummy'
+      }));
       
       expect(() => extractGcodeFrom3MF(buffer)).toThrow('No .gcode file found');
     });

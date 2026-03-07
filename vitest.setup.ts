@@ -63,9 +63,17 @@ if (typeof window !== 'undefined') {
 import React from 'react';
 
 vi.mock('@radix-ui/react-checkbox', () => {
+  const React = require('react') as typeof import('react');
   return {
     // Root behaves like a lightweight button element in tests
-    Root: (props: any) => React.createElement('button', props, props.children),
+    Root: (props: any) => {
+      const { onCheckedChange, checked, ...rest } = props;
+      return React.createElement('button', {
+        ...rest,
+        onClick: () => onCheckedChange?.(!checked),
+        'aria-checked': checked,
+      }, props.children);
+    },
     // Indicator is a simple inline element
     Indicator: (props: any) => React.createElement('span', props, props.children),
   };
@@ -130,6 +138,30 @@ vi.mock('@radix-ui/react-slider', () => {
 vi.mock('@radix-ui/react-use-size', () => {
   return {
     useSize: () => undefined,
+  };
+});
+
+// Mock Radix DropdownMenu to avoid portal/context issues
+vi.mock('@radix-ui/react-dropdown-menu', () => {
+  const React = require('react') as typeof import('react');
+  const Passthrough = (props: any) => React.createElement(React.Fragment, null, props.children);
+  return {
+    Root: Passthrough,
+    Trigger: (props: any) => React.createElement('button', props, props.children),
+    Portal: Passthrough,
+    Content: Passthrough,
+    Item: (props: any) => React.createElement('div', { onClick: props.onSelect, ...props }, props.children),
+    CheckboxItem: (props: any) => React.createElement('div', { onClick: props.onSelect, ...props }, props.children),
+    RadioGroup: Passthrough,
+    RadioItem: (props: any) => React.createElement('div', { onClick: props.onSelect, ...props }, props.children),
+    ItemIndicator: Passthrough,
+    Separator: (props: any) => React.createElement('hr', props),
+    Label: (props: any) => React.createElement('div', props, props.children),
+    Sub: Passthrough,
+    SubTrigger: (props: any) => React.createElement('div', props, props.children),
+    SubContent: Passthrough,
+    Group: Passthrough,
+    Arrow: (props: any) => React.createElement('span', props),
   };
 });
 
