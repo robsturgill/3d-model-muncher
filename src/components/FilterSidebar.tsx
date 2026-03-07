@@ -416,45 +416,36 @@ export function FilterSidebar({
             </div>
 
             {/* Categories */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Layers className="h-4 w-4 text-foreground" />
                 <label className="text-sm font-medium text-foreground">Categories</label>
               </div>
-              <div className="space-y-1">
-                <Button
-                  variant={selectedCategory === "all" ? "default" : "ghost"}
-                  onClick={() => handleCategoryChange("all")}
-                  className={`w-full justify-start h-10 px-3 ${
-                    selectedCategory === "all" 
-                      ? "text-primary-foreground hover:text-primary-foreground" 
-                      : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
-                  <Filter className="h-4 w-4 mr-3" />
-                  <span>All Categories</span>
-                </Button>
-  
-                {categories.map((category) => {
-                  const iconKey = normalizeIconName(category.icon);
-                  const Icon = (LucideIcons as any)[iconKey] as React.ComponentType<any> || (LucideIcons as any)['Folder'];
-                  return (
-                    <Button
-                      key={category.id}
-                      variant={selectedCategory === category.label ? "default" : "ghost"}
-                      onClick={() => handleCategoryChange(category.label)}
-                      className={`w-full justify-start h-10 px-3 ${
-                        selectedCategory === category.label 
-                          ? "text-primary-foreground hover:text-primary-foreground" 
-                          : "text-foreground hover:bg-accent hover:text-accent-foreground"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 mr-3" />
-                      <span>{category.label}</span>
-                    </Button>
-                  );
-                })}
-              </div>
+              <Select value={selectedCategory} onValueChange={handleCategoryChange}>
+                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    <div className="flex items-center gap-2">
+                      <Filter className="h-4 w-4" />
+                      <span>All Categories</span>
+                    </div>
+                  </SelectItem>
+                  {categories.map((category) => {
+                    const iconKey = normalizeIconName(category.icon);
+                    const Icon = (LucideIcons as any)[iconKey] as React.ComponentType<any> || (LucideIcons as any)['Folder'];
+                    return (
+                      <SelectItem key={category.id} value={category.label}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{category.label}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Print Status */}
