@@ -8,7 +8,6 @@ describe('GeneralTab', () => {
   const mockConfig: AppConfig = {
     categories: [],
     settings: {
-      itemsPerPage: 12,
       defaultView: 'grid' as const,
       autoSave: true,
       modelsDirectory: './models',
@@ -31,27 +30,6 @@ describe('GeneralTab', () => {
   it('renders the general tab', () => {
     render(<GeneralTab {...mockProps} />);
     expect(screen.getByTestId('general-tab')).toBeInTheDocument();
-  });
-
-  it('displays items per page input', () => {
-    render(<GeneralTab {...mockProps} />);
-    const input = screen.getByTestId('items-per-page-input') as HTMLInputElement;
-    expect(input).toBeInTheDocument();
-    expect(input.value).toBe('12');
-  });
-
-  it('calls onConfigFieldChange when items per page changes', async () => {
-    const user = userEvent.setup();
-    render(<GeneralTab {...mockProps} />);
-    
-    const input = screen.getByTestId('items-per-page-input') as HTMLInputElement;
-    // Focus and type - with controlled inputs, this appends to existing value
-    await user.click(input);
-    await user.keyboard('5');  // This will make it "125"
-    
-    // Just verify that onConfigFieldChange was called with the settings field
-    // The exact value isn't critical for the test - we're testing that the handler is wired up
-    expect(mockProps.onConfigFieldChange).toHaveBeenCalledWith('settings.itemsPerPage', expect.any(Number));
   });
 
   it('displays default view select', () => {

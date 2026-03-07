@@ -36,18 +36,6 @@ export function GeneralTab({
       <CardContent className="space-y-6">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="items-per-page">Items per page</Label>
-            <Input
-              id="items-per-page"
-              data-testid="items-per-page-input"
-              type="number"
-              min="1"
-              value={config.settings.itemsPerPage}
-              onChange={(e) => onConfigFieldChange('settings.itemsPerPage', parseInt(e.target.value) || 12)}
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="default-view">Default View</Label>
             <Select
               value={config.settings.defaultView}
