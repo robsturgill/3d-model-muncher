@@ -7,20 +7,29 @@ import React from 'react'
 // Mock the local UI Select module used by FilterSidebar to a simple <select>
 vi.mock('../../src/components/ui/select', () => {
   const React = require('react') as typeof import('react')
+  
   return {
-    Select: ({ children, value, onValueChange, ...rest }: any) => (
-      React.createElement(
+    Select: ({ children, value, onValueChange, ...rest }: any) => {
+      // Find the SelectTrigger child to extract data-testid
+      let testId: string | undefined
+      React.Children.forEach(children, (child: any) => {
+        if (child?.type?.name === 'SelectTrigger' || child?.props?.['data-testid']) {
+          testId = child.props?.['data-testid']
+        }
+      })
+      
+      return React.createElement(
         'select',
         {
-          'data-testid': 'mock-select',
+          'data-testid': testId,
           value,
           onChange: (e: any) => onValueChange && onValueChange(e.target.value),
           ...rest,
         },
         children,
       )
-    ),
-    // Return null for wrapper components to avoid invalid DOM nesting (<div> inside <select>)
+    },
+    // Store the testId in props for Select to access
     SelectTrigger: () => null,
     SelectValue: () => null,
     SelectContent: (props: any) => React.createElement(React.Fragment, null, props.children),
@@ -54,9 +63,7 @@ describe('FilterSidebar file type includes Collections', () => {
     )
 
   // Change the mocked File Type select to "collections"
-  const selects = screen.getAllByTestId('mock-select')
-  // Order in FilterSidebar: Print Status, File Type, Sort By, License (all are mocked)
-  const fileTypeSelect = selects[1] as HTMLSelectElement
+  const fileTypeSelect = screen.getByTestId('filter-file-type-select') as HTMLSelectElement
   fireEvent.change(fileTypeSelect, { target: { value: 'collections' } })
 
     // Called with a filter object containing fileType: 'collections'

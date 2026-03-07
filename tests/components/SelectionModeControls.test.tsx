@@ -22,7 +22,7 @@ describe('SelectionModeControls', () => {
     const onEnterSelectionMode = vi.fn()
     renderComponent({ onEnterSelectionMode, selectLabel: 'Select models' })
 
-    const selectButton = screen.getByRole('button', { name: /select models/i })
+    const selectButton = screen.getByTestId('selection-mode-enter-button')
     await user.click(selectButton)
 
     expect(onEnterSelectionMode).toHaveBeenCalledTimes(1)
@@ -50,12 +50,12 @@ describe('SelectionModeControls', () => {
 
   expect(screen.getByText('3 selected')).toBeInTheDocument()
 
-  await user.click(screen.getByRole('button', { name: /edit/i }))
-  await user.click(screen.getByRole('button', { name: /collection/i }))
-  await user.click(screen.getByRole('button', { name: /delete/i }))
+  await user.click(screen.getByTestId('selection-mode-edit-button'))
+  await user.click(screen.getByTestId('selection-mode-collection-button'))
+  await user.click(screen.getByTestId('selection-mode-delete-button'))
   await user.click(screen.getByTitle('Select all visible models'))
   await user.click(screen.getByTitle('Deselect all models'))
-  await user.click(screen.getByRole('button', { name: /done/i }))
+  await user.click(screen.getByTestId('selection-mode-exit-button'))
 
     expect(onBulkEdit).toHaveBeenCalledTimes(1)
     expect(onCreateCollection).toHaveBeenCalledTimes(1)

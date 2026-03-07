@@ -422,7 +422,7 @@ export function FilterSidebar({
                 <label className="text-sm font-medium text-foreground">Categories</label>
               </div>
               <Select value={selectedCategory} onValueChange={handleCategoryChange}>
-                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                <SelectTrigger data-testid="filter-category-select" className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -455,7 +455,7 @@ export function FilterSidebar({
                 <label className="text-sm font-medium text-foreground">Print Status</label>
               </div>
               <Select value={selectedPrintStatus} onValueChange={handlePrintStatusChange}>
-                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                <SelectTrigger data-testid="filter-print-status-select" className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -473,7 +473,7 @@ export function FilterSidebar({
                 <label className="text-sm font-medium text-foreground">Type</label>
               </div>
               <Select value={selectedFileType} onValueChange={handleFileTypeChange}>
-                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                <SelectTrigger data-testid="filter-file-type-select" className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
                   <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -492,7 +492,7 @@ export function FilterSidebar({
                 <label className="text-sm font-medium text-foreground">Sort By</label>
               </div>
               <Select value={selectedSort} onValueChange={handleSortChange}>
-                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                <SelectTrigger data-testid="filter-sort-select" className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
@@ -512,7 +512,7 @@ export function FilterSidebar({
                 <label className="text-sm font-medium text-foreground">License</label>
               </div>
               <Select value={selectedLicense} onValueChange={handleLicenseChange}>
-                <SelectTrigger className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                <SelectTrigger data-testid="filter-license-select" className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
                   <SelectValue placeholder="All Licenses" />
                 </SelectTrigger>
                 <SelectContent>

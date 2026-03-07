@@ -44,6 +44,7 @@ export function SelectionModeControls({
           className="gap-2"
           title="Enter selection mode"
           disabled={!onEnterSelectionMode}
+          data-testid="selection-mode-enter-button"
         >
           <CheckSquare className="h-4 w-4" />
           <span className="hidden sm:inline">{selectLabel}</span>
@@ -67,6 +68,7 @@ export function SelectionModeControls({
               onClick={onBulkEdit}
               className="gap-2"
               title="Bulk edit selected models"
+              data-testid="selection-mode-edit-button"
             >
               <Edit className="h-4 w-4" />
               <span className="hidden sm:inline">Edit</span>
@@ -80,6 +82,7 @@ export function SelectionModeControls({
               onClick={onCreateCollection}
               className="gap-2"
               title="Create collection from selection"
+              data-testid="selection-mode-collection-button"
             >
               <List className="h-4 w-4" />
               <span className="hidden sm:inline">Collection</span>
@@ -92,8 +95,7 @@ export function SelectionModeControls({
               size="sm"
               onClick={onBulkDelete}
               className="gap-2 text-destructive hover:text-destructive"
-              title="Delete selected models"
-            >
+              title="Delete selected models"              data-testid="selection-mode-delete-button"            >
               <Trash2 className="h-4 w-4" />
               <span className="hidden sm:inline">Delete</span>
             </Button>
@@ -130,6 +132,7 @@ export function SelectionModeControls({
         className="gap-2"
         title="Exit selection mode"
         disabled={!onExitSelectionMode}
+        data-testid="selection-mode-exit-button"
       >
         <X className="h-4 w-4" />
         <span className="hidden sm:inline">{exitLabel}</span>

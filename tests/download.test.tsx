@@ -34,13 +34,10 @@ describe('download behavior', () => {
       printSettings: {}
     };
 
-    const { container } = render(<ModelCard model={model} onClick={() => {}} />);
+    render(<ModelCard model={model} onClick={() => {}} />);
 
-    // Find the ModelCard Download button inside the rendered container by text
-    // (the ModelCard button does not set a title attribute).
-    const btn = Array.from(container.querySelectorAll('button')).find(b => 
-      (b.textContent || '').includes('Download')
-    ) as HTMLButtonElement;
+    // Find the ModelCard Download button by its test ID
+    const btn = screen.getByTestId('model-card-download-button');
     expect(btn).toBeDefined();
 
     const user = userEvent.setup();

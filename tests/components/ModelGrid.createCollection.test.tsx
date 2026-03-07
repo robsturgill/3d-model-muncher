@@ -19,7 +19,7 @@ describe('ModelGrid create collection flow', () => {
       />
     )
     // Click the Collection button
-    fireEvent.click(screen.getByRole('button', { name: /collection/i }))
+    fireEvent.click(screen.getByTestId('selection-mode-collection-button'))
     // Drawer content should appear
     expect(screen.getByText(/new collection/i)).toBeTruthy()
   })
