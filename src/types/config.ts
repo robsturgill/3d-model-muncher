@@ -17,6 +17,7 @@ export interface AppConfig {
     modelDirectory: string;
     gcodeOverwriteBehavior?: 'prompt' | 'overwrite';
     gcodeStorageBehavior?: 'parse-only' | 'save-and-link';
+    categorySortOrder?: 'custom' | 'alpha';
   };
   filters: {
     defaultCategory: string;

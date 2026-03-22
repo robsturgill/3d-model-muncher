@@ -1022,10 +1022,10 @@ export function BulkEditDrawer({
                       {/* Render available categories passed in via props. Persist the human-friendly
                           label so saved models keep the expected casing. */}
                       {Array.isArray(categories) && categories.map((c) => (
-                        <SelectItem key={c.id} value={c.label}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
+                          <SelectItem key={c.id} value={c.label}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {commonValues.category && (

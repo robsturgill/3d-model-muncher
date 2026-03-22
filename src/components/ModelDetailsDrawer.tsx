@@ -2656,10 +2656,10 @@ export function ModelDetailsDrawer({
                       </SelectTrigger>
                       <SelectContent>
                         {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.label}>
-                            {category.label}
-                          </SelectItem>
-                        ))}
+                            <SelectItem key={category.id} value={category.label}>
+                              {category.label}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>

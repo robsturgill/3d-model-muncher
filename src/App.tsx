@@ -57,6 +57,18 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<ViewType>('models');
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+
+  const sortedCategories = useMemo(() => {
+    const order = appConfig?.settings?.categorySortOrder ?? 'custom';
+    if (order === 'alpha') {
+      return [...categories].sort((a, b) => {
+        if (a.label === 'Uncategorized') return -1;
+        if (b.label === 'Uncategorized') return 1;
+        return a.label.localeCompare(b.label);
+      });
+    }
+    return categories;
+  }, [categories, appConfig?.settings?.categorySortOrder]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Loading state for initial models fetch (separate from manual refresh)
   const [isModelsLoading, setIsModelsLoading] = useState(false);
@@ -89,6 +101,11 @@ function AppContent() {
   const [sidebarResetKey, setSidebarResetKey] = useState(0);
   // Remember last selected sort from sidebar so collections list can respect it
   const [currentSortBy, setCurrentSortBy] = useState<SortKey>('none');
+  const configWithSortedCategories = useMemo(() => {
+    if (!appConfig) return appConfig;
+    return { ...appConfig, categories: sortedCategories };
+  }, [appConfig, sortedCategories]);
+
   // When in a collection, this is the full set of models in that collection (used for sidebar tags/categories)
   const collectionBaseModels = useMemo(() => {
     if (activeCollection && Array.isArray(activeCollection.modelIds)) {
@@ -1030,7 +1047,7 @@ function AppContent() {
             isOpen={isSidebarOpen}
             onClose={() => setIsSidebarOpen(false)}
             onSettingsClick={handleSettingsClick}
-            categories={categories}
+            categories={sortedCategories}
             models={(currentView === 'collection-view' && activeCollection)
               ? collectionBaseModels
               : models}
@@ -1202,12 +1219,12 @@ function AppContent() {
               onDeselectAll={deselectAllModels}
               onBulkEdit={handleBulkEdit}
               onBulkDelete={handleBulkDeleteClick}
-              config={appConfig}
+              config={configWithSortedCategories}
             />
           ) : currentView === 'settings' ? (
             <SettingsPage 
               onBack={handleBackToModels} 
-              categories={categories}
+              categories={sortedCategories}
               onCategoriesUpdate={handleCategoriesUpdate}
               config={appConfig}
               onConfigUpdate={handleConfigUpdate}
@@ -1317,7 +1334,7 @@ function AppContent() {
           onModelUpdate={handleModelUpdate}
           defaultModelView={appConfig?.settings.defaultModelView || 'images'}
           defaultModelColor={appConfig?.settings?.defaultModelColor}
-          categories={categories}
+          categories={sortedCategories}
         />
       )}
 
@@ -1332,7 +1349,7 @@ function AppContent() {
           onBulkSaved={handleBulkSavedModels}
           onModelUpdate={handleModelUpdate}
           onClearSelections={exitSelectionMode}
-          categories={categories}
+          categories={sortedCategories}
           modelDirectory={appConfig?.settings?.modelDirectory || './models'}
         />
       )}

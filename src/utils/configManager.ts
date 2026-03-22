@@ -25,6 +25,7 @@ export class ConfigManager {
       modelCardSecondary: 'filamentUsed',
       autoSave: true,
       modelDirectory: "./models",
+      categorySortOrder: 'custom' as const,
     },
     filters: {
       defaultCategory: "all",
@@ -95,6 +96,9 @@ export class ConfigManager {
         modelDirectory: typeof config?.settings?.modelDirectory === 'string' && config.settings.modelDirectory.trim() !== ''
           ? config.settings.modelDirectory
           : this.defaultConfig.settings.modelDirectory,
+        categorySortOrder: (config?.settings?.categorySortOrder === 'alpha' || config?.settings?.categorySortOrder === 'custom')
+          ? config.settings.categorySortOrder
+          : 'custom',
       },
       filters: {
         defaultCategory: typeof config?.filters?.defaultCategory === 'string' && config.filters.defaultCategory.trim() !== ''

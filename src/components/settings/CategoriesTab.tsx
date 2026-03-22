@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { GripVertical, Edit2, Plus, Save, X } from "lucide-react";
 import { Category } from "../../types/category";
 import { Model } from "../../types/model";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import * as LucideIcons from 'lucide-react';
 
 interface CategoriesTabProps {
@@ -15,9 +15,11 @@ interface CategoriesTabProps {
   models: Model[];
   onCategoriesUpdate: (categories: Category[]) => void;
   onSaveCategories: () => void;
-  onRenameCategory: (oldId: string, newId: string, newLabel: string) => Promise<void>;
+  onRenameCategory: (oldId: string, newId: string, newLabel: string, icon?: string) => Promise<void>;
   onDeleteCategory: (categoryId: string) => Promise<void>;
   onAddCategory: (label: string, icon: string) => Promise<void>;
+  categorySortOrder: 'custom' | 'alpha';
+  onCategorySortOrderChange: (order: 'custom' | 'alpha') => void;
 }
 
 export function CategoriesTab({
@@ -28,6 +30,8 @@ export function CategoriesTab({
   onRenameCategory,
   onDeleteCategory,
   onAddCategory,
+  categorySortOrder,
+  onCategorySortOrderChange,
 }: CategoriesTabProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -37,6 +41,26 @@ export function CategoriesTab({
   const [renameCategoryIcon, setRenameCategoryIcon] = useState('Folder');
   const [newCategoryLabel, setNewCategoryLabel] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState('Folder');
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
+
+  const unmappedCategories = useMemo(() => {
+    const configuredLabels = new Set(categories.map(c => c.label.toLowerCase()));
+    const counts: Record<string, number> = {};
+    models.forEach(m => {
+      const raw = (m.category ?? '').toString().trim();
+      if (!raw) return;
+      if (!configuredLabels.has(raw.toLowerCase())) {
+        counts[raw] = (counts[raw] || 0) + 1;
+      }
+    });
+    return Object.keys(counts).map(label => ({ label, count: counts[label] })).sort((a, b) => b.count - a.count);
+  }, [models, categories]);
+
+  const iconExists = (name?: string) => {
+    const normalized = normalizeIconName(name);
+    return !!normalized && !!(LucideIcons as any)[normalized];
+  };
 
   const handleDragStart = (index: number) => {
     setDraggedIndex(index);
@@ -83,6 +107,28 @@ export function CategoriesTab({
 
   return (
     <div data-testid="categories-tab">
+      {/* Sort Order Toggle */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-sm font-medium text-foreground">Display order:</span>
+        <div className="flex rounded-md border border-border overflow-hidden">
+          <Button
+            variant={categorySortOrder === 'custom' ? 'default' : 'ghost'}
+            size="sm"
+            className="rounded-none border-0"
+            onClick={() => onCategorySortOrderChange('custom')}
+          >
+            Custom Order
+          </Button>
+          <Button
+            variant={categorySortOrder === 'alpha' ? 'default' : 'ghost'}
+            size="sm"
+            className="rounded-none border-0 border-l border-border"
+            onClick={() => onCategorySortOrderChange('alpha')}
+          >
+            Alphabetical
+          </Button>
+        </div>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Categories</CardTitle>
@@ -92,25 +138,32 @@ export function CategoriesTab({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2" data-testid="categories-list">
-            {categories.map((category, index) => {
+            {(categorySortOrder === 'alpha'
+              ? [...categories].sort((a, b) => {
+                  if (a.label === 'Uncategorized') return -1;
+                  if (b.label === 'Uncategorized') return 1;
+                  return a.label.localeCompare(b.label);
+                })
+              : categories
+            ).map((category, index) => {
               const IconComp = getLucideIconComponent(category.icon);
               const modelCount = models.filter(m => m.category === category.label).length;
-              
+
               return (
                 <div
                   key={category.id}
-                  draggable
+                  draggable={categorySortOrder === 'custom'}
                   onDragStart={() => handleDragStart(index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   data-testid={`category-item-${category.id}`}
                   className={`
                     flex items-center gap-3 p-3 bg-muted rounded-lg border border-border
-                    cursor-move hover:bg-accent/50 transition-colors duration-200
+                    ${categorySortOrder === 'custom' ? 'cursor-move' : 'cursor-default'} hover:bg-accent/50 transition-colors duration-200
                     ${draggedIndex === index ? 'opacity-50' : ''}
                   `}
                 >
-                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  {categorySortOrder === 'custom' && (<GripVertical className="h-4 w-4 text-muted-foreground" />)}
                   <div className="flex items-center gap-2">
                     <IconComp className="h-4 w-4 text-muted-foreground" />
                     <Badge variant="outline" className="font-medium">
@@ -138,6 +191,30 @@ export function CategoriesTab({
               );
             })}
           </div>
+
+          {unmappedCategories.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Unmapped Categories</h4>
+              <p className="text-xs text-muted-foreground">Categories found in model metadata that are not defined in your configuration. You can add them as configured categories.</p>
+              <div className="space-y-2 mt-2">
+                {unmappedCategories.map((uc) => (
+                  <div key={uc.label} className="flex items-center gap-3 p-3 bg-muted/60 rounded-lg border border-border">
+                    <div className="flex items-center gap-2">
+                      <LucideIcons.Box className="h-4 w-4 text-muted-foreground" />
+                      <Badge variant="outline" className="font-medium">{uc.label}</Badge>
+                    </div>
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground hidden sm:inline">Used in {uc.count} model{uc.count !== 1 ? 's' : ''}</span>
+                      <Button size="sm" variant="ghost" className="gap-2" onClick={() => onAddCategory(uc.label, 'Folder')}>
+                        <Plus className="h-4 w-4" />
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button
@@ -184,35 +261,98 @@ export function CategoriesTab({
             </div>
             <div className="space-y-2">
               <Label htmlFor="rename-category-icon">Icon (Lucide name)</Label>
-              <Input
-                id="rename-category-icon"
-                data-testid="rename-category-icon-input"
-                value={renameCategoryIcon}
-                onChange={(e) => setRenameCategoryIcon(e.target.value)}
-                placeholder="e.g. tag, box, heart"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id="rename-category-icon"
+                  data-testid="rename-category-icon-input"
+                  value={renameCategoryIcon}
+                  onChange={(e) => setRenameCategoryIcon(e.target.value)}
+                  placeholder="e.g. tag, box, heart"
+                />
+                <div className="w-8 h-8 shrink-0 flex items-center justify-center bg-muted rounded border">
+                  {(() => { const I = getLucideIconComponent(renameCategoryIcon); return <I className="h-4 w-4 text-muted-foreground" />; })()}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Browse available icons at{' '}
+                <a href="https://lucide.dev/icons/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  lucide.dev/icons
+                </a>
+                . Use the icon name in kebab-case (e.g. <code className="text-xs">box</code>, <code className="text-xs">file-box</code>).
+              </p>
+              {!iconExists(renameCategoryIcon) && (
+                <p className="text-xs text-destructive">Icon not found — will fall back to the Folder icon.</p>
+              )}
             </div>
           </div>
+          <DialogFooter className="flex justify-between items-center">
+            <div className="flex-1 flex justify-start">
+              <Button
+                variant="destructive"
+                data-testid="delete-category-button"
+                disabled={!selectedCategory}
+                onClick={() => {
+                  if (!selectedCategory) return;
+                  const count = models.reduce((acc, m) => acc + (m.category === selectedCategory.label ? 1 : 0), 0);
+                  setPendingDeleteCount(count);
+                  setIsRenameDialogOpen(false);
+                  setIsDeleteConfirmOpen(true);
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsRenameDialogOpen(false)}
+                data-testid="cancel-rename-button"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (selectedCategory && renameCategoryValue.trim()) {
+                    const newId = renameCategoryValue.trim().toLowerCase().replace(/\s+/g, '_');
+                    await onRenameCategory(selectedCategory.id, newId, renameCategoryValue.trim(), renameCategoryIcon);
+                    setIsRenameDialogOpen(false);
+                  }
+                }}
+                data-testid="confirm-rename-button"
+                disabled={!renameCategoryValue.trim()}
+              >
+                Rename Category
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <DialogContent data-testid="delete-category-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle>Confirm Delete Category</DialogTitle>
+            <DialogDescription>
+              {pendingDeleteCount} model{pendingDeleteCount !== 1 ? 's' : ''} will be moved to "Uncategorized".
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">This action cannot be undone. Are you sure you want to delete this category?</p>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsRenameDialogOpen(false)}
-              data-testid="cancel-rename-button"
-            >
+            <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)} data-testid="cancel-delete-button">
               Cancel
             </Button>
             <Button
+              variant="destructive"
+              data-testid="confirm-delete-button"
               onClick={async () => {
-                if (selectedCategory && renameCategoryValue.trim()) {
-                  const newId = renameCategoryValue.trim().toLowerCase().replace(/\s+/g, '_');
-                  await onRenameCategory(selectedCategory.id, newId, renameCategoryValue.trim());
-                  setIsRenameDialogOpen(false);
+                if (selectedCategory) {
+                  setIsDeleteConfirmOpen(false);
+                  await onDeleteCategory(selectedCategory.id);
                 }
               }}
-              data-testid="confirm-rename-button"
-              disabled={!renameCategoryValue.trim()}
             >
-              Rename Category
+              Confirm Delete
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -240,13 +380,28 @@ export function CategoriesTab({
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-category-icon">Icon (Lucide name)</Label>
-              <Input
-                id="new-category-icon"
-                data-testid="new-category-icon-input"
-                value={newCategoryIcon}
-                onChange={(e) => setNewCategoryIcon(e.target.value)}
-                placeholder="e.g. tag, box, heart"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id="new-category-icon"
+                  data-testid="new-category-icon-input"
+                  value={newCategoryIcon}
+                  onChange={(e) => setNewCategoryIcon(e.target.value)}
+                  placeholder="e.g. tag, box, heart"
+                />
+                <div className="w-8 h-8 shrink-0 flex items-center justify-center bg-muted rounded border">
+                  {(() => { const I = getLucideIconComponent(newCategoryIcon); return <I className="h-4 w-4 text-muted-foreground" />; })()}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Browse available icons at{' '}
+                <a href="https://lucide.dev/icons/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  lucide.dev/icons
+                </a>
+                . Use the icon name in kebab-case (e.g. <code className="text-xs">box</code>, <code className="text-xs">file-box</code>).
+              </p>
+              {!iconExists(newCategoryIcon) && (
+                <p className="text-xs text-destructive">Icon not found — will fall back to the Folder icon.</p>
+              )}
             </div>
           </div>
           <DialogFooter>

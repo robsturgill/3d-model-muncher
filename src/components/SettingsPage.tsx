@@ -557,8 +557,8 @@ export function SettingsPage({
     handleSaveConfig(updatedConfig);
   };
 
-  const handleConfirmAddCategory = async () => {
-    const label = newCategoryLabel.trim();
+  const handleConfirmAddCategory = async (label: string, icon: string) => {
+    label = label.trim();
     if (!label) return;
 
     setSaveStatus('saving');
@@ -585,7 +585,7 @@ export function SettingsPage({
       return;
     }
 
-  const normalizedIcon = normalizeIconName(newCategoryIcon || 'Folder');
+  const normalizedIcon = normalizeIconName(icon || 'Folder');
   const newCat: Category = { id: uniqueId, label, icon: normalizedIcon } as Category;
     const updatedCategories = [...localCategories, newCat];
     const updatedConfig: AppConfig = { ...localConfig, categories: updatedCategories };
@@ -1006,7 +1006,7 @@ export function SettingsPage({
   };
 
   // Category management functions
-  const handleRenameCategory = async (oldCategoryId: string, newCategoryId: string, newCategoryLabel: string) => {
+  const handleRenameCategory = async (oldCategoryId: string, newCategoryId: string, newCategoryLabel: string, icon?: string) => {
     if (!newCategoryId.trim() || !newCategoryLabel.trim()) return;
 
     const newIdTrimmed = newCategoryId.trim();
@@ -1036,7 +1036,7 @@ export function SettingsPage({
     });
 
     // Update the category in the local categories list
-    const normalizedNewIcon = normalizeIconName(renameCategoryIcon);
+    const normalizedNewIcon = normalizeIconName(icon ?? renameCategoryIcon);
     const updatedCategories = localCategories.map(cat => 
       cat.id === oldCategoryId 
         ? { ...cat, id: newIdTrimmed, label: newLabelTrimmed, icon: normalizedNewIcon }
@@ -1734,6 +1734,16 @@ export function SettingsPage({
                 onRenameCategory={handleRenameCategory}
                 onDeleteCategory={handleDeleteCategory}
                 onAddCategory={handleConfirmAddCategory}
+                categorySortOrder={localConfig.settings?.categorySortOrder ?? 'custom'}
+                onCategorySortOrderChange={(order) => {
+                  const updatedConfig = {
+                    ...localConfig,
+                    settings: { ...localConfig.settings, categorySortOrder: order }
+                  };
+                  setLocalConfig(updatedConfig);
+                  onConfigUpdate?.(updatedConfig);
+                  handleSaveConfig(updatedConfig);
+                }}
               />
             )}
 

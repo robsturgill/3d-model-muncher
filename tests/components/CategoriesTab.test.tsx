@@ -119,7 +119,7 @@ describe('CategoriesTab', () => {
     
     await user.click(screen.getByTestId('confirm-rename-button'));
     
-    expect(mockProps.onRenameCategory).toHaveBeenCalledWith('toys', 'games', 'Games');
+    expect(mockProps.onRenameCategory).toHaveBeenCalledWith('toys', 'games', 'Games', 'Box');
   });
 
   it('calls onSaveCategories when save button clicked', async () => {

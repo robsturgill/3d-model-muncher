@@ -14,7 +14,8 @@
     "defaultGridDensity": 4,
     "defaultModelView": "images",
     "autoSave": true,
-  "modelDirectory": "./models"
+  "modelDirectory": "./models",
+  "categorySortOrder": "custom"
   },
   "filters": {
     "defaultCategory": "all",
