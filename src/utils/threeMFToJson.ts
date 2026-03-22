@@ -158,16 +158,17 @@ export async function parse3MF(filePath: string, id: string, precomputedHash?: s
       const metadataNodes = modelNode?.metadata;
 
       function decodeHtmlEntities(text: string): string {
-        // First decode HTML entities
-        const decodedText = text
-          .replace(/&amp;/g, '&')
+        // Strip complete and incomplete HTML tags first (before entity decoding)
+        // to prevent tag injection via encoded sequences like &lt;script&gt;
+        const stripped = text.replace(/<[^>]*>?/g, '');
+        // Decode HTML entities; &amp; must be last to avoid double-decoding
+        // (e.g. &amp;lt; should become &lt;, not <)
+        return stripped
           .replace(/&lt;/g, '<')
           .replace(/&gt;/g, '>')
           .replace(/&quot;/g, '"')
-          .replace(/&#039;/g, "'");
-        
-        // Then strip out any HTML tags
-        return decodedText.replace(/<[^>]*>/g, '');
+          .replace(/&#039;/g, "'")
+          .replace(/&amp;/g, '&');
       }
 
       if (Array.isArray(metadataNodes)) {

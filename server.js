@@ -665,7 +665,7 @@ app.post('/api/save-model', async (req, res) => {
         const raw = fs.readFileSync(absoluteFilePath, 'utf-8');
         existing = raw ? JSON.parse(raw) : {};
       } catch (parseErr) {
-        console.error(`Failed to parse existing model JSON at ${absoluteFilePath}:`, parseErr);
+        console.error('Failed to parse existing model JSON at path:', absoluteFilePath, parseErr);
         // If file is corrupted or partially written, continue with an empty object so we can
         // overwrite with a clean, valid JSON. Do NOT hard-fail here to avoid blocking UI actions.
         existing = {};
@@ -683,7 +683,7 @@ app.post('/api/save-model', async (req, res) => {
         existing = migrated;
         console.log(`Migrated embedded 'changes' object for ${absoluteFilePath}`);
       } catch (e) {
-        console.warn(`Failed to migrate embedded 'changes' for ${absoluteFilePath}:`, e);
+        console.warn("Failed to migrate embedded 'changes' for path:", absoluteFilePath, e);
       }
     }
     
@@ -1547,7 +1547,7 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
           const resObj = await regenerateFromPaths(modelFilePath, model.jsonPath, model.id);
           if (resObj && resObj.error) errors.push({ modelId, error: resObj.error }); else processed++;
         } catch (error) {
-          console.error(`Error regenerating munchie file for model ${modelId}:`, error);
+          console.error('Error regenerating munchie file for model:', modelId, error);
           errors.push({ modelId, error: error.message });
         }
       }
@@ -1975,7 +1975,7 @@ app.post('/api/create-model-folder', express.json(), (req, res) => {
     // sanitize and validate: ensure folder is within modelsDir
     const modelsDir = getAbsoluteModelsPath();
     // Remove leading/trailing whitespace and slashes
-    let candidate = folder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    let candidate = folder.trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
     // Resolve the absolute path of the target folder
     const target = path.resolve(modelsDir, candidate);
     // Ensure the target is within modelsDir
@@ -2317,10 +2317,15 @@ app.post('/api/delete-models', (req, res) => {
     return res.status(400).json({ success: false, error: 'No files provided' });
   }
   const modelsDir = getAbsoluteModelsPath();
+  const resolvedModelsDir = path.resolve(modelsDir);
   let deleted = [];
   let errors = [];
   files.forEach(file => {
-    const filePath = path.join(modelsDir, file);
+    const filePath = path.resolve(modelsDir, file);
+    if (!filePath.startsWith(resolvedModelsDir + path.sep) && filePath !== resolvedModelsDir) {
+      errors.push({ file, error: 'Access denied' });
+      return;
+    }
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -2387,8 +2392,14 @@ app.get('/api/validate-3mf', async (req, res) => {
 
   try {
     const { parse3MF } = require('./dist-backend/utils/threeMFToJson');
-  const filePath = path.isAbsolute(file) ? file : path.join(getAbsoluteModelsPath(), file);
-    
+    const modelsDir = getAbsoluteModelsPath();
+    const normalizedFile = file.replace(/\\/g, '/').replace(/^\/+/, '');
+    const filePath = path.resolve(modelsDir, normalizedFile);
+    // Containment check: reject paths that escape the models directory
+    if (!filePath.startsWith(path.resolve(modelsDir) + path.sep) && filePath !== path.resolve(modelsDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found' });
     }
@@ -2628,7 +2639,7 @@ app.delete('/api/models/delete', async (req, res) => {
         }
       }
 
-      console.log(`Files to delete for ${modelId}:`, filesToDelete);
+      console.log('Files to delete for model:', modelId, filesToDelete);
 
       // Delete each file
       for (const fileInfo of filesToDelete) {

@@ -40,6 +40,8 @@ export function triggerDownload(url: string | undefined | null, e?: MouseEvent, 
   const fileName = typeof downloadName === 'string' && downloadName ? downloadName : extractFileName(resolved);
   // No debug logging here in normal operation — caller should pass a clean basename.
   const link = document.createElement('a');
+  // Guard against javascript: scheme to prevent XSS via href
+  if (/^javascript:/i.test(resolved)) return;
   link.href = resolved;
   link.download = fileName;
   document.body.appendChild(link);

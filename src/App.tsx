@@ -1379,6 +1379,8 @@ function AppContent() {
               <ul className="list-disc pl-5 list-outside mb-4">
                 <li><strong>Settings Sidebar</strong> - Settings have been reorganised into a sidebar layout for easier navigation between tabs.</li>
                 <li><strong>Currency Symbol</strong> - You can now configure your preferred currency symbol in General settings, which is displayed wherever prices appear.</li>
+                <li><strong>Category Sorting</strong> - Categories can now be displayed in custom drag-and-drop order or sorted alphabetically via a toggle in the Categories settings tab.</li>
+                <li><strong>Category Dropdown</strong> - Changed from a list to a dropdown field and now reflects your configured categories and sort order.</li>
               </ul>
             </div>
 
