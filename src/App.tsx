@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { ModelGrid } from "./components/ModelGrid";
 import { ModelDetailsDrawer } from "./components/ModelDetailsDrawer";
@@ -77,9 +77,10 @@ function AppContent() {
 
   // Dialog states
   const [isDonationDialogOpen, setIsDonationDialogOpen] = useState(false);
-  // Release notes dialog (shown after config is loaded, before/while models load)
+  // Release notes dialog (shown once on initial load)
   const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
   const [dontShowReleaseNotes, setDontShowReleaseNotes] = useState(false);
+  const releaseNotesChecked = useRef(false);
 
   // Bulk selection state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -228,10 +229,12 @@ function AppContent() {
     loadInitialData();
   }, []);
 
-  // Show release notes dialog once after appConfig is available unless the user opted out for this version
+  // Show release notes dialog once on initial load (not on every config update)
   // Only show release notes dialog when the major.minor version changes (ignore patch)
   useEffect(() => {
     if (!appConfig) return;
+    if (releaseNotesChecked.current) return;
+    releaseNotesChecked.current = true;
 
     try {
       // Helper to extract major.minor from a semver string
