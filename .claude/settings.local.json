@@ -3,7 +3,11 @@
     "allow": [
       "Skill(claude-md-management:revise-claude-md)",
       "Bash(npm run:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm show:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
