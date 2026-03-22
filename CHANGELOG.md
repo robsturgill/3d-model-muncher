@@ -1,3 +1,23 @@
+# [0.16.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.3...v0.16.0) (2026-03-22)
+
+
+### Bug Fixes
+
+* add duplicate file handling and model selection in IntegrityTab component ([a714322](https://github.com/robsturgill/3d-model-muncher/commit/a714322934aad12d3cf16a72b9081c4d7c7f342f))
+* enhance backup and restore functionality with strategy options and history display ([ce6cee2](https://github.com/robsturgill/3d-model-muncher/commit/ce6cee24f284ff218ded6085b6b7bc0c146080ee))
+* enhance release notes dialog behavior to show only once on initial load ([03d4805](https://github.com/robsturgill/3d-model-muncher/commit/03d48059cefe17ae180136cec7b1eeb6aaf2c661))
+
+
+### Features
+
+* add currency symbol configuration and display across components ([3377779](https://github.com/robsturgill/3d-model-muncher/commit/33777794bdf098d9ba3f4b3bc37a285223fd1301))
+* add data-testid attributes for improved testing in FilterSidebar, ModelCard, and SelectionModeControls components ([2eac4cb](https://github.com/robsturgill/3d-model-muncher/commit/2eac4cbf1e8fbdbbd9b0813bc8ee822ddb8f167d))
+* add initial CLAUDE.md file with project overview and development commands ([8fdd889](https://github.com/robsturgill/3d-model-muncher/commit/8fdd889ac2acb595c2bb1c22449a7d0061eb1a13))
+* add TagsTab component for global tag management with search, rename, and delete functionality ([e341213](https://github.com/robsturgill/3d-model-muncher/commit/e3412131b274e4156badd2661d99d11390f5ff9d))
+* category sorting and management features in Settings and Categories components ([be9346e](https://github.com/robsturgill/3d-model-muncher/commit/be9346eb5545bc08b57759a62cc2ccfa7aeaf45d))
+* integrate SettingsSidebar into App component and update SettingsPage to use controlled tab state ([e88d82e](https://github.com/robsturgill/3d-model-muncher/commit/e88d82ec79a3b5815e244784573d5c6ad92e0e29))
+* replace category buttons with Select component for improved UI and usability ([da3a49c](https://github.com/robsturgill/3d-model-muncher/commit/da3a49c79db2b5bf1021ed4f5a83703343d2e2ec))
+
 ## [0.15.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.2...v0.15.3) (2025-12-22)
 
 
