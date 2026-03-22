@@ -202,3 +202,8 @@
 [data-radix-scroll-area-viewport] > div {
   display: block !important;
 }
+
+@keyframes progress-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}

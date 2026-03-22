@@ -3,10 +3,12 @@ import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import { Progress } from "../ui/progress";
-import { FileCheck, RefreshCw, Files, AlertTriangle, Clock } from "lucide-react";
-import { HashCheckResult, Model } from "../../types/model";
-import { useState } from "react";
+import { FileCheck, RefreshCw, Files, AlertTriangle, Clock, Trash2 } from "lucide-react";
+import { HashCheckResult, Model, DuplicateGroup } from "../../types/model";
 import { Separator } from "../ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
+import { resolveModelThumbnail } from "../../utils/thumbnailUtils";
+import { ImageWithFallback } from "../ImageWithFallback";
 
 interface IntegrityTabProps {
   models: Model[];
@@ -20,6 +22,8 @@ interface IntegrityTabProps {
   onRunHashCheck: () => Promise<void>;
   onGenerateModelJson: () => Promise<void>;
   onRegenerate?: (model: any) => Promise<void>;
+  onRemoveDuplicates: (group: DuplicateGroup, keepModelId: string) => Promise<boolean>;
+  onModelClick?: (model: Model) => void;
 }
 
 export function IntegrityTab({
@@ -34,9 +38,9 @@ export function IntegrityTab({
   onRunHashCheck,
   onGenerateModelJson,
   onRegenerate,
+  onRemoveDuplicates,
+  onModelClick,
 }: IntegrityTabProps) {
-  const [duplicateGroups] = useState<any[]>([]);
-
   const getDisplayPath = (model: Model) => {
     if (model.modelUrl) {
       return model.modelUrl.replace(/^\/models\//, '');
@@ -159,12 +163,9 @@ export function IntegrityTab({
           </div>
 
           {isHashChecking && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Progress</span>
-                <span data-testid="hash-check-progress">{Math.round(hashCheckProgress)}%</span>
-              </div>
-              <Progress value={hashCheckProgress} className="w-full" />
+            <div className="space-y-1">
+              <span className="text-sm text-muted-foreground">Checking files...</span>
+              <Progress className="w-full" />
             </div>
           )}
 
@@ -200,6 +201,92 @@ export function IntegrityTab({
                           </Button>
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          {hashCheckResult && hashCheckResult.duplicateGroups && hashCheckResult.duplicateGroups.length > 0 && (
+            <div className="space-y-4">
+              <Separator />
+              <div>
+                <h3 className="font-medium mb-2">Duplicate Files</h3>
+                <div className="space-y-2" data-testid="duplicate-groups-list">
+                  {hashCheckResult.duplicateGroups.map((group, idx) => (
+                    <div
+                      key={`dup-${idx}`}
+                      className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-blue-600 dark:text-blue-400">
+                          {group.models.length} copies · {group.totalSize} total
+                        </span>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <Trash2 className="h-4 w-4" />
+                              Remove Duplicates
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Remove Duplicate Files</DialogTitle>
+                              <DialogDescription>
+                                Choose which file to keep. All other copies will be removed.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-2">
+                              {group.models.map((model) => (
+                                <div key={model.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                  <div
+                                    data-testid={`duplicate-model-info-${model.id}`}
+                                    className={`flex items-center gap-2 min-w-0 flex-1 ${onModelClick ? 'cursor-pointer hover:opacity-75' : ''}`}
+                                    onClick={() => onModelClick?.(model)}
+                                  >
+                                    {resolveModelThumbnail(model) && (
+                                      <ImageWithFallback
+                                        src={resolveModelThumbnail(model) as string}
+                                        alt={model.name}
+                                        className="w-10 h-10 object-cover rounded shrink-0"
+                                      />
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium truncate">{model.name}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{getDisplayPath(model)}</p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="ml-2 shrink-0"
+                                    onClick={() => onRemoveDuplicates(group, model.id)}
+                                  >
+                                    Keep This
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                      <div className="space-y-1">
+                        {group.models.map((model) => (
+                          <div key={model.id} className="flex items-center gap-2 px-1">
+                            {resolveModelThumbnail(model) && (
+                              <ImageWithFallback
+                                src={resolveModelThumbnail(model) as string}
+                                alt={model.name}
+                                className="w-8 h-8 object-cover rounded shrink-0"
+                              />
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-sm truncate">{model.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{getDisplayPath(model)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>

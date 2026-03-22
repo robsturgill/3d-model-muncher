@@ -1780,6 +1780,8 @@ export function SettingsPage({
                 onRunHashCheck={() => handleRunHashCheck()}
                 onGenerateModelJson={() => handleGenerateModelJson()}
                 onRegenerate={handleRegenerate}
+                onRemoveDuplicates={handleRemoveDuplicates}
+                onModelClick={onModelClick}
               />
             )}
 

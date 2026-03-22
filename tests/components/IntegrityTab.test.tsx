@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { IntegrityTab } from '../../src/components/settings/IntegrityTab';
 import { HashCheckResult, Model } from '../../src/types/model';
@@ -8,6 +8,11 @@ describe('IntegrityTab', () => {
   const mockModels: Model[] = [
     { id: '1', name: 'Model 1' } as Model,
     { id: '2', name: 'Model 2' } as Model,
+  ];
+
+  const mockDuplicateModels: Model[] = [
+    { id: '3', name: 'Widget', modelUrl: '/models/prints/widget.3mf' } as Model,
+    { id: '4', name: 'Widget', modelUrl: '/models/archive/widget.3mf' } as Model,
   ];
 
   const mockHashCheckResult: HashCheckResult = {
@@ -39,6 +44,7 @@ describe('IntegrityTab', () => {
     onRunHashCheck: vi.fn().mockResolvedValue(undefined),
     onGenerateModelJson: vi.fn().mockResolvedValue(undefined),
     onRegenerate: vi.fn().mockResolvedValue(undefined),
+    onRemoveDuplicates: vi.fn().mockResolvedValue(true),
   };
 
   it('renders the integrity tab', () => {
@@ -108,10 +114,10 @@ describe('IntegrityTab', () => {
       isHashChecking: true,
       hashCheckProgress: 50,
     };
-    
+
     render(<IntegrityTab {...props} />);
-    
-    expect(screen.getByTestId('hash-check-progress')).toHaveTextContent('50%');
+
+    expect(screen.getByText('Checking files...')).toBeInTheDocument();
   });
 
   it('displays hash check results', () => {
@@ -162,6 +168,78 @@ describe('IntegrityTab', () => {
     await user.click(screen.getByTestId('regenerate-button-0'));
     
     expect(mockProps.onRegenerate).toHaveBeenCalled();
+  });
+
+  it('displays duplicate groups list', () => {
+    const props = {
+      ...mockProps,
+      hashCheckResult: {
+        ...mockHashCheckResult,
+        duplicateGroups: [{ hash: 'abc', models: mockDuplicateModels, totalSize: '2 MB' }],
+      },
+    };
+
+    render(<IntegrityTab {...props} />);
+
+    expect(screen.getByTestId('duplicate-groups-list')).toBeInTheDocument();
+    expect(screen.getByTestId('duplicates-count')).toHaveTextContent('1 duplicates');
+  });
+
+  it('shows file paths in duplicate entries', () => {
+    const props = {
+      ...mockProps,
+      hashCheckResult: {
+        ...mockHashCheckResult,
+        duplicateGroups: [{ hash: 'abc', models: mockDuplicateModels, totalSize: '2 MB' }],
+      },
+    };
+
+    render(<IntegrityTab {...props} />);
+
+    expect(screen.getByText('prints/widget.3mf')).toBeInTheDocument();
+    expect(screen.getByText('archive/widget.3mf')).toBeInTheDocument();
+  });
+
+  it('calls onModelClick when duplicate model row is clicked', async () => {
+    const onModelClick = vi.fn();
+    const props = {
+      ...mockProps,
+      onModelClick,
+      hashCheckResult: {
+        ...mockHashCheckResult,
+        duplicateGroups: [{ hash: 'abc', models: mockDuplicateModels, totalSize: '2 MB' }],
+      },
+    };
+
+    render(<IntegrityTab {...props} />);
+
+    fireEvent.click(screen.getByText('Remove Duplicates'));
+    fireEvent.click(screen.getByTestId(`duplicate-model-info-${mockDuplicateModels[0].id}`));
+
+    expect(onModelClick).toHaveBeenCalledWith(mockDuplicateModels[0]);
+  });
+
+  it('calls onRemoveDuplicates with correct group and model id when Keep This clicked', async () => {
+    const user = userEvent.setup();
+    const onRemoveDuplicates = vi.fn().mockResolvedValue(true);
+    const props = {
+      ...mockProps,
+      onRemoveDuplicates,
+      hashCheckResult: {
+        ...mockHashCheckResult,
+        duplicateGroups: [{ hash: 'abc', models: mockDuplicateModels, totalSize: '2 MB' }],
+      },
+    };
+
+    render(<IntegrityTab {...props} />);
+
+    await user.click(screen.getByText('Remove Duplicates'));
+    await user.click(screen.getAllByText('Keep This')[0]);
+
+    expect(onRemoveDuplicates).toHaveBeenCalledWith(
+      { hash: 'abc', models: mockDuplicateModels, totalSize: '2 MB' },
+      mockDuplicateModels[0].id,
+    );
   });
 
   it('displays generate results', () => {
