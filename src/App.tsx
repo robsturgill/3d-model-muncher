@@ -1375,11 +1375,10 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
-              <h3 className="text-lg">v0.15.x - Release updates</h3>
+              <h3 className="text-lg">v0.16.x - Release updates</h3>
               <ul className="list-disc pl-5 list-outside mb-4">
-                <li><strong>File Integrity Improvements</strong> - The File Integrity tools now allow selecting both 3MF and STL files simultaneously; checking both will process 3MF then STL sequentially when you run checks or generate munchie files.</li>
-                <li><strong>Bulk Image Generation Cancel</strong> - You can now cancel bulk image generation in progress, allowing you to stop long-running operations and close the bulk edit drawer.</li>
-                <li><strong>G-Code Support</strong> - Upload a gcode file to complete filament type, amount and print duration.</li>
+                <li><strong>Settings Sidebar</strong> - Settings have been reorganised into a sidebar layout for easier navigation between tabs.</li>
+                <li><strong>Currency Symbol</strong> - You can now configure your preferred currency symbol in General settings, which is displayed wherever prices appear.</li>
               </ul>
             </div>
 
