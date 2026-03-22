@@ -88,4 +88,31 @@ describe('GeneralTab', () => {
     render(<GeneralTab {...mockProps} />);
     expect(screen.getByTestId('verbose-scan-logs-switch')).toBeInTheDocument();
   });
+
+  it('renders currency symbol input with default value', () => {
+    render(<GeneralTab {...mockProps} />);
+    const input = screen.getByTestId('currency-symbol-input') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe('$');
+  });
+
+  it('renders currency symbol input with configured value', () => {
+    const configWithEuro = {
+      ...mockConfig,
+      settings: { ...mockConfig.settings, currencySymbol: '€' },
+    };
+    render(<GeneralTab {...mockProps} config={configWithEuro} />);
+    const input = screen.getByTestId('currency-symbol-input') as HTMLInputElement;
+    expect(input.value).toBe('€');
+  });
+
+  it('calls onConfigFieldChange when currency symbol changes', async () => {
+    const user = userEvent.setup();
+    const onConfigFieldChange = vi.fn();
+    render(<GeneralTab {...mockProps} onConfigFieldChange={onConfigFieldChange} />);
+    const input = screen.getByTestId('currency-symbol-input');
+    await user.clear(input);
+    await user.type(input, '€');
+    expect(onConfigFieldChange).toHaveBeenCalledWith('settings.currencySymbol', expect.any(String));
+  });
 });

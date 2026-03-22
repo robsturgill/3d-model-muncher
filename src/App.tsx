@@ -1338,6 +1338,7 @@ function AppContent() {
           defaultModelView={appConfig?.settings.defaultModelView || 'images'}
           defaultModelColor={appConfig?.settings?.defaultModelColor}
           categories={sortedCategories}
+          currencySymbol={appConfig?.settings?.currencySymbol ?? '$'}
         />
       )}
 
@@ -1354,6 +1355,7 @@ function AppContent() {
           onClearSelections={exitSelectionMode}
           categories={sortedCategories}
           modelDirectory={appConfig?.settings?.modelDirectory || './models'}
+          currencySymbol={appConfig?.settings?.currencySymbol ?? '$'}
         />
       )}
 

@@ -144,6 +144,26 @@ export function GeneralTab({
         <Separator />
 
         <div className="space-y-4">
+          <h3 className="font-medium">Currency</h3>
+          <div className="space-y-2">
+            <Label htmlFor="currency-symbol">Currency Symbol</Label>
+            <Input
+              id="currency-symbol"
+              data-testid="currency-symbol-input"
+              value={config.settings.currencySymbol ?? '$'}
+              maxLength={3}
+              className="w-20"
+              onChange={(e) => onConfigFieldChange('settings.currencySymbol', e.target.value || '$')}
+            />
+            <p className="text-sm text-muted-foreground">
+              Symbol displayed next to prices (e.g. $, €, £, ¥).
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
           <h3 className="font-medium">Apply Server Configuration</h3>
           <p className="text-sm text-muted-foreground">
             Load the authoritative configuration from the server's <code>data/config.json</code>. This will clear local UI overrides.

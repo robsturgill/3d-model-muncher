@@ -36,7 +36,6 @@ import {
   FileText,
   CheckCircle,
   XCircle,
-  DollarSign,
   EyeOff,
   Eye,
   Clock,
@@ -68,6 +67,7 @@ interface BulkEditDrawerProps {
   // Optional configured models directory (from app config). Used to
   // normalize related file paths when saving (strip leading directory).
   modelDirectory?: string;
+  currencySymbol?: string;
 }
 
 interface BulkEditState {
@@ -128,6 +128,7 @@ export function BulkEditDrawer({
   onClearSelections,
   categories,
   modelDirectory,
+  currencySymbol = '$',
 }: BulkEditDrawerProps) {
   // keep categories referenced to avoid TypeScript unused prop error (it's passed from parent)
   void categories;
@@ -1646,7 +1647,7 @@ export function BulkEditDrawer({
                   htmlFor="price-field"
                   className="font-medium flex items-center gap-2"
                 >
-                  <DollarSign className="h-4 w-4" />
+                  <span className="text-sm font-medium">{currencySymbol}</span>
                   Selling Price
                 </Label>
               </div>
@@ -1654,7 +1655,7 @@ export function BulkEditDrawer({
               {fieldSelection.price && (
                 <div className="ml-6 space-y-2">
                   <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                     <Input
                       type="number"
                       step="0.01"

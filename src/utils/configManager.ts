@@ -26,6 +26,7 @@ export class ConfigManager {
       autoSave: true,
       modelDirectory: "./models",
       categorySortOrder: 'custom' as const,
+      currencySymbol: '$',
     },
     filters: {
       defaultCategory: "all",
@@ -99,6 +100,9 @@ export class ConfigManager {
         categorySortOrder: (config?.settings?.categorySortOrder === 'alpha' || config?.settings?.categorySortOrder === 'custom')
           ? config.settings.categorySortOrder
           : 'custom',
+        currencySymbol: typeof config?.settings?.currencySymbol === 'string' && config.settings.currencySymbol.trim() !== ''
+          ? config.settings.currencySymbol
+          : this.defaultConfig.settings.currencySymbol,
       },
       filters: {
         defaultCategory: typeof config?.filters?.defaultCategory === 'string' && config.filters.defaultCategory.trim() !== ''

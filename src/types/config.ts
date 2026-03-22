@@ -18,6 +18,7 @@ export interface AppConfig {
     gcodeOverwriteBehavior?: 'prompt' | 'overwrite';
     gcodeStorageBehavior?: 'parse-only' | 'save-and-link';
     categorySortOrder?: 'custom' | 'alpha';
+    currencySymbol?: string;
   };
   filters: {
     defaultCategory: string;

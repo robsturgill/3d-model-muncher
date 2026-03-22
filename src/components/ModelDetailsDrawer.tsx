@@ -19,7 +19,7 @@ import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
-import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, DollarSign, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle, Upload, ChevronDown, ChevronUp, Codesandbox } from "lucide-react";
+import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle, Upload, ChevronDown, ChevronUp, Codesandbox } from "lucide-react";
 import TagsInput from "./TagsInput";
 import { Download } from "lucide-react";
 import { toast } from 'sonner';
@@ -34,6 +34,7 @@ interface ModelDetailsDrawerProps {
   defaultModelView?: '3d' | 'images';
   categories: Category[];
   defaultModelColor?: string | null;
+  currencySymbol?: string;
 }
 
 export function ModelDetailsDrawer({
@@ -43,7 +44,8 @@ export function ModelDetailsDrawer({
   onModelUpdate,
   defaultModelView = 'images',
   defaultModelColor = null,
-  categories
+  categories,
+  currencySymbol = '$',
 }: ModelDetailsDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedModel, setEditedModel] = useState<Model | null>(null);
@@ -2553,7 +2555,7 @@ export function ModelDetailsDrawer({
                     </div>                    
                     <div>
                       <p className="text-sm text-muted-foreground">Price</p>
-                      <p className="text-xl font-semibold text-foreground">${currentModel.price}</p>
+                      <p className="text-xl font-semibold text-foreground">{currencySymbol}{currentModel.price}</p>
                     </div>
                   </div>
                 </div>
@@ -2755,7 +2757,7 @@ export function ModelDetailsDrawer({
                   <div className="space-y-2">
                     <Label htmlFor="edit-price">Selling Price</Label>
                     <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                       <Input
                         id="edit-price"
                         type="number"
