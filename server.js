@@ -2790,23 +2790,33 @@ app.post('/api/restore-munchie-files', async (req, res) => {
             mapExistingFiles(fullPath);
           } else if (entry.name.endsWith('.3mf')) {
             try {
-              // Calculate the current hash of the 3MF file
               const currentHash = computeMD5(fullPath);
               const relativePath = path.relative(modelsDir, fullPath);
-              
-              // Find the corresponding munchie.json file
               const munchieJsonPath = fullPath.replace(/\.3mf$/i, '-munchie.json');
-              
-              if (fs.existsSync(munchieJsonPath)) {
-                existingFiles.set(currentHash, {
-                  munchieJsonPath: munchieJsonPath,
-                  threeMFPath: fullPath,
-                  relativeMunchieJsonPath: relativePath.replace(/\.3mf$/i, '-munchie.json').replace(/\\/g, '/'),
-                  currentHash: currentHash
-                });
-              }
+              // Always map regardless of whether the munchie.json exists so restore
+              // can recreate deleted sidecars by matching the model file.
+              existingFiles.set(currentHash, {
+                munchieJsonPath: munchieJsonPath,
+                threeMFPath: fullPath,
+                relativeMunchieJsonPath: relativePath.replace(/\.3mf$/i, '-munchie.json').replace(/\\/g, '/'),
+                currentHash: currentHash
+              });
             } catch (error) {
               console.error(`Error processing 3MF file ${fullPath}:`, error);
+            }
+          } else if (entry.name.endsWith('.stl') || entry.name.endsWith('.STL')) {
+            try {
+              const currentHash = computeMD5(fullPath);
+              const relativePath = path.relative(modelsDir, fullPath);
+              const munchieJsonPath = fullPath.replace(/\.stl$/i, '-stl-munchie.json');
+              existingFiles.set(currentHash, {
+                munchieJsonPath: munchieJsonPath,
+                threeMFPath: fullPath,
+                relativeMunchieJsonPath: relativePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\\/g, '/'),
+                currentHash: currentHash
+              });
+            } catch (error) {
+              console.error(`Error processing STL file ${fullPath}:`, error);
             }
           }
         }
@@ -2865,9 +2875,11 @@ app.post('/api/restore-munchie-files', async (req, res) => {
             shouldRestore = true;
             reason = `Hash match: ${backupFile.hash.substring(0, 8)}... -> ${path.basename(existing.threeMFPath)}`;
           } else {
-            // If no hash match, try original path
+            // If no hash match, try original path — check the model file exists even
+            // if the munchie.json sidecar was deleted.
             const originalPath = path.join(modelsDir, backupFile.originalPath);
-            if (fs.existsSync(originalPath)) {
+            const modelPath = originalPath.replace(/-stl-munchie\.json$/i, '.stl').replace(/-munchie\.json$/i, '.3mf');
+            if (fs.existsSync(originalPath) || fs.existsSync(modelPath)) {
               targetPath = originalPath;
               shouldRestore = true;
               reason = 'Path match (no hash match found)';
@@ -2880,9 +2892,11 @@ app.post('/api/restore-munchie-files', async (req, res) => {
             }
           }
         } else if (strategy === 'path-match') {
-          // Match by original path
+          // Match by original path — check the model file exists even if the munchie.json
+          // sidecar was deleted.
           const originalPath = path.join(modelsDir, backupFile.originalPath);
-          if (fs.existsSync(originalPath)) {
+          const modelPath = originalPath.replace(/-stl-munchie\.json$/i, '.stl').replace(/-munchie\.json$/i, '.3mf');
+          if (fs.existsSync(originalPath) || fs.existsSync(modelPath)) {
             targetPath = originalPath;
             shouldRestore = true;
             reason = 'Path match';
@@ -3005,23 +3019,33 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
             mapExistingFiles(fullPath);
           } else if (entry.name.endsWith('.3mf')) {
             try {
-              // Calculate the current hash of the 3MF file
               const currentHash = computeMD5(fullPath);
               const relativePath = path.relative(modelsDir, fullPath);
-              
-              // Find the corresponding munchie.json file
               const munchieJsonPath = fullPath.replace(/\.3mf$/i, '-munchie.json');
-              
-              if (fs.existsSync(munchieJsonPath)) {
-                existingFiles.set(currentHash, {
-                  munchieJsonPath: munchieJsonPath,
-                  threeMFPath: fullPath,
-                  relativeMunchieJsonPath: relativePath.replace(/\.3mf$/i, '-munchie.json').replace(/\\/g, '/'),
-                  currentHash: currentHash
-                });
-              }
+              // Always map regardless of whether the munchie.json exists so restore
+              // can recreate deleted sidecars by matching the model file.
+              existingFiles.set(currentHash, {
+                munchieJsonPath: munchieJsonPath,
+                threeMFPath: fullPath,
+                relativeMunchieJsonPath: relativePath.replace(/\.3mf$/i, '-munchie.json').replace(/\\/g, '/'),
+                currentHash: currentHash
+              });
             } catch (error) {
               console.error(`Error processing 3MF file ${fullPath}:`, error);
+            }
+          } else if (entry.name.endsWith('.stl') || entry.name.endsWith('.STL')) {
+            try {
+              const currentHash = computeMD5(fullPath);
+              const relativePath = path.relative(modelsDir, fullPath);
+              const munchieJsonPath = fullPath.replace(/\.stl$/i, '-stl-munchie.json');
+              existingFiles.set(currentHash, {
+                munchieJsonPath: munchieJsonPath,
+                threeMFPath: fullPath,
+                relativeMunchieJsonPath: relativePath.replace(/\.stl$/i, '-stl-munchie.json').replace(/\\/g, '/'),
+                currentHash: currentHash
+              });
+            } catch (error) {
+              console.error(`Error processing STL file ${fullPath}:`, error);
             }
           }
         }
@@ -3078,9 +3102,11 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
             shouldRestore = true;
             reason = `Hash match: ${backupFile.hash.substring(0, 8)}... -> ${path.basename(existing.threeMFPath)}`;
           } else {
-            // If no hash match, try original path
+            // If no hash match, try original path — check the model file exists even
+            // if the munchie.json sidecar was deleted.
             const originalPath = path.join(modelsDir, backupFile.originalPath);
-            if (fs.existsSync(originalPath)) {
+            const modelPath = originalPath.replace(/-stl-munchie\.json$/i, '.stl').replace(/-munchie\.json$/i, '.3mf');
+            if (fs.existsSync(originalPath) || fs.existsSync(modelPath)) {
               targetPath = originalPath;
               shouldRestore = true;
               reason = 'Path match (no hash match found)';
@@ -3093,9 +3119,11 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
             }
           }
         } else if (strategy === 'path-match') {
-          // Match by original path
+          // Match by original path — check the model file exists even if the munchie.json
+          // sidecar was deleted.
           const originalPath = path.join(modelsDir, backupFile.originalPath);
-          if (fs.existsSync(originalPath)) {
+          const modelPath = originalPath.replace(/-stl-munchie\.json$/i, '.stl').replace(/-munchie\.json$/i, '.3mf');
+          if (fs.existsSync(originalPath) || fs.existsSync(modelPath)) {
             targetPath = originalPath;
             shouldRestore = true;
             reason = 'Path match';

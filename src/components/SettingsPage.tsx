@@ -346,7 +346,6 @@ export function SettingsPage({
   const statusToastId = useRef<string | number | null>(null);
 
   // State for backup and restore functionality
-  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [backupHistory, setBackupHistory] = useState<Array<{
     name: string;
@@ -1534,7 +1533,6 @@ export function SettingsPage({
 
   // Backup and restore functions
   const handleCreateBackup = async () => {
-    setIsCreatingBackup(true);
     setSaveStatus('saving');
     setStatusMessage('Creating backup of munchie.json files...');
 
@@ -1579,7 +1577,6 @@ export function SettingsPage({
       setStatusMessage('Failed to create backup');
       console.error('Backup creation error:', error);
     } finally {
-      setIsCreatingBackup(false);
       setTimeout(() => {
         setSaveStatus('idle');
         setStatusMessage('');
@@ -1587,7 +1584,9 @@ export function SettingsPage({
     }
   };
 
-  const handleRestoreFromFile = () => {
+  const handleRestoreFromFile = (strategy: 'hash-match' | 'path-match' | 'force', collectionsStrategy: 'merge' | 'replace') => {
+    setRestoreStrategy(strategy);
+    setCollectionsRestoreStrategy(collectionsStrategy);
     backupFileInputRef.current?.click();
   };
 
@@ -1761,6 +1760,7 @@ export function SettingsPage({
             {selectedTab === 'backup' && (
               <BackupTab
                 models={models}
+                backupHistory={backupHistory}
                 onCreateBackup={handleCreateBackup}
                 onRestoreFromFile={handleRestoreFromFile}
               />

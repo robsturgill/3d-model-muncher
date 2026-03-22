@@ -8,12 +8,14 @@ import { Separator } from "../ui/separator";
 
 interface BackupTabProps {
   models: any[];
+  backupHistory: Array<{ name: string; timestamp: string; size: number; fileCount: number }>;
   onCreateBackup: () => Promise<void>;
-  onRestoreFromFile: () => void;
+  onRestoreFromFile: (strategy: 'hash-match' | 'path-match' | 'force', collectionsStrategy: 'merge' | 'replace') => void;
 }
 
 export function BackupTab({
   models,
+  backupHistory,
   onCreateBackup,
   onRestoreFromFile,
 }: BackupTabProps) {
@@ -21,12 +23,6 @@ export function BackupTab({
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreStrategy, setRestoreStrategy] = useState<'hash-match' | 'path-match' | 'force'>('hash-match');
   const [collectionsRestoreStrategy, setCollectionsRestoreStrategy] = useState<'merge' | 'replace'>('merge');
-  const [backupHistory] = useState<Array<{
-    name: string;
-    timestamp: string;
-    size: number;
-    fileCount: number;
-  }>>([]);
 
   const handleCreateBackup = async () => {
     setIsCreatingBackup(true);
@@ -40,7 +36,7 @@ export function BackupTab({
   const handleRestoreFromFile = () => {
     setIsRestoring(true);
     try {
-      onRestoreFromFile();
+      onRestoreFromFile(restoreStrategy, collectionsRestoreStrategy);
     } finally {
       setIsRestoring(false);
     }

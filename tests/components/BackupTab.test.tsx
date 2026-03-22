@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { BackupTab } from '../../src/components/settings/BackupTab';
 import userEvent from '@testing-library/user-event';
@@ -12,6 +12,7 @@ describe('BackupTab', () => {
 
   const mockProps = {
     models: mockModels,
+    backupHistory: [],
     onCreateBackup: vi.fn().mockResolvedValue(undefined),
     onRestoreFromFile: vi.fn(),
   };
@@ -77,17 +78,52 @@ describe('BackupTab', () => {
     expect(screen.getByTestId('restore-from-file-button')).toBeInTheDocument();
   });
 
-  it('calls onRestoreFromFile when restore button clicked', async () => {
+  it('calls onRestoreFromFile with default strategies when restore button clicked', async () => {
     const user = userEvent.setup();
     render(<BackupTab {...mockProps} />);
-    
+
     await user.click(screen.getByTestId('restore-from-file-button'));
-    
-    expect(mockProps.onRestoreFromFile).toHaveBeenCalled();
+
+    expect(mockProps.onRestoreFromFile).toHaveBeenCalledWith('hash-match', 'merge');
   });
 
-  it('shows last backup size', () => {
+  it('passes selected restore strategy to onRestoreFromFile', async () => {
+    const user = userEvent.setup();
+    const onRestoreFromFile = vi.fn();
+    render(<BackupTab {...mockProps} onRestoreFromFile={onRestoreFromFile} />);
+
+    const strategySelect = screen.getByTestId('restore-strategy-select').closest('select')!;
+    fireEvent.change(strategySelect, { target: { value: 'force' } });
+
+    await user.click(screen.getByTestId('restore-from-file-button'));
+
+    expect(onRestoreFromFile).toHaveBeenCalledWith('force', 'merge');
+  });
+
+  it('passes selected collections strategy to onRestoreFromFile', async () => {
+    const user = userEvent.setup();
+    const onRestoreFromFile = vi.fn();
+    render(<BackupTab {...mockProps} onRestoreFromFile={onRestoreFromFile} />);
+
+    const collectionsSelect = screen.getByTestId('collections-strategy-select').closest('select')!;
+    fireEvent.change(collectionsSelect, { target: { value: 'replace' } });
+
+    await user.click(screen.getByTestId('restore-from-file-button'));
+
+    expect(onRestoreFromFile).toHaveBeenCalledWith('hash-match', 'replace');
+  });
+
+  it('shows last backup size from backupHistory', () => {
+    const props = {
+      ...mockProps,
+      backupHistory: [{ name: 'backup.gz', timestamp: new Date().toISOString(), size: 20480, fileCount: 5 }],
+    };
+    render(<BackupTab {...props} />);
+    expect(screen.getByTestId('last-backup-size')).toHaveTextContent('20.0KB');
+  });
+
+  it('shows 0KB when backupHistory is empty', () => {
     render(<BackupTab {...mockProps} />);
-    expect(screen.getByTestId('last-backup-size')).toBeInTheDocument();
+    expect(screen.getByTestId('last-backup-size')).toHaveTextContent('0KB');
   });
 });
