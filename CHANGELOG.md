@@ -1,3 +1,10 @@
+## [0.16.1](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.0...v0.16.1) (2026-03-22)
+
+
+### Bug Fixes
+
+* enhance security and update release dialog with other features added ([bc95c13](https://github.com/robsturgill/3d-model-muncher/commit/bc95c13884e143cb03821b92f35b5c04bc99fd92))
+
 # [0.16.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.15.3...v0.16.0) (2026-03-22)
 
 
