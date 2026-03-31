@@ -1,3 +1,10 @@
+## [0.16.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.2...v0.16.3) (2026-03-31)
+
+
+### Bug Fixes
+
+* update Docker publish workflow ([5b049f8](https://github.com/robsturgill/3d-model-muncher/commit/5b049f89addf641b9ec8efddf2440930d447f92c))
+
 ## [0.16.2](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.1...v0.16.2) (2026-03-31)
 
 
