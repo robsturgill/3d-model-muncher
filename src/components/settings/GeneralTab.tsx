@@ -164,6 +164,31 @@ export function GeneralTab({
         <Separator />
 
         <div className="space-y-4">
+          <h3 className="font-medium">3D Viewer</h3>
+          <div className="space-y-2">
+            <Label htmlFor="default-model-color">Default Model Color</Label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                id="default-model-color"
+                data-testid="default-model-color-input"
+                value={config.settings.defaultModelColor ?? '#aaaaaa'}
+                onChange={(e) => onConfigFieldChange('settings.defaultModelColor', e.target.value)}
+                className="h-9 w-16 cursor-pointer rounded-md border border-input bg-transparent p-1"
+              />
+              <span className="font-mono text-sm text-muted-foreground">
+                {config.settings.defaultModelColor ?? '#aaaaaa'}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Color applied to models in the 3D viewer and bulk image generation.
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
           <h3 className="font-medium">Apply Server Configuration</h3>
           <p className="text-sm text-muted-foreground">
             Load the authoritative configuration from the server's <code>data/config.json</code>. This will clear local UI overrides.

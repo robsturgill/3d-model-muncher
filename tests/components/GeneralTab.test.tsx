@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { GeneralTab } from '../../src/components/settings/GeneralTab';
 import { AppConfig } from '../../src/types/config';
@@ -114,5 +114,33 @@ describe('GeneralTab', () => {
     await user.clear(input);
     await user.type(input, '€');
     expect(onConfigFieldChange).toHaveBeenCalledWith('settings.currencySymbol', expect.any(String));
+  });
+
+  it('renders default model color input with fallback value', () => {
+    render(<GeneralTab {...mockProps} />);
+    const input = screen.getByTestId('default-model-color-input') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.type).toBe('color');
+    expect(input.value).toBe('#aaaaaa');
+  });
+
+  it('renders default model color input with configured value', () => {
+    const configWithColor = {
+      ...mockConfig,
+      settings: { ...mockConfig.settings, defaultModelColor: '#ff0000' },
+    };
+    render(<GeneralTab {...mockProps} config={configWithColor} />);
+    const input = screen.getByTestId('default-model-color-input') as HTMLInputElement;
+    expect(input.value).toBe('#ff0000');
+  });
+
+  it('calls onConfigFieldChange when model color changes', async () => {
+    const user = userEvent.setup();
+    const onConfigFieldChange = vi.fn();
+    render(<GeneralTab {...mockProps} onConfigFieldChange={onConfigFieldChange} />);
+    const input = screen.getByTestId('default-model-color-input');
+    await user.click(input);
+    fireEvent.change(input, { target: { value: '#336699' } });
+    expect(onConfigFieldChange).toHaveBeenCalledWith('settings.defaultModelColor', '#336699');
   });
 });
