@@ -1,3 +1,10 @@
+## [0.16.4](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.3...v0.16.4) (2026-03-31)
+
+
+### Bug Fixes
+
+* restore default model color input to GeneralTab, new tests added ([41b3635](https://github.com/robsturgill/3d-model-muncher/commit/41b36351f3e609e2d0d1d20c26e49ff825e7bb39))
+
 ## [0.16.3](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.2...v0.16.3) (2026-03-31)
 
 
