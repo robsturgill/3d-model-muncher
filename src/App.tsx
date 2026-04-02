@@ -1376,12 +1376,12 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
-              <h3 className="text-lg">v0.16.x - Release updates</h3>
-              <ul className="list-disc pl-5 list-outside mb-4">
-                <li><strong>Settings Sidebar</strong> - Settings have been reorganised into a sidebar layout for easier navigation between tabs.</li>
-                <li><strong>Currency Symbol</strong> - You can now configure your preferred currency symbol in General settings, which is displayed wherever prices appear.</li>
-                <li><strong>Category Sorting</strong> - Categories can now be displayed in custom drag-and-drop order or sorted alphabetically via a toggle in the Categories settings tab.</li>
-                <li><strong>Category Dropdown</strong> - Changed from a list to a dropdown field and now reflects your configured categories and sort order.</li>
+              <h3 className="text-lg font-semibold mb-2">v0.17.x — Release updates</h3>
+              <ul className="list-disc pl-5 list-outside space-y-1.5">
+                <li><strong>Markdown descriptions &amp; notes</strong> — Both the Description and Notes fields now render markdown. Use headings, bold, lists, links, and more. An Edit/Preview toggle in the editor lets you check formatting before saving.</li>
+                <li><strong>Normal material view for all file types</strong> — The normal material (surface normal color map) toggle is now available for both STL and 3MF files in the 3D viewer.</li>
+                <li><strong>Default material type setting</strong> — A new setting in General → 3D Viewer lets you choose whether models open in Standard or Normal material view by default.</li>
+                <li><strong>Wireframe view fix</strong> — The wireframe toggle in the 3D viewer was not applying to the model. This has been fixed for both STL and 3MF files.</li>
               </ul>
             </div>
 
