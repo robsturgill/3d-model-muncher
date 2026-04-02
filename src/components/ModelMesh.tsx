@@ -37,7 +37,7 @@ export function ModelMesh({ modelUrl, isWireframe, materialType = 'standard', cu
       // STL loader returns a BufferGeometry, so we need to create a mesh
       const geometry = modelData as THREE.BufferGeometry;
       const mesh = new THREE.Mesh(geometry, material);
-      
+
       // Create a group to contain the mesh (similar to 3MF structure)
       const group = new THREE.Group();
       group.add(mesh);
@@ -45,33 +45,31 @@ export function ModelMesh({ modelUrl, isWireframe, materialType = 'standard', cu
       group.rotation.x = -Math.PI / 2;
       return group;
     } else {
-      // 3MF loader returns a Group object directly
-      const group = modelData as THREE.Group;
-      if (materialType === 'normal') {
-        // Apply normal material to all meshes in the 3MF group
-        group.traverse((child: any) => {
-          if (child.isMesh) {
+      // Clone the loader's cached Group so we never mutate the cached object.
+      // Without cloning, material changes stick to the cache and switching back
+      // to standard material becomes impossible.
+      const group = (modelData as THREE.Group).clone(true);
+      group.traverse((child: any) => {
+        if (child.isMesh) {
+          if (materialType === 'normal') {
+            // Ensure vertex normals exist so MeshNormalMaterial renders correctly
+            if (child.geometry && !child.geometry.attributes.normal) {
+              child.geometry.computeVertexNormals();
+            }
             child.material = material;
-          }
-        });
-      } else if (customColor) {
-        // Tint existing materials with custom color
-        group.traverse((child: any) => {
-          if (child.isMesh && child.material) {
+          } else if (customColor && child.material) {
+            // Tint cloned materials with custom color
             if (Array.isArray(child.material)) {
               child.material.forEach((mat: any) => {
-                if (mat.color) {
-                  mat.color.set(customColor);
-                }
+                if (mat.color) mat.color.set(customColor);
               });
             } else if (child.material.color) {
               child.material.color.set(customColor);
             }
           }
-        });
-      }
-      // For 'standard' without customColor, keep original materials
-      // Rotate the group to make the model upright (consistent with STL)
+          // For 'standard' without customColor, keep the original materials from the clone
+        }
+      });
       group.rotation.x = -Math.PI / 2;
       return group;
     }
