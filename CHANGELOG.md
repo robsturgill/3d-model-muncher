@@ -1,3 +1,17 @@
+# [0.17.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.4...v0.17.0) (2026-04-02)
+
+
+### Bug Fixes
+
+* 3MF rendering of normal material ([81a9669](https://github.com/robsturgill/3d-model-muncher/commit/81a9669476f99cecd033d4ef56e73cef85c29e26))
+* bulk image generation support for normal material setting ([560b770](https://github.com/robsturgill/3d-model-muncher/commit/560b77004b21c4e44eef30f8382c4c91376a445f))
+
+
+### Features
+
+* add default material type setting and update related components ([a254cf4](https://github.com/robsturgill/3d-model-muncher/commit/a254cf4230a8cceec045a2513be0cb052acf5fe0))
+* add Markdown editor for model description and note fields ([5f696b4](https://github.com/robsturgill/3d-model-muncher/commit/5f696b4f9e3a21cf7bff5b4cba074e6585744a86))
+
 ## [0.16.4](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.3...v0.16.4) (2026-03-31)
 
 
