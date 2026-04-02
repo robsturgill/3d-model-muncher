@@ -1337,6 +1337,7 @@ function AppContent() {
           onModelUpdate={handleModelUpdate}
           defaultModelView={appConfig?.settings.defaultModelView || 'images'}
           defaultModelColor={appConfig?.settings?.defaultModelColor}
+          defaultMaterialType={appConfig?.settings?.defaultMaterialType}
           categories={sortedCategories}
           currencySymbol={appConfig?.settings?.currencySymbol ?? '$'}
         />

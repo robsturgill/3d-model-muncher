@@ -8,6 +8,7 @@ interface SharedModelSceneProps {
   customColor?: string;
   autoRotate?: boolean;
   materialType?: "standard" | "normal";
+  isWireframe?: boolean;
   onModelLoaded?: () => void;
 }
 
@@ -16,6 +17,7 @@ export const SharedModelScene = memo(({
   customColor,
   autoRotate = false,
   materialType = "standard",
+  isWireframe,
   onModelLoaded,
 }: SharedModelSceneProps) => {
   const loadedRef = React.useRef(false);
@@ -45,6 +47,7 @@ export const SharedModelScene = memo(({
                 modelUrl={modelUrl}
                 materialType={materialType}
                 customColor={customColor}
+                isWireframe={isWireframe}
                 onBoundingBox={(box) => {
                   if (!loadedRef.current && box && !box.isEmpty()) {
                     loadedRef.current = true;

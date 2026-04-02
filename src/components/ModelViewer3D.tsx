@@ -15,6 +15,8 @@ interface ModelViewer3DProps {
   onCapture?: (dataUrl: string) => void;
   // optional external default/custom color to apply to models
   customColor?: string;
+  // optional default material type for the viewer
+  defaultMaterialType?: 'standard' | 'normal';
   // programmatic trigger: change this number to force the viewer to capture and call onCapture
   captureTrigger?: number;
   // Called when the model has finished loading and we have a valid bounding box
@@ -24,13 +26,14 @@ interface ModelViewer3DProps {
 
 
 // Use shared scene setup for consistency
-const Scene = memo(({ modelUrl, autoRotate, materialType, customColor, onModelLoaded }: { modelUrl?: string; autoRotate?: boolean; materialType?: 'standard' | 'normal'; customColor?: string; onModelLoaded?: () => void }) => {
+const Scene = memo(({ modelUrl, autoRotate, materialType, customColor, isWireframe, onModelLoaded }: { modelUrl?: string; autoRotate?: boolean; materialType?: 'standard' | 'normal'; customColor?: string; isWireframe?: boolean; onModelLoaded?: () => void }) => {
   return (
     <SharedModelScene
       modelUrl={modelUrl}
       customColor={customColor}
       autoRotate={autoRotate}
       materialType={materialType}
+      isWireframe={isWireframe}
       onModelLoaded={onModelLoaded}
     />
   );
@@ -39,10 +42,10 @@ const Scene = memo(({ modelUrl, autoRotate, materialType, customColor, onModelLo
 Scene.displayName = "Scene";
 
 
-export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture, customColor: externalCustomColor, onModelLoaded }: ModelViewer3DProps) => {
+export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture, customColor: externalCustomColor, defaultMaterialType, onModelLoaded }: ModelViewer3DProps) => {
   const [isWireframe, setIsWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
-  const [materialType, setMaterialType] = useState<'standard' | 'normal'>('standard');
+  const [materialType, setMaterialType] = useState<'standard' | 'normal'>(defaultMaterialType ?? 'standard');
   const [customColor, setCustomColor] = useState<string | undefined>(externalCustomColor);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
@@ -64,7 +67,8 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
   useEffect(() => {
     setIsWireframe(false);
     setIsDestroyed(false);
-  }, [modelName]);
+    setMaterialType(defaultMaterialType ?? 'standard');
+  }, [modelName, defaultMaterialType]);
 
   // Sync external custom color prop into internal state when it changes
   useEffect(() => {
@@ -212,7 +216,7 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
             ref={canvasRef}
             {...canvasConfig}
           >
-            <Scene modelUrl={modelUrl} autoRotate={autoRotate} materialType={materialType} customColor={customColor} onModelLoaded={onModelLoaded} />
+            <Scene modelUrl={modelUrl} autoRotate={autoRotate} materialType={materialType} customColor={customColor} isWireframe={isWireframe} onModelLoaded={onModelLoaded} />
           </Canvas>
         </Suspense>
       </div>
@@ -251,23 +255,21 @@ export const ModelViewer3D = memo(({ modelUrl, modelName = "3D Model", onCapture
           <TooltipContent sideOffset={8}>{isWireframe ? 'Solid view' : 'Wireframe view'}</TooltipContent>
         </Tooltip>
 
-        {!is3MF && (
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => !isDestroyed && setMaterialType(materialType === 'standard' ? 'normal' : 'standard')}
-                className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
-                disabled={isDestroyed}
-                aria-label={materialType === 'standard' ? "Normal material" : "Standard material"}
-              >
-                <Palette className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={8}>{materialType === 'standard' ? 'Normal material' : 'Standard material'}</TooltipContent>
-          </Tooltip>
-        )}
+        <Tooltip>
+          <TooltipTrigger>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => !isDestroyed && setMaterialType(materialType === 'standard' ? 'normal' : 'standard')}
+              className="bg-background/90 backdrop-blur-sm hover:bg-background border border-border"
+              disabled={isDestroyed}
+              aria-label={materialType === 'standard' ? "Normal material" : "Standard material"}
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={8}>{materialType === 'standard' ? 'Normal material' : 'Standard material'}</TooltipContent>
+        </Tooltip>
         {/* Capture current view as image */}
         <Tooltip>
           <TooltipTrigger>

@@ -34,6 +34,7 @@ interface ModelDetailsDrawerProps {
   defaultModelView?: '3d' | 'images';
   categories: Category[];
   defaultModelColor?: string | null;
+  defaultMaterialType?: 'standard' | 'normal' | null;
   currencySymbol?: string;
 }
 
@@ -44,6 +45,7 @@ export function ModelDetailsDrawer({
   onModelUpdate,
   defaultModelView = 'images',
   defaultModelColor = null,
+  defaultMaterialType = null,
   categories,
   currencySymbol = '$',
 }: ModelDetailsDrawerProps) {
@@ -2275,11 +2277,12 @@ export function ModelDetailsDrawer({
             <div className="relative bg-gradient-to-br from-muted/30 to-muted/60 rounded-xl border overflow-hidden">
                 {viewMode === '3d' ? (
                 <ModelViewerErrorBoundary>
-                  <ModelViewer3D 
-                      modelUrl={currentModel.modelUrl} 
+                  <ModelViewer3D
+                      modelUrl={currentModel.modelUrl}
                       modelName={currentModel.name}
                       onCapture={handleCapturedImage}
                       customColor={defaultModelColor || undefined}
+                      defaultMaterialType={defaultMaterialType || undefined}
                     />
                 </ModelViewerErrorBoundary>
               ) : (
