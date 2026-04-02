@@ -17,6 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { AspectRatio } from "./ui/aspect-ratio";
 import { ModelViewer3D } from "./ModelViewer3D";
 import { ModelViewerErrorBoundary } from "./ErrorBoundary";
+import { MarkdownContent } from "./MarkdownContent";
+import { MarkdownEditor } from "./MarkdownEditor";
 import { compressImageFile } from "../utils/imageUtils";
 import { ImageWithFallback } from "./ImageWithFallback";
 import { Clock, Weight, HardDrive, Layers, Droplet, Diameter, Edit3, Save, X, FileText, Tag, Box, Images, ChevronLeft, ChevronRight, Maximize2, StickyNote, ExternalLink, Globe, Store, CheckCircle, Ban, User, RefreshCw, Plus, List, MinusCircle, Upload, ChevronDown, ChevronUp, Codesandbox } from "lucide-react";
@@ -34,6 +36,7 @@ interface ModelDetailsDrawerProps {
   defaultModelView?: '3d' | 'images';
   categories: Category[];
   defaultModelColor?: string | null;
+  defaultMaterialType?: 'standard' | 'normal' | null;
   currencySymbol?: string;
 }
 
@@ -44,6 +47,7 @@ export function ModelDetailsDrawer({
   onModelUpdate,
   defaultModelView = 'images',
   defaultModelColor = null,
+  defaultMaterialType = null,
   categories,
   currencySymbol = '$',
 }: ModelDetailsDrawerProps) {
@@ -2275,11 +2279,12 @@ export function ModelDetailsDrawer({
             <div className="relative bg-gradient-to-br from-muted/30 to-muted/60 rounded-xl border overflow-hidden">
                 {viewMode === '3d' ? (
                 <ModelViewerErrorBoundary>
-                  <ModelViewer3D 
-                      modelUrl={currentModel.modelUrl} 
+                  <ModelViewer3D
+                      modelUrl={currentModel.modelUrl}
                       modelName={currentModel.name}
                       onCapture={handleCapturedImage}
                       customColor={defaultModelColor || undefined}
+                      defaultMaterialType={defaultMaterialType || undefined}
                     />
                 </ModelViewerErrorBoundary>
               ) : (
@@ -2681,11 +2686,11 @@ export function ModelDetailsDrawer({
 
                 <div className="space-y-2">
                   <Label htmlFor="edit-description">Description</Label>
-                  <Textarea
-                    id="edit-description"
+                  <MarkdownEditor
                     value={editedModel?.description || ""}
-                    onChange={(e) => setEditedModel(prev => prev ? { ...prev, description: e.target.value } : null)}
+                    onChange={(val) => setEditedModel(prev => prev ? { ...prev, description: val } : null)}
                     rows={3}
+                    placeholder="Describe this model..."
                   />
                     {/* If there is a stored userDefined description (including empty string), allow restoring the original top-level description */}
                     {originalUserDefinedDescriptionRef.current !== null && (
@@ -2863,16 +2868,14 @@ export function ModelDetailsDrawer({
                   <div className="flex items-center gap-2">
                     <Label htmlFor="edit-notes">Notes</Label>
                   </div>
-                  <Textarea
-                    id="edit-notes"
-                    placeholder="Add your personal notes about this model..."
+                  <MarkdownEditor
                     value={editedModel?.notes || ""}
-                    onChange={(e) => setEditedModel(prev => prev ? { ...prev, notes: e.target.value } : null)}
+                    onChange={(val) => setEditedModel(prev => prev ? { ...prev, notes: val } : null)}
                     rows={4}
-                    className="resize-none"
+                    placeholder="Add your personal notes about this model..."
                   />
                   <p className="text-xs text-muted-foreground">
-                    Use notes to track print settings, modifications, or reminders.
+                    Use notes to track print settings, modifications, or reminders. Supports markdown formatting.
                   </p>
                 </div>
 
@@ -3051,23 +3054,18 @@ export function ModelDetailsDrawer({
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-muted-foreground text-base leading-relaxed">
-                  {(() => {
-                      // Prefer userDefined.description when available.
-                      try {
-                        const ud = (currentModel as any).userDefined;
-                        // If userDefined.description is present and non-empty (after trim)
-                        // treat it as an override. If it's an empty string, fall back
-                        // to the top-level description.
-                        if (ud && typeof ud === 'object' && typeof ud.description === 'string') {
-                          if (ud.description.trim() !== '') return ud.description;
-                        }
-                      } catch (e) {
-                        // ignore and fall back
+                {(() => {
+                    let resolvedDescription = currentModel.description;
+                    try {
+                      const ud = (currentModel as any).userDefined;
+                      if (ud && typeof ud === 'object' && typeof ud.description === 'string') {
+                        if (ud.description.trim() !== '') resolvedDescription = ud.description;
                       }
-                      return currentModel.description;
-                    })()}
-                </p>
+                    } catch (e) {
+                      // ignore and fall back
+                    }
+                    return <MarkdownContent content={resolvedDescription} className="text-muted-foreground text-base leading-relaxed" />;
+                  })()}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* License Information (hidden when not set) */}
@@ -3129,9 +3127,7 @@ export function ModelDetailsDrawer({
                   <h3 className="font-semibold text-lg text-card-foreground">Notes</h3>
                 </div>
                 <div className="p-4 bg-muted/30 rounded-lg border">
-                  <p className="text-foreground leading-relaxed whitespace-pre-wrap">
-                    {currentModel.notes}
-                  </p>
+                  <MarkdownContent content={currentModel.notes} className="text-foreground leading-relaxed" />
                 </div>
               </div>
             </>

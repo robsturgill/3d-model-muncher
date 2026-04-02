@@ -9,6 +9,7 @@ export interface AppConfig {
     defaultGridDensity: number;
     defaultModelView: "3d" | "images";
     defaultModelColor?: string;
+    defaultMaterialType?: 'standard' | 'normal';
     showPrintedBadge?: boolean;
     verboseScanLogs?: boolean;
     modelCardPrimary: 'none' | 'printTime' | 'filamentUsed' | 'fileSize' | 'category' | 'designer' | 'layerHeight' | 'nozzle' | 'price';

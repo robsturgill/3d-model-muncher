@@ -71,41 +71,99 @@ export function DemoPage({ onBack }: DemoPageProps) {
                 <CardTitle>Typography</CardTitle>
                 <CardDescription>Text styles and hierarchy used throughout the application</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <div>
-                      <h1>Heading 1 - Main Titles</h1>
-                      <p className="text-xs text-muted-foreground">text-2xl, font-medium</p>
-                    </div>
-                    <div>
-                      <h2>Heading 2 - Section Titles</h2>
-                      <p className="text-xs text-muted-foreground">text-xl, font-medium</p>
-                    </div>
-                    <div>
-                      <h3>Heading 3 - Subsections</h3>
-                      <p className="text-xs text-muted-foreground">text-lg, font-medium</p>
-                    </div>
-                    <div>
-                      <h4>Heading 4 - Card Titles</h4>
-                      <p className="text-xs text-muted-foreground">text-base, font-medium</p>
-                    </div>
+              <CardContent className="space-y-8">
+
+                {/* Headings */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Headings</h4>
+                  <div className="space-y-2 pl-3 border-l border-border">
+                    <div><h1>Heading 1 — Main Titles</h1><code className="text-xs text-muted-foreground">h1 / text-2xl font-medium</code></div>
+                    <div><h2>Heading 2 — Section Titles</h2><code className="text-xs text-muted-foreground">h2 / text-xl font-medium</code></div>
+                    <div><h3>Heading 3 — Subsections</h3><code className="text-xs text-muted-foreground">h3 / text-lg font-medium</code></div>
+                    <div><h4>Heading 4 — Card Titles</h4><code className="text-xs text-muted-foreground">h4 / text-base font-medium</code></div>
                   </div>
-                  <div className="space-y-4">
-                    <div>
-                      <p>Body text - Regular paragraph content used for descriptions and general text content.</p>
-                      <p className="text-xs text-muted-foreground">text-base, font-normal</p>
+                </div>
+
+                <Separator />
+
+                {/* Text colours */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Text Colours</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      { cls: "text-foreground",        label: "text-foreground",        desc: "Default body text" },
+                      { cls: "text-muted-foreground",  label: "text-muted-foreground",  desc: "Secondary / captions" },
+                      { cls: "text-primary",           label: "text-primary",           desc: "Primary brand" },
+                      { cls: "text-secondary-foreground", label: "text-secondary-foreground", desc: "Secondary surface text" },
+                      { cls: "text-accent-foreground", label: "text-accent-foreground", desc: "Accent surface text" },
+                      { cls: "text-destructive",       label: "text-destructive",       desc: "Errors / destructive" },
+                      { cls: "text-card-foreground",   label: "text-card-foreground",   desc: "Card body text" },
+                    ].map(({ cls, label, desc }) => (
+                      <div key={cls} className="flex items-baseline gap-3 p-2 rounded-md bg-muted/30">
+                        <span className={`text-sm font-medium ${cls}`}>Aa</span>
+                        <div>
+                          <code className="text-xs">{label}</code>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Body sizes */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Body Sizes</h4>
+                  <div className="space-y-2 pl-3 border-l border-border">
+                    <div><p className="text-base">Base — Regular paragraph content used for descriptions.</p><code className="text-xs text-muted-foreground">text-base</code></div>
+                    <div><p className="text-sm text-muted-foreground">Small — Metadata, captions, and secondary information.</p><code className="text-xs text-muted-foreground">text-sm text-muted-foreground</code></div>
+                    <div><p className="text-xs text-muted-foreground">Extra small — File sizes, timestamps, and minimal details.</p><code className="text-xs text-muted-foreground">text-xs text-muted-foreground</code></div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Links */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Links &amp; Anchors</h4>
+                  <div className="space-y-3 pl-3 border-l border-border">
+                    <div className="space-y-1">
+                      <a href="#" onClick={(e) => e.preventDefault()} className="text-primary underline text-sm">text-primary underline</a>
+                      <p className="text-xs text-muted-foreground">Default primary-coloured link</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Small text - Used for metadata, captions, and secondary information.</p>
-                      <p className="text-xs text-muted-foreground">text-sm, text-muted-foreground</p>
+                    <div className="space-y-1">
+                      <a href="#" onClick={(e) => e.preventDefault()} className="underline text-sm" style={{ color: 'var(--brand-secondary)' }}>var(--brand-secondary)</a>
+                      <p className="text-xs text-muted-foreground">Brand secondary CSS variable — used in markdown</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Extra small text - File sizes, timestamps, and minimal details.</p>
-                      <p className="text-xs text-muted-foreground">text-xs, text-muted-foreground</p>
+                    <div className="space-y-1">
+                      <a href="#" onClick={(e) => e.preventDefault()} className="underline text-sm" style={{ color: 'var(--brand-purple-lightest)' }}>var(--brand-purple-lightest)</a>
+                      <p className="text-xs text-muted-foreground">Lightest purple — better contrast on dark backgrounds</p>
+                    </div>
+                    <div className="space-y-1">
+                      <a href="#" onClick={(e) => e.preventDefault()} className="text-muted-foreground hover:text-foreground underline text-sm transition-colors">text-muted-foreground hover:text-foreground</a>
+                      <p className="text-xs text-muted-foreground">Subtle link style for secondary actions</p>
+                    </div>
+                    <div className="space-y-1">
+                      <a href="#" onClick={(e) => e.preventDefault()} className="text-destructive underline text-sm">text-destructive</a>
+                      <p className="text-xs text-muted-foreground">Destructive / warning link</p>
                     </div>
                   </div>
                 </div>
+
+                <Separator />
+
+                {/* Inline formatting */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inline Formatting</h4>
+                  <div className="space-y-2 pl-3 border-l border-border text-sm">
+                    <p><strong className="font-semibold">Bold text</strong> — <code className="text-xs bg-muted px-1 rounded">font-semibold</code></p>
+                    <p><em className="italic">Italic text</em> — <code className="text-xs bg-muted px-1 rounded">italic</code></p>
+                    <p><code className="bg-muted px-1 rounded font-mono">inline code</code> — <code className="text-xs bg-muted px-1 rounded">bg-muted font-mono</code></p>
+                    <p><span className="line-through text-muted-foreground">Strikethrough</span> — <code className="text-xs bg-muted px-1 rounded">line-through</code></p>
+                  </div>
+                </div>
+
               </CardContent>
             </Card>
           </section>

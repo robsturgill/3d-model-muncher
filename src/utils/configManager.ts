@@ -103,6 +103,9 @@ export class ConfigManager {
         currencySymbol: typeof config?.settings?.currencySymbol === 'string' && config.settings.currencySymbol.trim() !== ''
           ? config.settings.currencySymbol
           : this.defaultConfig.settings.currencySymbol,
+        defaultMaterialType: (config?.settings?.defaultMaterialType === 'standard' || config?.settings?.defaultMaterialType === 'normal')
+          ? config.settings.defaultMaterialType
+          : undefined,
       },
       filters: {
         defaultCategory: typeof config?.filters?.defaultCategory === 'string' && config.filters.defaultCategory.trim() !== ''

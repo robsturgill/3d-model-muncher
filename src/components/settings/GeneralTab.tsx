@@ -184,6 +184,24 @@ export function GeneralTab({
               Color applied to models in the 3D viewer and bulk image generation.
             </p>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="default-material-type">Default Material Type</Label>
+            <Select
+              value={config.settings.defaultMaterialType ?? 'standard'}
+              onValueChange={(value) => onConfigFieldChange('settings.defaultMaterialType', value)}
+            >
+              <SelectTrigger id="default-material-type" data-testid="default-material-type-select" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="standard">Standard</SelectItem>
+                <SelectItem value="normal">Normal</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              Material applied when opening a model in the 3D viewer.
+            </p>
+          </div>
         </div>
 
         <Separator />
