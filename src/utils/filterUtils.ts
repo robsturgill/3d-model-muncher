@@ -20,6 +20,8 @@ export const applyFiltersToModels = (modelsToFilter: Model[], filters: FilterSta
 
   if (filters.showMissingImages) {
     filtered = filtered.filter(model => {
+      // Support lightweight index entries (hasImages field) and full model objects
+      if ('hasImages' in model) return !(model as any).hasImages;
       const hasParsedImages = model.parsedImages && model.parsedImages.length > 0;
       const hasUserImages = model.userDefined?.images && model.userDefined.images.length > 0;
       return !hasParsedImages && !hasUserImages;

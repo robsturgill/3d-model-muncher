@@ -9,6 +9,12 @@ export function getUserImageData(entry: any): string {
 export function resolveModelThumbnail(model: any): string {
   if (!model) return '';
 
+  // If the model has a thumbnailUrl (from the lightweight index), use it directly.
+  // This avoids needing the full base64 image data for grid/listing views.
+  if (model.thumbnailUrl && typeof model.thumbnailUrl === 'string') {
+    return model.thumbnailUrl;
+  }
+
   // Descriptor stored by UI in userDefined.thumbnail (e.g. 'parsed:0', 'user:1', or a literal data URL)
     const thumbnailDesc = (model as any)?.userDefined?.thumbnail;
 

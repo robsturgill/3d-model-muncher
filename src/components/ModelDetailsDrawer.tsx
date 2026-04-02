@@ -41,7 +41,7 @@ interface ModelDetailsDrawerProps {
 }
 
 export function ModelDetailsDrawer({
-  model,
+  model: modelProp,
   isOpen,
   onClose,
   onModelUpdate,
@@ -86,6 +86,50 @@ export function ModelDetailsDrawer({
     file: null,
     existingPath: ''
   });
+
+  // Full model data (with images) loaded on demand from the server.
+  // When the drawer receives a lightweight listing entry (no parsedImages), we
+  // fetch the complete munchie.json via /api/load-model so the detail view has
+  // access to all image data, gcode info, etc.
+  const [fullModel, setFullModel] = useState<Model | null>(null);
+  const [isLoadingFullModel, setIsLoadingFullModel] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !modelProp) {
+      setFullModel(null);
+      return;
+    }
+
+    // If the model already has parsedImages, it's a full model — no fetch needed
+    if (Array.isArray(modelProp.parsedImages)) {
+      setFullModel(null); // not needed, use model directly
+      return;
+    }
+
+    // Lightweight entry — fetch full data
+    setIsLoadingFullModel(true);
+    (async () => {
+      try {
+        const resp = await fetch(`/api/load-model?id=${encodeURIComponent(modelProp.id)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          // Carry over filePath/modelUrl from the lightweight entry since load-model
+          // may not always include them
+          if (!data.filePath && modelProp.filePath) data.filePath = modelProp.filePath;
+          if (!data.modelUrl && modelProp.modelUrl) data.modelUrl = modelProp.modelUrl;
+          setFullModel(data);
+        }
+      } catch (e) {
+        console.error('Failed to load full model data:', e);
+      } finally {
+        setIsLoadingFullModel(false);
+      }
+    })();
+  }, [isOpen, modelProp?.id]);
+
+  // The effective model used throughout the drawer — prefers the full model
+  // (with images) when available, otherwise falls back to the lightweight prop.
+  const model = fullModel || modelProp;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -2176,6 +2220,15 @@ export function ModelDetailsDrawer({
           event.preventDefault();
         }}
       >
+        {/* Loading overlay while fetching full model data */}
+        {isLoadingFullModel && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
+            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+              <RefreshCw className="h-6 w-6 animate-spin" />
+              <span className="text-sm">Loading model details...</span>
+            </div>
+          </div>
+        )}
         {/* Sticky Header during editing */}
         <SheetHeader className={`space-y-4 pb-6 border-b border-border bg-background/95 backdrop-blur-sm ${isEditing ? 'sticky top-0 z-10 shadow-sm' : ''}`}> 
           <div className="flex items-start justify-between">

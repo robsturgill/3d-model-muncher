@@ -297,15 +297,27 @@ function AppContent() {
   };
 
   const handleModelUpdate = (updatedModel: Model) => {
-    const updatedModels = models.map(model => 
-      model.id === updatedModel.id ? updatedModel : model
+    // When updating the lightweight listing array with a full model from the
+    // detail view, ensure thumbnail URL is available for the grid view.
+    const withThumbnail = { ...updatedModel };
+    if (!withThumbnail.thumbnailUrl && withThumbnail.id) {
+      const hasImages = (Array.isArray(withThumbnail.parsedImages) && withThumbnail.parsedImages.length > 0) ||
+        (withThumbnail.userDefined?.images && withThumbnail.userDefined.images.length > 0);
+      if (hasImages) {
+        withThumbnail.thumbnailUrl = `/api/model-thumbnail/${encodeURIComponent(withThumbnail.id)}`;
+        withThumbnail.hasImages = true;
+      }
+    }
+
+    const updatedModels = models.map(model =>
+      model.id === withThumbnail.id ? withThumbnail : model
     );
     setModels(updatedModels);
-    setSelectedModel(updatedModel);
-    
+    setSelectedModel(withThumbnail);
+
     // Update filtered models if they contain the updated model
     const updatedFilteredModels = filteredModels.map(model =>
-      model.id === updatedModel.id ? updatedModel : model
+      model.id === withThumbnail.id ? withThumbnail : model
     );
     setFilteredModels(updatedFilteredModels);
   };

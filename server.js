@@ -8,6 +8,7 @@ const multer = require('multer');
 try { require('dotenv').config(); } catch (e) { /* dotenv not installed or not needed in production */ }
 const { scanDirectory } = require('./dist-backend/utils/threeMFToJson');
 const { ConfigManager } = require('./dist-backend/utils/configManager');
+const modelIndex = require('./server-utils/modelIndex');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -589,44 +590,38 @@ app.post('/api/save-model', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Refusing to write to model file' });
   }
   try {
-    // If an id was provided without a filePath, try to locate the munchie JSON file by scanning the models directory
+    // If an id was provided without a filePath, use the in-memory index for fast lookup
     let absoluteFilePath;
     if (!filePath && id) {
-      try {
+      let indexedPath = modelIndex.getMunchieJsonPath(id);
+      // Fallback to filesystem walk if not in index (e.g. tests, stale index)
+      if (!indexedPath) {
         const modelsRoot = getAbsoluteModelsPath();
-        let found = null;
-        function walk(dir) {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
+        function walkForId(dir) {
+          let entries;
+          try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return null; }
           for (const entry of entries) {
-            if (found) break;
             const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-              walk(full);
-            } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
+            if (entry.isDirectory()) { const r = walkForId(full); if (r) return r; }
+            else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
               try {
                 const raw = fs.readFileSync(full, 'utf8');
-                const parsed = raw ? JSON.parse(raw) : null;
-                if (parsed && (parsed.id === id || parsed.name === id)) {
-                  found = full;
-                  break;
-                }
-              } catch (e) {
-                // ignore parse errors for individual files
-              }
+                if (!raw) continue;
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.id === id) return full;
+              } catch (e) { /* ignore */ }
             }
           }
+          return null;
         }
-        walk(modelsRoot);
-        if (!found) {
-          return res.status(404).json({ success: false, error: 'Model id not found' });
-        }
-        absoluteFilePath = found;
-        // populate filePath (relative) for logging and downstream use
-        filePath = path.relative(modelsRoot, found).replace(/\\/g, '/');
-      } catch (e) {
-        console.error('Error searching for munchie by id:', e);
-        return res.status(500).json({ success: false, error: 'Internal error locating model by id' });
+        indexedPath = walkForId(modelsRoot);
       }
+      if (!indexedPath) {
+        return res.status(404).json({ success: false, error: 'Model id not found' });
+      }
+      absoluteFilePath = indexedPath;
+      const modelsRoot = getAbsoluteModelsPath();
+      filePath = path.relative(modelsRoot, indexedPath).replace(/\\/g, '/');
       } else {
         // Resolve provided filePath to absolute path
         if (path.isAbsolute(filePath)) {
@@ -959,6 +954,12 @@ app.post('/api/save-model', async (req, res) => {
       refreshedModel = undefined;
     }
 
+    // Keep the in-memory index in sync after save
+    const savedId = updated.id || (refreshedModel && refreshedModel.id) || id;
+    if (savedId) {
+      modelIndex.updateFromDisk(savedId, safeTargetPath);
+    }
+
     // Return cleaned/rejected related_files and refreshedModel for client feedback
     res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles, refreshedModel });
   } catch (err) {
@@ -967,111 +968,19 @@ app.post('/api/save-model', async (req, res) => {
   }
 });
 
-// API endpoint to get all model data
+// API endpoint to get all model data (served from in-memory index)
 app.get('/api/models', async (req, res) => {
   try {
-    const absolutePath = getAbsoluteModelsPath();
-    serverDebug(`API /models scanning directory: ${absolutePath}`);
-    
-    let models = [];
-    
-    // Function to recursively scan directories
-    function scanForModels(directory) {
-  serverDebug(`Scanning directory: ${directory}`);
-      const entries = fs.readdirSync(directory, { withFileTypes: true });
-  serverDebug(`Found ${entries.length} entries in ${directory}`);
-      
-      for (const entry of entries) {
-        const fullPath = path.join(directory, entry.name);
-        
-        if (entry.isDirectory()) {
-          // Recursively scan subdirectories (debug only)
-          serverDebug(`Scanning subdirectory: ${fullPath}`);
-          scanForModels(fullPath);
-        } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
-          // Load and parse each munchie file
-          // console.log(`Found munchie file: ${fullPath}`);
-          try {
-            const fileContent = fs.readFileSync(fullPath, 'utf8');
-            const model = JSON.parse(fileContent);
-            // Add relative path information for proper URL construction
-            const relativePath = path.relative(absolutePath, fullPath);
-            
-            // Handle both 3MF and STL file types
-            let modelUrl, filePath;
-            if (entry.name.endsWith('-stl-munchie.json')) {
-              // STL file - check if corresponding .stl file exists
-              // Only process files with proper naming format: [name]-stl-munchie.json
-              const fileName = entry.name;
-              
-              // Skip files with malformed names (e.g., containing duplicate suffixes)
-              if (fileName.includes('-stl-munchie.json_')) {
-                serverDebug(`Skipping malformed STL JSON file: ${fullPath}`);
-              } else {
-                const baseFilePath = relativePath.replace('-stl-munchie.json', '');
-                // Try both .stl and .STL extensions
-                let stlFilePath = baseFilePath + '.stl';
-                let absoluteStlPath = path.join(absolutePath, stlFilePath);
-                
-                if (!fs.existsSync(absoluteStlPath)) {
-                  // Try uppercase extension
-                  stlFilePath = baseFilePath + '.STL';
-                  absoluteStlPath = path.join(absolutePath, stlFilePath);
-                }
-                
-                if (fs.existsSync(absoluteStlPath)) {
-                  modelUrl = '/models/' + stlFilePath.replace(/\\/g, '/');
-                  filePath = stlFilePath;
-                  
-                  model.modelUrl = modelUrl;
-                  model.filePath = filePath;
-                  
-                  // console.log(`Added STL model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
-                  models.push(model);
-                } else {
-                  serverDebug(`Skipping ${fullPath} - corresponding .stl/.STL file not found`);
-                }
-              }
-            } else {
-              // 3MF file - check if corresponding .3mf file exists
-              // Only process files with proper naming format: [name]-munchie.json
-              const fileName = entry.name;
-              
-              // Skip files with malformed names
-              if (fileName.includes('-munchie.json_')) {
-                serverDebug(`Skipping malformed 3MF JSON file: ${fullPath}`);
-              } else {
-                const threeMfFilePath = relativePath.replace('-munchie.json', '.3mf');
-                const absoluteThreeMfPath = path.join(absolutePath, threeMfFilePath);
-                
-                if (fs.existsSync(absoluteThreeMfPath)) {
-                  modelUrl = '/models/' + threeMfFilePath.replace(/\\/g, '/');
-                  filePath = threeMfFilePath;
-                  
-                  model.modelUrl = modelUrl;
-                  model.filePath = filePath;
-                  
-                  // console.log(`Added 3MF model: ${model.name} with URL: ${model.modelUrl} and filePath: ${model.filePath}`);
-                  models.push(model);
-                } else {
-                  serverDebug(`Skipping ${fullPath} - corresponding .3mf file not found at ${absoluteThreeMfPath}`);
-                }
-              }
-            }
-          } catch (error) {
-                console.error(`Error reading model file ${fullPath}:`, error);
-          }
-        }
-      }
+    // If the index is empty (e.g. first request before startup finished, or
+    // tests that import app without calling buildIndex), build it now.
+    if (modelIndex.size() === 0) {
+      const absolutePath = getAbsoluteModelsPath();
+      modelIndex.buildIndex(absolutePath);
     }
-    
-  // Start the recursive scan
-  scanForModels(absolutePath);
 
-  // Summary: concise result for normal logs (debug contains per-directory details)
-  console.log(`API /models scan complete: found ${models.length} model(s)`);
-
-  res.json(models);
+    const models = modelIndex.getAll();
+    console.log(`API /models served ${models.length} model(s) from index`);
+    res.json(models);
   } catch (error) {
     console.error('Error loading models:', error);
     res.status(500).json({ success: false, message: 'Failed to load models', error: error.message });
@@ -1236,6 +1145,8 @@ app.post('/api/scan-models', async (req, res) => {
       }
       // Final summary
   res.write(JSON.stringify({ type: 'done', success: true, processed: result.processed, skipped: result.skipped, skippedFiles: skipped.length, errors }) + '\n');
+      // Rebuild the in-memory index after scan
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[scan-models] Index rebuild failed:', e.message); }
       return res.end();
     } else {
       // Non-streaming: run migration and respond with final JSON
@@ -1286,6 +1197,9 @@ app.post('/api/scan-models', async (req, res) => {
       } catch (e) {
         console.warn('Orphan munchie detection failed:', e);
       }
+
+      // Rebuild the in-memory index after scan
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[scan-models] Index rebuild failed:', e.message); }
 
       res.json({ success: true, message: 'Model JSON files generated and updated successfully.', processed: result.processed, skipped: result.skipped, skippedFiles: skipped.length, errors, orphanMunchies });
     }
@@ -1583,6 +1497,11 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
       }
     }
 
+    // Rebuild index after regeneration
+    if (processed > 0) {
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[regenerate] Index rebuild failed:', e.message); }
+    }
+
     res.json({ success: errors.length === 0, processed, errors, message: `Regenerated ${processed} munchie files${errors.length > 0 ? ` with ${errors.length} errors` : ''}` });
   } catch (error) {
     console.error('Munchie file regeneration error:', error);
@@ -1737,6 +1656,11 @@ app.post('/api/upload-models', upload.array('files'), async (req, res) => {
       } catch (e) {
         errors.push({ file: f.originalname || 'unknown', error: e && e.message ? e.message : String(e) });
       }
+    }
+
+    // Add newly uploaded models to the index
+    if (processed.length > 0) {
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[upload-models] Index rebuild failed:', e.message); }
     }
 
     res.json({ success: errors.length === 0, saved, processed, errors });
@@ -2208,53 +2132,52 @@ app.post('/api/hash-check', async (req, res) => {
 app.get('/api/load-model', async (req, res) => {
   try {
     const { filePath, id } = req.query;
-    // Prefer id-based lookup when provided (more robust)
     const modelsDir = path.resolve(getModelsDirectory());
-    try { console.log('[debug] /api/load-model modelsDir=', modelsDir, 'id=', id); } catch (e) {}
 
-    // If `id` provided, try scanning for a munchie.json with matching id
+    // Fast path: use the in-memory index for id-based lookups
     if (id && typeof id === 'string' && id.trim().length > 0) {
-      safeLog('Load model by id requested', { id });
-      // Recursively search munchie files for matching id
+      const jsonPath = modelIndex.getMunchieJsonPath(id);
+      if (jsonPath) {
+        try {
+          const content = fs.readFileSync(jsonPath, 'utf8');
+          const parsed = JSON.parse(content);
+          // Ensure filePath/modelUrl are set (index knows them)
+          const indexed = modelIndex.get(id);
+          if (indexed) {
+            parsed.filePath = indexed.filePath;
+            parsed.modelUrl = indexed.modelUrl;
+          }
+          return res.json(parsed);
+        } catch (e) {
+          console.error('[load-model] Error reading indexed path, falling through:', e.message);
+        }
+      }
+      // Not in index — fallback to filesystem walk (handles tests and out-of-sync index)
       function findById(dir) {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return null; }
         for (const entry of entries) {
           const full = path.join(dir, entry.name);
           if (entry.isDirectory()) {
             const r = findById(full);
             if (r) return r;
-          } else if (entry.name.toLowerCase().endsWith('-munchie.json') || entry.name.toLowerCase().endsWith('-stl-munchie.json')) {
+          } else if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
             try {
               const raw = fs.readFileSync(full, 'utf8');
               if (!raw || raw.trim().length === 0) continue;
               const parsed = JSON.parse(raw);
-               try { console.log('[debug] /api/load-model inspecting', full, 'parsed.id=', parsed && parsed.id, 'parsed.name=', parsed && parsed.name); } catch (e) {}
-              if (parsed && (parsed.id === id || parsed.name === id)) {
-                try { console.log('[debug] /api/load-model matched id at', full); } catch (e) {}
-                return full;
-              }
-            } catch (e) {
-              // ignore parse/read errors
-            }
+              if (parsed && parsed.id === id) return full;
+            } catch (e) { /* ignore */ }
           }
         }
         return null;
       }
-
-      try {
-        const found = findById(modelsDir);
-        if (found) {
-          const content = fs.readFileSync(found, 'utf8');
-          const parsed = JSON.parse(content);
-          return res.json(parsed);
-        }
-        try { console.log('[debug] /api/load-model no match found for id', id); } catch (e) {}
-        // If search completed without finding a match, return 404 to indicate not found
-        return res.status(404).json({ success: false, error: 'Model not found for id' });
-      } catch (e) {
-        console.error('Error during id lookup for /api/load-model (falling back to filePath):', e);
-        // On unexpected errors, fall through to filePath handling below
+      const found = findById(modelsDir);
+      if (found) {
+        const content = fs.readFileSync(found, 'utf8');
+        return res.json(JSON.parse(content));
       }
+      return res.status(404).json({ success: false, error: 'Model not found for id' });
     }
 
     console.log('Load model request for filePath:', filePath, 'id:', id);
@@ -2335,6 +2258,10 @@ app.post('/api/delete-models', (req, res) => {
       errors.push({ file, error: err.message });
     }
   });
+  // Rebuild index after deletions to remove stale entries
+  if (deleted.length > 0) {
+    try { modelIndex.rebuild(); } catch (e) { console.warn('[delete-models] Index rebuild failed:', e.message); }
+  }
   res.json({ success: errors.length === 0, deleted, errors });
 });
 
@@ -2959,6 +2886,11 @@ app.post('/api/restore-munchie-files', async (req, res) => {
       }
     }
 
+    // Rebuild index after restore
+    if (results.restored.length > 0) {
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[restore] Index rebuild failed:', e.message); }
+    }
+
     res.json({
       success: true,
       ...results,
@@ -2967,7 +2899,7 @@ app.post('/api/restore-munchie-files', async (req, res) => {
 
   console.log(`Restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
   safeLog('Restore details:', results);
-    
+
   } catch (error) {
     console.error('Restore error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -3186,6 +3118,11 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
       }
     }
 
+    // Rebuild index after restore
+    if (results.restored.length > 0) {
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[restore-upload] Index rebuild failed:', e.message); }
+    }
+
     res.json({
       success: true,
       ...results,
@@ -3194,10 +3131,79 @@ app.post('/api/restore-munchie-files/upload', upload.single('backupFile'), async
 
   console.log(`File upload restore completed: ${results.restored.length} restored, ${results.skipped.length} skipped, ${results.errors.length} errors`);
   safeLog('File upload restore details:', results);
-    
+
   } catch (error) {
     console.error('File upload restore error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to serve a model's thumbnail image on demand (avoids sending
+// all base64 images in the listing response).
+app.get('/api/model-thumbnail/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const jsonPath = modelIndex.getMunchieJsonPath(id);
+    if (!jsonPath) return res.status(404).end();
+
+    const raw = fs.readFileSync(jsonPath, 'utf8');
+    if (!raw || raw.trim().length === 0) return res.status(404).end();
+    const model = JSON.parse(raw);
+
+    // Resolve the thumbnail using the same descriptor logic as the frontend
+    let thumbData = '';
+    const desc = model.userDefined?.thumbnail;
+    if (desc && typeof desc === 'string') {
+      if (desc.startsWith('parsed:')) {
+        const idx = parseInt(desc.split(':')[1] || '', 10);
+        if (!isNaN(idx) && Array.isArray(model.parsedImages) && model.parsedImages[idx]) {
+          thumbData = model.parsedImages[idx];
+        }
+      } else if (desc.startsWith('user:')) {
+        const idx = parseInt(desc.split(':')[1] || '', 10);
+        const userImages = model.userDefined?.images;
+        if (!isNaN(idx) && Array.isArray(userImages) && userImages[idx]) {
+          const entry = userImages[idx];
+          thumbData = typeof entry === 'string' ? entry : (entry && entry.data) || '';
+        }
+      } else if (desc.startsWith('data:')) {
+        thumbData = desc;
+      }
+    }
+    // Fallback to first parsed image
+    if (!thumbData && Array.isArray(model.parsedImages) && model.parsedImages.length > 0) {
+      thumbData = model.parsedImages[0];
+    }
+    // Fallback to legacy fields
+    if (!thumbData && model.thumbnail) thumbData = model.thumbnail;
+    if (!thumbData && Array.isArray(model.images) && model.images.length > 0) thumbData = model.images[0];
+
+    if (!thumbData) return res.status(404).end();
+
+    // Parse data URL and send binary image
+    const match = thumbData.match(/^data:([^;]+);base64,(.+)$/s);
+    if (!match) return res.status(404).end();
+
+    const mimeType = match[1];
+    const buffer = Buffer.from(match[2], 'base64');
+    res.set('Content-Type', mimeType);
+    res.set('Cache-Control', 'public, max-age=86400'); // cache 24h
+    res.send(buffer);
+  } catch (e) {
+    console.error('[model-thumbnail] Error:', e.message);
+    res.status(500).end();
+  }
+});
+
+// API endpoint to manually rebuild the in-memory model index
+app.post('/api/rebuild-index', (req, res) => {
+  try {
+    const absolutePath = getAbsoluteModelsPath();
+    modelIndex.buildIndex(absolutePath);
+    res.json({ success: true, count: modelIndex.size() });
+  } catch (e) {
+    console.error('Index rebuild error:', e);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -3233,6 +3239,14 @@ app.get(/^(?!\/api|\/models).*$/, (req, res) => {
 });
 
 if (require.main === module) {
+  // Build the in-memory model index before accepting requests
+  try {
+    const absoluteModelsPath = getAbsoluteModelsPath();
+    modelIndex.buildIndex(absoluteModelsPath);
+  } catch (e) {
+    console.warn('[startup] Failed to build model index:', e.message);
+  }
+
   app.listen(PORT, () => {
     console.log(`3D Model Muncher backend API running on port ${PORT}`);
     console.log(`Frontend served from build directory`);

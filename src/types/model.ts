@@ -66,6 +66,12 @@ export interface Model {
   // Timestamps added by server: when munchie.json was first created and last modified
   created?: string;
   lastModified?: string;
+
+  // Lightweight index fields (present in listing responses, absent in full model loads)
+  hasImages?: boolean;
+  imageCount?: number;
+  thumbnailDescriptor?: string;
+  thumbnailUrl?: string;
 }
 
 // Group of duplicate models by hash

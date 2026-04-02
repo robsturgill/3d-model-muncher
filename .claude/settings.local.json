@@ -9,7 +9,8 @@
       "Bash(npm audit:*)",
       "Bash(npm test:*)",
       "Bash(gh issue:*)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

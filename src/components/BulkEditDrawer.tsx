@@ -438,6 +438,8 @@ export function BulkEditDrawer({
   // Utility: determine if a model already has any images
   const modelHasImage = (m: Model) => {
     if (!m) return false;
+    // Support lightweight index entries
+    if ('hasImages' in m && (m as any).hasImages) return true;
     if (m.thumbnail) return true;
     if (m.images && m.images.length > 0) return true;
     if (m.parsedImages && m.parsedImages.length > 0) return true;
