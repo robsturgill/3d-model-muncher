@@ -5,18 +5,22 @@ import { SharedModelScene } from '../components/SharedModelScene';
 import { ConfigManager } from '../utils/configManager';
 
 
-// Shared scene for offscreen capture, matching color from config
+// Shared scene for offscreen capture, matching color and material type from config
 function OffscreenScene({ modelUrl, onModelLoaded }: { modelUrl?: string; onModelLoaded?: () => void }) {
-  // Get color from config, fallback to default
   let customColor: string | undefined = undefined;
+  let materialType: 'standard' | 'normal' = 'standard';
   try {
     const config = ConfigManager.loadConfig();
     customColor = config?.settings?.defaultModelColor || '#aaaaaa';
+    if (config?.settings?.defaultMaterialType === 'normal') {
+      materialType = 'normal';
+    }
   } catch {}
   return (
     <SharedModelScene
       modelUrl={modelUrl}
       customColor={customColor}
+      materialType={materialType}
       onModelLoaded={onModelLoaded}
     />
   );
