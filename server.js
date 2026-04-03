@@ -882,9 +882,15 @@ app.post('/api/save-model', async (req, res) => {
       updated.userDefined = mergedUDObj;
     }
 
-    // Extract any newly added user images (base64) to .munchie_media/ for v2 models
+    // For v2 models: normalize the incoming data (client sends /api/media/ URLs
+    // back; convert them to bare filenames before persisting), then delete any
+    // image files that were removed by the user, then extract any newly added
+    // base64 images out to .munchie_media/.
     if (updated.imageVersion === 2) {
-      imageExtractor.extractNewUserImages(updated, getAbsoluteModelsPath());
+      const modelsRoot = getAbsoluteModelsPath();
+      imageExtractor.untranslateV2Urls(updated);
+      imageExtractor.deleteOrphanedImages(existing, updated, modelsRoot);
+      imageExtractor.extractNewUserImages(updated, modelsRoot);
     }
 
     // Ensure the directory exists
@@ -947,7 +953,7 @@ app.post('/api/save-model', async (req, res) => {
     }
 
     // Return cleaned/rejected related_files and refreshedModel for client feedback
-    res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles, refreshedModel });
+    res.json({ success: true, cleaned_related_files: cleanChanges.related_files || [], rejected_related_files: rejectedRelatedFiles, refreshedModel: imageExtractor.translateV2ToUrls(refreshedModel) });
   } catch (err) {
     console.error('Error saving model:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1573,6 +1579,14 @@ app.post('/api/regenerate-munchie-files', async (req, res) => {
         // Write the regenerated file and post-process
         fs.writeFileSync(jsonPath, JSON.stringify(mergedMetadata, null, 2), 'utf8');
         await postProcessMunchieFile(jsonPath);
+
+        // Extract base64 images to .munchie_media/ so regenerated files are immediately v2
+        try {
+          imageExtractor.extractImages(jsonPath, getAbsoluteModelsPath());
+        } catch (e) {
+          console.warn('[regenerate] Image extraction failed for', jsonPath, e.message);
+        }
+
         return { success: true };
       } catch (error) {
         return { error: error && error.message ? error.message : String(error) };
@@ -2284,7 +2298,7 @@ app.get('/api/load-model', async (req, res) => {
             parsed.filePath = indexed.filePath;
             parsed.modelUrl = indexed.modelUrl;
           }
-          return res.json(parsed);
+          return res.json(imageExtractor.translateV2ToUrls(parsed));
         } catch (e) {
           console.error('[load-model] Error reading indexed path, falling through:', e.message);
         }
@@ -2312,7 +2326,7 @@ app.get('/api/load-model', async (req, res) => {
       const found = findById(modelsDir);
       if (found) {
         const content = fs.readFileSync(found, 'utf8');
-        return res.json(JSON.parse(content));
+        return res.json(imageExtractor.translateV2ToUrls(JSON.parse(content)));
       }
       return res.status(404).json({ success: false, error: 'Model not found for id' });
     }
@@ -2364,7 +2378,7 @@ app.get('/api/load-model', async (req, res) => {
 
     // Read and parse the JSON file
     const modelData = JSON.parse(fileContent);
-    res.json(modelData);
+    res.json(imageExtractor.translateV2ToUrls(modelData));
   } catch (error) {
     console.error('Error loading model:', error);
     res.status(500).json({ success: false, error: 'Failed to load model data' });

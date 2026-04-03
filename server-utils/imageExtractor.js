@@ -169,6 +169,111 @@ function translateV2ToUrls(model) {
   return translated;
 }
 
+/**
+ * Reverse of translateV2ToUrls. Strips /api/media/ URL prefixes back to bare
+ * filenames so that a v2 model sent back by the client can be persisted with
+ * the correct filename references. Mutates and returns the model object.
+ *
+ * Safe to call on v1 models — only acts when imageVersion === 2.
+ */
+function untranslateV2Urls(model) {
+  if (!model || model.imageVersion !== 2) return model;
+
+  if (Array.isArray(model.parsedImages)) {
+    model.parsedImages = model.parsedImages.map(entry => {
+      if (typeof entry === 'string' && entry.startsWith('/api/media/')) {
+        return decodeURIComponent(entry.slice('/api/media/'.length));
+      }
+      return entry;
+    });
+  }
+
+  if (model.userDefined && Array.isArray(model.userDefined.images)) {
+    model.userDefined = {
+      ...model.userDefined,
+      images: model.userDefined.images.map(entry => {
+        if (!entry || typeof entry !== 'object') return entry;
+        // Strip the transient .data URL that translateV2ToUrls added; keep .file
+        if (entry.file && entry.data && typeof entry.data === 'string' && entry.data.startsWith('/api/media/')) {
+          const { data: _removed, ...rest } = entry;
+          return rest;
+        }
+        return entry;
+      }),
+    };
+  }
+
+  return model;
+}
+
+/**
+ * Delete image files from .munchie_media/ that are referenced in existingModel
+ * but no longer present in updatedModel. Both models must use v2 (filename)
+ * format — call untranslateV2Urls on updatedModel before passing it here.
+ *
+ * @param {object} existingModel - model as read from disk (filenames, not URLs)
+ * @param {object} updatedModel  - model after client changes (filenames, not URLs)
+ * @param {string} modelsRoot    - absolute models root path
+ */
+function deleteOrphanedImages(existingModel, updatedModel, modelsRoot) {
+  if (!existingModel || !updatedModel || existingModel.imageVersion !== 2) return;
+
+  const mediaDir = getMediaDir(modelsRoot);
+
+  // Helper: extract bare filename from an entry that might be a filename or URL
+  function toFilename(val) {
+    if (!val || typeof val !== 'string') return null;
+    if (val.startsWith('/api/media/')) return decodeURIComponent(val.slice('/api/media/'.length));
+    if (val.startsWith('data:') || val.startsWith('/')) return null; // not a media file
+    return val;
+  }
+
+  // Collect all filenames still referenced in the updated model
+  const stillReferenced = new Set();
+  if (Array.isArray(updatedModel.parsedImages)) {
+    for (const f of updatedModel.parsedImages) {
+      const name = toFilename(f);
+      if (name) stillReferenced.add(name);
+    }
+  }
+  if (updatedModel.userDefined && Array.isArray(updatedModel.userDefined.images)) {
+    for (const entry of updatedModel.userDefined.images) {
+      if (entry && typeof entry === 'object' && entry.file) stillReferenced.add(entry.file);
+    }
+  }
+
+  // Find filenames from the old model that are gone from the updated model
+  const toDelete = [];
+  if (Array.isArray(existingModel.parsedImages)) {
+    for (const f of existingModel.parsedImages) {
+      const name = toFilename(f);
+      if (name && !stillReferenced.has(name)) toDelete.push(name);
+    }
+  }
+  if (existingModel.userDefined && Array.isArray(existingModel.userDefined.images)) {
+    for (const entry of existingModel.userDefined.images) {
+      if (entry && typeof entry === 'object' && entry.file && !stillReferenced.has(entry.file)) {
+        toDelete.push(entry.file);
+      }
+    }
+  }
+
+  for (const filename of toDelete) {
+    try {
+      const filePath = path.join(mediaDir, filename);
+      const resolved = path.resolve(filePath);
+      const mediaDirResolved = path.resolve(mediaDir);
+      if (!resolved.startsWith(mediaDirResolved + path.sep) && resolved !== mediaDirResolved) continue;
+      if (fs.existsSync(resolved)) {
+        fs.unlinkSync(resolved);
+        console.log('[imageExtractor] Deleted orphaned media file:', filename);
+      }
+    } catch (e) {
+      console.warn('[imageExtractor] Failed to delete orphaned media file:', filename, e.message);
+    }
+  }
+}
+
 module.exports = {
   getMediaDir,
   ensureMediaDir,
@@ -177,4 +282,6 @@ module.exports = {
   extractImages,
   extractNewUserImages,
   translateV2ToUrls,
+  untranslateV2Urls,
+  deleteOrphanedImages,
 };

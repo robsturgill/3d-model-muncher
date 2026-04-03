@@ -1968,12 +1968,16 @@ export function ModelDetailsDrawer({
       if (result && result.success) {
         // If the save returned a refreshedModel (e.g., user cleared userDefined.description),
         // prefer that authoritative model from the server so the UI falls back to top-level description.
+        // result.refreshedModel comes from /api/models (lightweight — no parsedImages).
+        // result.serverResponse.refreshedModel comes from /api/save-model (full model with images).
         const refreshed: Model | undefined = (result as any).refreshedModel;
-        if (refreshed) {
-          onModelUpdate(refreshed);
-        } else {
-          onModelUpdate(finalModel);
-        }
+        const serverRefreshed: Model | undefined = (result as any).serverResponse?.refreshedModel;
+        const authoritative = refreshed || finalModel;
+        onModelUpdate(authoritative);
+        // Update the drawer's fullModel with the FULL model (has parsedImages/image URLs) so
+        // images stay visible immediately after save without requiring the drawer to be closed.
+        // Fall back to finalModel (also has image URLs) if the server response is unavailable.
+        setFullModel(serverRefreshed || finalModel);
         setIsEditing(false);
         setEditedModel(null);
         setSelectedImageIndexes([]);
