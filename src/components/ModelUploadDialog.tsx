@@ -162,7 +162,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
         setPreviewGenerating(true);
         setPreviewProgress({ current: 0, total: savedPaths.length });
         try {
-          const modelsResp = await fetch('/api/models');
+          const modelsResp = await fetch('/api/models?pageSize=0');
           const allModels = modelsResp.ok ? await modelsResp.json() : [];
 
           for (let i = 0; i < savedPaths.length; i++) {
@@ -231,7 +231,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
         }
       } else if (savedPaths.length > 0) {
         try {
-          const modelsResp = await fetch('/api/models');
+          const modelsResp = await fetch('/api/models?pageSize=0');
           const allModels = modelsResp.ok ? await modelsResp.json() : [];
           for (const rel of savedPaths) {
             // Use case-insensitive comparison for file systems like Windows/macOS

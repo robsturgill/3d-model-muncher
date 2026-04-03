@@ -47,7 +47,7 @@ export default function ExperimentalTab({ categories: propCategories }: Experime
   useEffect(() => {
     // Fetch models from backend API. Expecting `/api/models` to return an array of model metadata objects.
     setLoading(true);
-    fetch("/api/models")
+    fetch("/api/models?pageSize=0")
       .then((res) => res.json())
       .then((data) => {
         // Normalize to ModelEntry where possible

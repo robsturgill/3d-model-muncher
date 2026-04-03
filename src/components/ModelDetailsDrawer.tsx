@@ -1700,7 +1700,7 @@ export function ModelDetailsDrawer({
       // successful save so the UI can show any server-side normalizations.
       let refreshedModel: Model | undefined = undefined;
       try {
-        const allResp = await fetch('/api/models');
+        const allResp = await fetch('/api/models?pageSize=0');
         if (allResp.ok) {
           const all = await allResp.json();
           // Prefer matching by id, fallback to matching by filePath if provided

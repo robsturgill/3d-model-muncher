@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Model } from "../types/model";
 import { AppConfig } from "../types/config";
 import type { Collection } from "../types/collection";
@@ -12,7 +12,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { Checkbox } from "./ui/checkbox";
-import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive } from "lucide-react";
+import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "./ui/badge";
 import CollectionEditDrawer from "./CollectionEditDrawer";
 import { SortKey, getModelTimestamp, getCollectionTimestamp } from "../utils/sortUtils";
@@ -37,6 +37,10 @@ interface ModelGridProps {
   config?: AppConfig | null;
   // When provided and not 'none', collections will be interleaved with models per sort
   sortBy?: SortKey;
+  // Pagination
+  currentPage?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -77,7 +81,10 @@ export function ModelGrid({
   onBulkEdit,
   onBulkDelete,
   config: providedConfig,
-  sortBy = 'none'
+  sortBy = 'none',
+  currentPage = 1,
+  pageSize = 50,
+  onPageChange,
 }: ModelGridProps) {
   // Prefer the provided app config (passed from App) so changes propagate immediately.
   // Fall back to loading from ConfigManager for standalone usage.
@@ -203,6 +210,32 @@ export function ModelGrid({
     return items;
   }, [collections, models, sortBy]);
 
+  // --- Pagination ---
+  const totalModels = models.length;
+  const totalPages = pageSize > 0 ? Math.ceil(totalModels / pageSize) : 1;
+  const safePage = Math.max(1, Math.min(currentPage, totalPages || 1));
+
+  // Paginate models: slice to current page
+  const paginatedModels = useMemo(() => {
+    if (pageSize <= 0 || totalModels === 0) return models;
+    const start = (safePage - 1) * pageSize;
+    return models.slice(start, start + pageSize);
+  }, [models, safePage, pageSize, totalModels]);
+
+  // Also paginate unifiedItems if sorting is active
+  const paginatedUnifiedItems = useMemo(() => {
+    if (!unifiedItems || pageSize <= 0) return unifiedItems;
+    const start = (safePage - 1) * pageSize;
+    return unifiedItems.slice(start, start + pageSize);
+  }, [unifiedItems, safePage, pageSize]);
+
+  const handlePageChange = useCallback((page: number) => {
+    onPageChange?.(page);
+    // Scroll to top of the grid
+    const scrollArea = document.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollArea) scrollArea.scrollTop = 0;
+  }, [onPageChange]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Enhanced header with view controls */}
@@ -210,8 +243,10 @@ export function ModelGrid({
           <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4 flex-wrap">
             <p className="text-muted-foreground text-sm font-medium">
-              {models.length > 0
-                ? `${models.length} model${models.length !== 1 ? 's' : ''} found`
+              {totalModels > 0
+                ? totalPages > 1
+                  ? `${totalModels} model${totalModels !== 1 ? 's' : ''} \u00B7 page ${safePage} of ${totalPages}`
+                  : `${totalModels} model${totalModels !== 1 ? 's' : ''} found`
                 : collections.length > 0
                 ? `${collections.length} collection${collections.length !== 1 ? 's' : ''}`
                 : 'No items found'}
@@ -294,8 +329,8 @@ export function ModelGrid({
             </div>
           ) : viewMode === 'grid' ? (
             <div className={`grid ${getGridClasses(gridDensity[0])} gap-4 lg:gap-6`}>
-              {unifiedItems ? (
-                unifiedItems.map((it, idx) => {
+              {paginatedUnifiedItems ? (
+                paginatedUnifiedItems.map((it, idx) => {
                   if (it.kind === 'collection') {
                     const c = it.data;
                     return (
@@ -335,25 +370,28 @@ export function ModelGrid({
                       onDeleted={() => onCollectionChanged?.()}
                     />
                   ))}
-                  {models.map((model, index) => (
-                    <ModelCard
-                      key={model.id}
-                      model={model}
-                      onClick={(e) => handleModelInteraction(e, model, index)}
-                      isSelectionMode={isSelectionMode}
-                      isSelected={selectedModelIds.includes(model.id)}
-                      onSelectionChange={(id, shiftKey) => onModelSelection?.(id, { index, shiftKey })}
-                      config={config}
-                    />
-                  ))}
+                  {paginatedModels.map((model, idx) => {
+                    const index = modelIndexMap.get(model.id) ?? idx;
+                    return (
+                      <ModelCard
+                        key={model.id}
+                        model={model}
+                        onClick={(e) => handleModelInteraction(e, model, index)}
+                        isSelectionMode={isSelectionMode}
+                        isSelected={selectedModelIds.includes(model.id)}
+                        onSelectionChange={(id, shiftKey) => onModelSelection?.(id, { index, shiftKey })}
+                        config={config}
+                      />
+                    );
+                  })}
                 </>
               )}
             </div>
           ) : (
             /* List View */
             <div className="space-y-3">
-              {unifiedItems ? (
-                unifiedItems.map((it, idx) => {
+              {paginatedUnifiedItems ? (
+                paginatedUnifiedItems.map((it, idx) => {
                   if (it.kind === 'collection') {
                     const c = it.data;
                     return (
@@ -521,7 +559,9 @@ export function ModelGrid({
                       onDeleted={() => onCollectionChanged?.()}
                     />
                   ))}
-                  {models.map((model, index) => (
+                  {paginatedModels.map((model, idx) => {
+                    const index = modelIndexMap.get(model.id) ?? idx;
+                    return (
                       <div
                         key={model.id}
                         data-testid={`row-${model.id}`}
@@ -659,9 +699,64 @@ export function ModelGrid({
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </>
               )}
+            </div>
+          )}
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 py-4 border-t bg-card/50">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(safePage - 1)}
+                disabled={safePage <= 1}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {/* Show page numbers with ellipsis for large page counts */}
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 7) {
+                    pageNum = i + 1;
+                  } else if (safePage <= 4) {
+                    pageNum = i < 5 ? i + 1 : i === 5 ? -1 : totalPages;
+                  } else if (safePage >= totalPages - 3) {
+                    pageNum = i === 0 ? 1 : i === 1 ? -1 : totalPages - (6 - i);
+                  } else {
+                    pageNum = i === 0 ? 1 : i === 1 ? -1 : i <= 4 ? safePage + (i - 3) : i === 5 ? -1 : totalPages;
+                  }
+                  if (pageNum === -1) {
+                    return <span key={`ellipsis-${i}`} className="px-2 text-muted-foreground">...</span>;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === safePage ? 'default' : 'outline'}
+                      size="sm"
+                      className="w-9 h-9 p-0"
+                      onClick={() => handlePageChange(pageNum)}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(safePage + 1)}
+                disabled={safePage >= totalPages}
+                className="gap-1"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </div>

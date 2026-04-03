@@ -102,6 +102,11 @@ function AppContent() {
   const [sidebarResetKey, setSidebarResetKey] = useState(0);
   // Remember last selected sort from sidebar so collections list can respect it
   const [currentSortBy, setCurrentSortBy] = useState<SortKey>('none');
+  // Pagination state for the model grid
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50);
+  // Server-fetched metadata (global tags across all models)
+  const [serverTags, setServerTags] = useState<string[]>([]);
   const configWithSortedCategories = useMemo(() => {
     if (!appConfig) return appConfig;
     return { ...appConfig, categories: sortedCategories };
@@ -181,11 +186,23 @@ function AppContent() {
           description: "Models are being loaded. This may take a minute for large libraries. Please wait."
         });
 
-        const response = await fetch('/api/models');
-        if (!response.ok) {
+        // Fetch lightweight models (pageSize=0 returns all without pagination wrapper)
+        // and aggregate metadata in parallel
+        const [modelsResp, metaResp] = await Promise.all([
+          fetch('/api/models?pageSize=0'),
+          fetch('/api/models/meta'),
+        ]);
+        if (!modelsResp.ok) {
           throw new Error('Failed to fetch models');
         }
-  const loadedModels = await response.json();
+        const loadedModels = await modelsResp.json();
+        // Load global tags from server metadata
+        try {
+          if (metaResp.ok) {
+            const meta = await metaResp.json();
+            if (Array.isArray(meta.tags)) setServerTags(meta.tags);
+          }
+        } catch (e) { /* ignore meta errors */ }
         setModels(loadedModels);
         // Apply configured default filters (from appConfig) when initializing filteredModels
         const defaultFilters = config.filters || { defaultCategory: 'all', defaultPrintStatus: 'all', defaultLicense: 'all' };
@@ -320,6 +337,11 @@ function AppContent() {
       model.id === withThumbnail.id ? withThumbnail : model
     );
     setFilteredModels(updatedFilteredModels);
+
+    // Refresh server tags in case tags were added/removed
+    fetch('/api/models/meta').then(r => r.ok ? r.json() : null).then(meta => {
+      if (meta && Array.isArray(meta.tags)) setServerTags(meta.tags);
+    }).catch(() => {});
   };
 
   const handleBulkModelsUpdate = (updatedModels: Model[]) => {
@@ -686,7 +708,10 @@ function AppContent() {
     const sortKey = (filters.sortBy || 'none') as SortKey;
     const sorted = sortModels(filtered as any[], sortKey);
     setFilteredModels(sorted);
-    
+
+    // Reset to first page when filters change
+    setCurrentPage(1);
+
     // Persist last applied filters for re-use on navigation and refresh
     setLastFilters({ ...filters });
     // Reset anchor when the visible list changes order/content
@@ -711,11 +736,21 @@ function AppContent() {
       });
 
       // Only fetch existing models without triggering generation
-      const response = await fetch('/api/models');
+      const [response, metaResp] = await Promise.all([
+        fetch('/api/models?pageSize=0'),
+        fetch('/api/models/meta'),
+      ]);
       if (!response.ok) {
         throw new Error('Failed to fetch models');
       }
-  const updatedModels = await response.json() as Model[];
+      const updatedModels = await response.json() as Model[];
+      // Refresh server tags
+      try {
+        if (metaResp.ok) {
+          const meta = await metaResp.json();
+          if (Array.isArray(meta.tags)) setServerTags(meta.tags);
+        }
+      } catch (e) { /* ignore */ }
 
       setModels(updatedModels);
       // Reapply the last used filters based on the current view
@@ -877,7 +912,7 @@ function AppContent() {
       }
       // Also refresh models so any hidden flags updated by collection creation are reflected in UI
       try {
-        const resp = await fetch('/api/models');
+        const resp = await fetch('/api/models?pageSize=0');
         if (resp.ok) {
           const updatedModels = await resp.json() as Model[];
           setModels(updatedModels);
@@ -946,12 +981,13 @@ function AppContent() {
     }
   };
 
-  // Build a global, deduped, sorted tags list from all models
+  // Global tags: prefer server-fetched tags (from /api/models/meta), fall back to client computation
   const globalTags = useMemo(() => {
+    if (serverTags.length > 0) return serverTags;
     const set = new Set<string>();
     (models || []).forEach(m => (m.tags || []).forEach(t => { if (t) set.add(t); }));
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  }, [models]);
+  }, [models, serverTags]);
 
   // Derive the collections that should be visible in the main grid based on current filters
   const collectionsForDisplay = useMemo(() => {
@@ -1203,8 +1239,8 @@ function AppContent() {
             </div>
           )}
           {currentView === 'models' ? (
-            <ModelGrid 
-              models={filteredModels} 
+            <ModelGrid
+              models={filteredModels}
               collections={sortCollections(collectionsForDisplay, currentSortBy)}
               sortBy={currentSortBy}
               onModelClick={handleModelClick}
@@ -1223,6 +1259,7 @@ function AppContent() {
                     setFilteredModels(base);
                   } catch { /* ignore */ }
                   setSidebarResetKey(k => k + 1);
+                  setCurrentPage(1);
                 }
               }}
               onCollectionChanged={refreshCollections}
@@ -1235,6 +1272,9 @@ function AppContent() {
               onBulkEdit={handleBulkEdit}
               onBulkDelete={handleBulkDeleteClick}
               config={configWithSortedCategories}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
             />
           ) : currentView === 'settings' ? (
             <SettingsPage 

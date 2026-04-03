@@ -10,7 +10,8 @@
       "Bash(npm test:*)",
       "Bash(gh issue:*)",
       "WebFetch(domain:api.github.com)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }

@@ -968,7 +968,12 @@ app.post('/api/save-model', async (req, res) => {
   }
 });
 
-// API endpoint to get all model data (served from in-memory index)
+// API endpoint to get model data with optional server-side filtering, sorting, and pagination.
+// Query params:
+//   page (default 1), pageSize (default 50, 0 = all),
+//   search, category, printStatus (all|printed|unprinted), license, fileType (all|3mf|stl),
+//   tags (comma-separated), showHidden (true|false), showMissingImages (true|false),
+//   sort (none|name_asc|name_desc|modified_asc|modified_desc)
 app.get('/api/models', async (req, res) => {
   try {
     // If the index is empty (e.g. first request before startup finished, or
@@ -978,12 +983,158 @@ app.get('/api/models', async (req, res) => {
       modelIndex.buildIndex(absolutePath);
     }
 
-    const models = modelIndex.getAll();
-    console.log(`API /models served ${models.length} model(s) from index`);
-    res.json(models);
+    let models = modelIndex.getAll();
+
+    // --- Filtering ---
+    const { search, category, printStatus, license, fileType, tags, showHidden, showMissingImages, sort, page, pageSize: pageSizeParam } = req.query;
+
+    // showHidden: default false — hide hidden models unless explicitly requested
+    if (showHidden !== 'true') {
+      models = models.filter(m => !m.hidden);
+    }
+
+    // showMissingImages
+    if (showMissingImages === 'true') {
+      models = models.filter(m => !m.hasImages);
+    }
+
+    // search — matches name or tags
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = search.toLowerCase().trim();
+      models = models.filter(m =>
+        (m.name || '').toLowerCase().includes(q) ||
+        (m.tags || []).some(t => t.toLowerCase().includes(q))
+      );
+    }
+
+    // category
+    if (category && typeof category === 'string' && category !== 'all') {
+      models = models.filter(m => (m.category || '').toLowerCase() === category.toLowerCase());
+    }
+
+    // printStatus
+    if (printStatus === 'printed') {
+      models = models.filter(m => m.isPrinted);
+    } else if (printStatus === 'unprinted') {
+      models = models.filter(m => !m.isPrinted);
+    }
+
+    // license
+    if (license && typeof license === 'string' && license !== 'all') {
+      models = models.filter(m => m.license === license);
+    }
+
+    // fileType
+    if (fileType && typeof fileType === 'string' && fileType !== 'all') {
+      const ext = fileType.toLowerCase();
+      models = models.filter(m => {
+        const p = (m.filePath || m.modelUrl || '').toLowerCase();
+        return p.endsWith('.' + ext);
+      });
+    }
+
+    // tags — comma-separated, AND logic (model must have ALL specified tags)
+    if (tags && typeof tags === 'string' && tags.trim()) {
+      const selectedTags = tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (selectedTags.length > 0) {
+        models = models.filter(m =>
+          selectedTags.every(st => (m.tags || []).some(mt => mt.toLowerCase() === st))
+        );
+      }
+    }
+
+    // --- Sorting ---
+    const sortKey = (typeof sort === 'string' ? sort : 'none');
+    if (sortKey && sortKey !== 'none') {
+      const getTimestamp = (m) => {
+        const v = m.lastModified || m.created || '';
+        const t = Date.parse(v || '');
+        return isNaN(t) ? 0 : t;
+      };
+      switch (sortKey) {
+        case 'name_asc':
+          models.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          break;
+        case 'name_desc':
+          models.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+          break;
+        case 'modified_desc':
+          models.sort((a, b) => getTimestamp(b) - getTimestamp(a));
+          break;
+        case 'modified_asc':
+          models.sort((a, b) => getTimestamp(a) - getTimestamp(b));
+          break;
+      }
+    }
+
+    const total = models.length;
+
+    // --- Pagination ---
+    // When pageSize is explicitly provided, paginate. Otherwise return a flat array
+    // for backwards compatibility (existing clients, tests, etc.).
+    if (pageSizeParam !== undefined && pageSizeParam !== null) {
+      const ps = parseInt(pageSizeParam, 10);
+      const actualPageSize = isNaN(ps) || ps < 0 ? 50 : ps;
+
+      if (actualPageSize > 0) {
+        const p = parseInt(page, 10);
+        const actualPage = isNaN(p) || p < 1 ? 1 : p;
+        const start = (actualPage - 1) * actualPageSize;
+        const paginatedModels = models.slice(start, start + actualPageSize);
+
+        console.log(`API /models served page ${actualPage} (${paginatedModels.length}/${total} models)`);
+        res.json({
+          models: paginatedModels,
+          total,
+          page: actualPage,
+          pageSize: actualPageSize,
+          totalPages: Math.ceil(total / actualPageSize),
+        });
+      } else {
+        // pageSize=0: return all as flat array
+        console.log(`API /models served ${total} model(s) from index (no pagination)`);
+        res.json(models);
+      }
+    } else {
+      // No pageSize param: return flat array (backwards-compatible)
+      console.log(`API /models served ${total} model(s) from index`);
+      res.json(models);
+    }
   } catch (error) {
     console.error('Error loading models:', error);
     res.status(500).json({ success: false, message: 'Failed to load models', error: error.message });
+  }
+});
+
+// Aggregate metadata endpoint — provides all tags, total model count, etc.
+// needed by the filter sidebar without loading all models.
+app.get('/api/models/meta', (req, res) => {
+  try {
+    if (modelIndex.size() === 0) {
+      const absolutePath = getAbsoluteModelsPath();
+      modelIndex.buildIndex(absolutePath);
+    }
+    const all = modelIndex.getAll();
+    const tagSet = new Set();
+    let totalModels = all.length;
+    let printedCount = 0;
+    let hiddenCount = 0;
+    for (const m of all) {
+      if (m.isPrinted) printedCount++;
+      if (m.hidden) hiddenCount++;
+      if (Array.isArray(m.tags)) {
+        for (const t of m.tags) { if (t) tagSet.add(t); }
+      }
+    }
+    res.json({
+      totalModels,
+      printedCount,
+      hiddenCount,
+      tags: Array.from(tagSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+    });
+  } catch (error) {
+    console.error('Error computing models meta:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
