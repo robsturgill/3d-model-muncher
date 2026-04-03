@@ -37,14 +37,38 @@ npx vitest run tests/gcodeParser.test.ts
 ### Frontend/Backend Split
 
 - **Frontend** (`src/`): React 18 + Vite 6 + Tailwind CSS 4 + Radix UI. Entry: `src/main.tsx` → `src/App.tsx`.
-- **Backend** (`server.js`): Single ~3200-line Express 5 file handling all API routes, file scanning, and static serving.
+- **Backend** (`server.js`): Single Express 5 file handling all API routes, file scanning, and static serving.
 - **Backend Utilities** (`src/utils/`): TypeScript modules shared between frontend and backend. They are compiled separately via `tsconfig.backend.json` to CommonJS in `dist-backend/utils/`. The main `tsconfig.json` has `noEmit: true` (Vite handles frontend compilation), so backend utilities **must** use the separate config.
+- **Server Utilities** (`server-utils/`): Plain CommonJS modules used only by the backend (no compilation step needed).
 
 ### Data Storage (File-Based, No Database)
 
-- `models/*-munchie.json` — metadata for each 3D model
+- `models/*-munchie.json` — metadata sidecar for each 3D model (~2-5KB after image migration)
+- `models/.munchie_media/` — centralized image store for extracted images (created by "Migrate Images" in Settings → Backup)
 - `data/config.json` — app configuration
 - `data/collections.json` — user-defined model groups
+
+**`imageVersion` field in munchie.json:**
+- `1` (or absent) — images stored as inline base64 data URLs inside `parsedImages` / `userDefined.images`
+- `2` — images extracted to `.munchie_media/`; those fields contain filenames like `5d486324c27f_parsed_0.png` instead of base64. The `/api/media/` route serves these files.
+
+### Server Utilities (`server-utils/`)
+
+These are plain CommonJS modules — no compilation step, require directly from `server.js`.
+
+- **`modelIndex.js`** — In-memory `Map<id, lightweightEntry>` built at startup via `buildIndex()`. Eliminates per-request filesystem scanning of all munchie.json files.
+  - `getAll()` — returns all lightweight entries (used by `/api/models`)
+  - `get(id)` / `getMunchieJsonPath(id)` / `getAllMunchieJsonPaths()` — O(1) lookups
+  - `updateFromDisk(id, path)` / `addFromDisk(path)` / `remove(id)` — incremental mutations kept in sync by save/delete/upload endpoints
+  - `rebuild()` — full rescan (used after bulk operations)
+  - Lightweight entries strip `parsedImages` and `userDefined.images` blobs; for v2 models they resolve `thumbnailUrl` directly to `/api/media/<filename>` to skip the thumbnail endpoint entirely.
+
+- **`imageExtractor.js`** — Extracts inline base64 images from munchie.json to `.munchie_media/`.
+  - `extractImages(munchieJsonPath, modelsRoot)` — migrates one file; sets `imageVersion: 2`; idempotent (skips v2 files).
+  - `extractNewUserImages(model, modelsRoot)` — called in `/api/save-model` to extract any new user-uploaded images on already-migrated (v2) models.
+  - `translateV2ToUrls(model)` — converts v2 filenames to `/api/media/` URLs for client consumption.
+  - `getMediaDir(modelsRoot)` — returns path to `.munchie_media/` directory.
+  - Filenames use first 12 chars of the model hash + source + index: `{hash12}_{parsed|user}_{n}.{ext}`
 
 ### Key Backend Utilities (edit in `src/utils/`, then run `npm run build:backend`)
 
@@ -71,11 +95,21 @@ Each `.3mf` or `.stl` file gets a `-munchie.json` sidecar. On metadata regenerat
 - G-code data is stored in the `gcodeData` field in `munchie.json`.
 - Unit tests: `tests/gcodeParser.test.ts`, fixtures: `tests/fixtures/gcode/`.
 
+### API Endpoints of Note
+
+- `GET /api/models` — returns lightweight index entries (no image blobs). Supports server-side filtering/sorting/pagination: `?page=1&pageSize=50&search=...&category=...&tags=...&sort=name_asc&fileType=3mf&isPrinted=true&hasImages=true`.  `pageSize=0` returns all. Response: `{ models, total, page, pageSize, totalPages }`.
+- `GET /api/load-model?id=<id>` — returns full munchie.json (including image data) for the detail drawer. For v2 models the image fields contain filenames; `translateV2ToUrls()` is applied so the client receives `/api/media/` URLs.
+- `GET /api/model-thumbnail/:id` — on-demand thumbnail. Handles v1 (decodes inline base64) and v2 (reads file from `.munchie_media/`). Not called for v2 models in the grid because the index resolves `/api/media/` URLs directly.
+- `GET /api/media/:filename` — serves binary image files from `.munchie_media/` with 24h browser caching.
+- `POST /api/migrate-images` — batch-migrates all indexed munchie.json files from v1 to v2 using `imageExtractor.extractImages()`. Returns `{ migrated, skipped, errors }`. Rebuilds the index on completion.
+- `POST /api/rebuild-index` — forces a full rescan and index rebuild without a server restart.
+
 ### Settings Architecture
 
 - `SettingsPage.tsx` is now a thin shell; all content lives in `src/components/settings/`:
   - `SettingsSidebar.tsx` — tab navigation sidebar (controlled by `App.tsx`)
-  - Tab components: `GeneralTab`, `CategoriesTab`, `TagsTab`, `ConfigTab`, `BackupTab`, `IntegrityTab`, `SupportTab`
+  - Tab components: `GeneralTab`, `CategoriesTab`, `TagsTab`, `ConfigTab`, `BackupTab`, `IntegrityTab`, `SupportTab`, `ExperimentalTab`
+- **BackupTab** includes the "Migrate Images to Disk" action that calls `POST /api/migrate-images`.
 
 ### Testing
 
@@ -89,3 +123,5 @@ Each `.3mf` or `.stl` file gets a `-munchie.json` sidecar. On metadata regenerat
 ### Docker
 
 Multi-stage Dockerfile: builder stage (`npm run build` + `npm run build:backend`), then production stage copies `build/`, `dist-backend/`, `server.js`, and `server-utils/`. The backend serves both the API and the frontend static files from a single port (3001).
+
+The `.munchie_media/` directory lives inside the models volume mount, so it is automatically persisted and backed up with the rest of the model data.

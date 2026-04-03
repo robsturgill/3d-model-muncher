@@ -10,11 +10,12 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 - **Capture 3D previews**: Capture the current camera/view from the built-in 3D viewer and save it directly into a model's images (useful for thumbnails or gallery images). While editing a model in the details drawer, use the capture button to add the exact view you want.
 - **G-code Analysis**: Upload .gcode or .gcode.3mf files to automatically extract print time, filament usage, and material colors with multi-material support
 - **Model Management**: Organize, categorize, and track print status
-- **Advanced Search & Filtering**: Search by name, tags, category, print status, and license
+- **Advanced Search & Filtering**: Server-side filtering and pagination — search by name, tags, category, print status, license, file type, and more without loading the full library
 - **Automatic Scanning**: Auto-generate metadata JSON files from 3MF files
 - **Duplicate Detection**: MD5 hash-based duplicate identification
 - **Bulk Editing**: Edit multiple models simultaneously
 - **Backup & Restore**: Protect your metadata with compressed backups and flexible restore options
+- **Image Migration**: Extract inline base64 images to a shared `.munchie_media/` folder — reduces metadata file sizes from ~500KB to ~2KB for faster loading and smaller backups
 - **Configuration Management**: Export/import app settings
 - **AI Features**: Generative suggestions for tags, categories, and descriptions using Google Gemini
 - **Docker Support**: Easy deployment with Docker Compose

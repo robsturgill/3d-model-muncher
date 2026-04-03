@@ -29,10 +29,25 @@ Protect your model metadata (tags, notes, print status, etc.) with automatic bac
 - **Disaster Recovery**: Use Force Restore to completely rebuild from backup
 - **Conservative Updates**: Use Path Match to only update existing files
 
+## Image Migration
+
+For large libraries, inline base64 images embedded in munchie.json files can make each sidecar ~500KB. The **Migrate Images to Disk** action extracts all images to a shared `.munchie_media/` folder inside your models directory, shrinking sidecars to ~2-5KB.
+
+### Running the Migration
+1. Go to **Settings → Backup**
+2. Click **"Migrate Images"** at the bottom of the page
+3. A summary shows how many files were migrated, already migrated, or errored
+
+The migration is idempotent — safe to run multiple times. Both formats (inline and extracted) are supported simultaneously during transition. After migration, future saves and uploads automatically extract new images to `.munchie_media/`.
+
+### Backing Up After Migration
+
+The `.munchie_media/` folder lives inside your models directory and is included in your existing volume mount, so it persists alongside your models automatically. The standard "Create Backup" only covers `*-munchie.json` metadata — it does **not** include `.munchie_media/` image files, but those are regenerable from your original `.3mf`/`.stl` files via a rescan.
+
 ## Technical Notes
 
 - Creates compressed `.gz` archives (80-90% size reduction)
 - Uses MD5 hashes for reliable file matching
 - Supports both `.gz` and `.json` backup formats
-- Backs up metadata files and collections; not the actual 3MF/STL model files
+- Backs up metadata files and collections; not the actual 3MF/STL model files or `.munchie_media/` images
 - All operations are local - no data sent to external servers

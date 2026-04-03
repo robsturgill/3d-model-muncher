@@ -27,9 +27,23 @@
 
 ## Patterns & Conventions
 - **Model Metadata:**
-  - Each model file (`.3mf`, `.stl`) gets a `-munchie.json` file with extracted info, thumbnails, tags, and print settings
+  - Each model file (`.3mf`, `.stl`) gets a `-munchie.json` sidecar with extracted info, thumbnails, tags, and print settings
   - Duplicate detection via MD5 hash
   - Rescans preserve user data
+  - After "Migrate Images" (Settings → Backup), images move out of munchie.json into `models/.munchie_media/`; the sidecar shrinks from ~500KB to ~2-5KB and gains `"imageVersion": 2`
+
+- **In-Memory Model Index (`server-utils/modelIndex.js`):**
+  - Built once at server startup; all `/api/models` listing requests read from it — no per-request filesystem scan
+  - Stores lightweight entries (no image blobs); for `imageVersion: 2` models it pre-resolves `thumbnailUrl` to `/api/media/<filename>` so the grid never hits the thumbnail endpoint
+  - Kept in sync by save/delete/upload/scan endpoints via `updateFromDisk()`, `addFromDisk()`, `remove()`
+  - Use `POST /api/rebuild-index` to force a full rescan without a server restart
+
+- **Image Storage (`server-utils/imageExtractor.js`):**
+  - Two formats coexist: v1 (inline base64 in munchie.json) and v2 (files in `.munchie_media/`)
+  - `imageVersion` field in munchie.json controls which format is active
+  - `/api/media/:filename` serves extracted images with 24h caching
+  - `POST /api/migrate-images` batch-migrates all models; safe to run multiple times (idempotent)
+  - New user images uploaded to v2 models are auto-extracted by `/api/save-model`
 
 - **Print Settings Ownership:**
   - 3MF (`.3mf`) files: printSettings come from the parsed 3MF. Edits to printSettings in the UI are ignored on save, and regenerate will refresh these values from the 3MF.
@@ -60,7 +74,13 @@
   - Testing: Unit tests in `tests/gcodeParser.test.ts` with fixtures in `tests/fixtures/gcode/`
 
 - **API Endpoints:**
-  - See `server.js` for `/api/models`, `/api/save-model`, `/api/scan-models`, `/api/validate-3mf`, `/api/delete-models`, `/api/parse-gcode`
+  - `GET /api/models` — paginated/filtered listing from in-memory index. Params: `page`, `pageSize` (0=all), `search`, `category`, `tags`, `sort`, `fileType`, `isPrinted`, `hasImages`. Response: `{ models, total, page, pageSize, totalPages }`.
+  - `GET /api/load-model?id=` — full munchie.json for the detail drawer (images included as `/api/media/` URLs for v2 models)
+  - `GET /api/model-thumbnail/:id` — on-demand thumbnail for v1 models; v2 grid thumbnails use `/api/media/` directly
+  - `GET /api/media/:filename` — binary image from `.munchie_media/` with browser caching
+  - `POST /api/migrate-images` — batch image extraction to `.munchie_media/`; returns `{ migrated, skipped, errors }`
+  - `POST /api/rebuild-index` — force full index rescan
+  - See `server.js` for `/api/save-model`, `/api/scan-models`, `/api/validate-3mf`, `/api/delete-models`, `/api/parse-gcode`
 - **Frontend:**
   - Main entry: `src/main.tsx`, App: `src/App.tsx`
   - Components in `src/components/`
