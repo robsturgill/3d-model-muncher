@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
-import { Archive, RefreshCw, RotateCcw, Clock, HardDrive } from "lucide-react";
+import { Archive, RefreshCw, RotateCcw, Clock, HardDrive, FolderOpen } from "lucide-react";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Label } from "../ui/label";
@@ -23,6 +23,8 @@ export function BackupTab({
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreStrategy, setRestoreStrategy] = useState<'hash-match' | 'path-match' | 'force'>('hash-match');
   const [collectionsRestoreStrategy, setCollectionsRestoreStrategy] = useState<'merge' | 'replace'>('merge');
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationResult, setMigrationResult] = useState<{ migrated: number; skipped: number; errors: number } | null>(null);
 
   const handleCreateBackup = async () => {
     setIsCreatingBackup(true);
@@ -39,6 +41,20 @@ export function BackupTab({
       onRestoreFromFile(restoreStrategy, collectionsRestoreStrategy);
     } finally {
       setIsRestoring(false);
+    }
+  };
+
+  const handleMigrateImages = async () => {
+    setIsMigrating(true);
+    setMigrationResult(null);
+    try {
+      const res = await fetch('/api/migrate-images', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setMigrationResult({ migrated: data.migrated, skipped: data.skipped, errors: data.errors });
+      }
+    } finally {
+      setIsMigrating(false);
     }
   };
 
@@ -206,6 +222,45 @@ export function BackupTab({
               <br />
               <strong>Note:</strong> Restores model metadata files and collections. Actual 3MF/STL models are not included in backups.
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Image Migration Section */}
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <h3 className="font-medium">Migrate Images to Disk</h3>
+                <p className="text-sm text-muted-foreground">
+                  Extract inline base64 images from model metadata files to a shared{' '}
+                  <code className="text-xs">.munchie_media/</code> folder. Reduces metadata file sizes
+                  from ~500KB to ~2KB for faster loading and smaller backups.
+                </p>
+              </div>
+              <Button
+                onClick={handleMigrateImages}
+                disabled={isMigrating}
+                variant="outline"
+                data-testid="migrate-images-button"
+                className="gap-2 md:ml-4"
+              >
+                {isMigrating ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FolderOpen className="h-4 w-4" />
+                )}
+                {isMigrating ? 'Migrating...' : 'Migrate Images'}
+              </Button>
+            </div>
+            {migrationResult && (
+              <div className="text-sm text-muted-foreground">
+                Done: <strong>{migrationResult.migrated}</strong> migrated,{' '}
+                <strong>{migrationResult.skipped}</strong> already migrated
+                {migrationResult.errors > 0 && (
+                  <>, <strong className="text-destructive">{migrationResult.errors}</strong> errors</>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

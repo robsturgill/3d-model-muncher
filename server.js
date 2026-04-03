@@ -9,6 +9,7 @@ try { require('dotenv').config(); } catch (e) { /* dotenv not installed or not n
 const { scanDirectory } = require('./dist-backend/utils/threeMFToJson');
 const { ConfigManager } = require('./dist-backend/utils/configManager');
 const modelIndex = require('./server-utils/modelIndex');
+const imageExtractor = require('./server-utils/imageExtractor');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -293,30 +294,11 @@ app.post('/api/collections', (req, res) => {
         const before = new Set(Array.isArray(prev.modelIds) ? prev.modelIds : []);
         const added = (Array.isArray(updated.modelIds) ? updated.modelIds : []).filter(mid => !before.has(mid));
         if (added.length > 0) {
-          const modelsRoot = getAbsoluteModelsPath();
-          const idToJsonPath = new Map();
-          (function scan(dir) {
-            let entries = [];
-            try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch {}
-            for (const entry of entries) {
-              const full = path.join(dir, entry.name);
-              if (entry.isDirectory()) { scan(full); continue; }
-              if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
-                try {
-                  const raw = fs.readFileSync(full, 'utf8');
-                  const parsed = raw ? JSON.parse(raw) : null;
-                  if (parsed && typeof parsed.id === 'string') {
-                    idToJsonPath.set(parsed.id, full);
-                  }
-                } catch { /* ignore */ }
-              }
-            }
-          })(modelsRoot);
           for (const mid of added) {
-            const jsonPath = idToJsonPath.get(mid);
+            const jsonPath = modelIndex.getMunchieJsonPath(mid);
             if (!jsonPath) continue;
             try {
-              const raw = fs.existsSync(jsonPath) ? fs.readFileSync(jsonPath, 'utf8') : '';
+              const raw = fs.readFileSync(jsonPath, 'utf8');
               const data = raw ? JSON.parse(raw) : {};
               if (!data || typeof data !== 'object') continue;
               if (data.hidden === true) continue;
@@ -327,6 +309,7 @@ app.post('/api/collections', (req, res) => {
               fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
               fs.renameSync(tmp, safeTarget);
               try { postProcessMunchieFile(safeTarget); } catch {}
+              modelIndex.updateFromDisk(mid, safeTarget);
             } catch (e) {
               console.warn('Failed to mark model hidden when updating collection:', mid, e && e.message ? e.message : e);
             }
@@ -337,6 +320,7 @@ app.post('/api/collections', (req, res) => {
       }
       // After update, ensure models no longer in any collection are unhidden
       try { reconcileHiddenFlags(); } catch {}
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[collections] Index rebuild failed:', e.message); }
       result = updated;
     } else {
       const newCol = { id: makeId(), name, description, modelIds: normalizedIds, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
@@ -344,43 +328,22 @@ app.post('/api/collections', (req, res) => {
       if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
       // Newly created collection: mark included models as hidden in their munchie files
       try {
-        const modelsRoot = getAbsoluteModelsPath();
-        // Build an index of munchie files by model id for faster lookup
-        const idToJsonPath = new Map();
-        (function scan(dir) {
-          let entries = [];
-          try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch {}
-          for (const entry of entries) {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) { scan(full); continue; }
-            if (entry.name.endsWith('-munchie.json') || entry.name.endsWith('-stl-munchie.json')) {
-              try {
-                const raw = fs.readFileSync(full, 'utf8');
-                const parsed = raw ? JSON.parse(raw) : null;
-                if (parsed && typeof parsed.id === 'string') {
-                  idToJsonPath.set(parsed.id, full);
-                }
-              } catch { /* ignore parse errors */ }
-            }
-          }
-        })(modelsRoot);
-
         for (const mid of normalizedIds) {
-          const jsonPath = idToJsonPath.get(mid);
+          const jsonPath = modelIndex.getMunchieJsonPath(mid);
           if (!jsonPath) continue;
           try {
-            const raw = fs.existsSync(jsonPath) ? fs.readFileSync(jsonPath, 'utf8') : '';
+            const raw = fs.readFileSync(jsonPath, 'utf8');
             const data = raw ? JSON.parse(raw) : {};
             if (!data || typeof data !== 'object') continue;
-            if (data.hidden === true) continue; // already hidden
+            if (data.hidden === true) continue;
             data.hidden = true;
-            // Keep created if present; update lastModified
             try { data.lastModified = new Date().toISOString(); } catch {}
             const safeTarget = protectModelFileWrite(jsonPath);
             const tmp = safeTarget + '.tmp';
             fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
             fs.renameSync(tmp, safeTarget);
             try { postProcessMunchieFile(safeTarget); } catch {}
+            modelIndex.updateFromDisk(mid, safeTarget);
           } catch (e) {
             console.warn('Failed to mark model hidden for collection creation:', mid, e && e.message ? e.message : e);
           }
@@ -390,6 +353,7 @@ app.post('/api/collections', (req, res) => {
       }
       // After creation, also reconcile to unhide anything not in any collection
       try { reconcileHiddenFlags(); } catch {}
+      try { modelIndex.rebuild(); } catch (e) { console.warn('[collections] Index rebuild failed:', e.message); }
       result = newCol;
     }
     res.json({ success: true, collection: result });
@@ -410,6 +374,7 @@ app.delete('/api/collections/:id', (req, res) => {
     if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collections' });
     // After deletion, some models may no longer belong to any collection; unhide them
     try { reconcileHiddenFlags(); } catch {}
+    try { modelIndex.rebuild(); } catch (e) { console.warn('[collections] Index rebuild failed:', e.message); }
     res.json({ success: true, deleted: removed });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Server error' });
@@ -439,6 +404,22 @@ function ensureModelsStaticHandler() {
 app.use('/models', (req, res, next) => {
   ensureModelsStaticHandler();
   return currentModelsStaticHandler(req, res, next);
+});
+
+// Serve extracted images from .munchie_media/ at /api/media/:filename
+let currentMediaStaticHandler = null;
+let currentMediaRootPath = null;
+app.use('/api/media', (req, res, next) => {
+  try {
+    const mediaDir = imageExtractor.getMediaDir(getAbsoluteModelsPath());
+    if (currentMediaRootPath !== mediaDir) {
+      currentMediaRootPath = mediaDir;
+      currentMediaStaticHandler = express.static(mediaDir, { maxAge: 86400000 });
+    }
+    return currentMediaStaticHandler(req, res, next);
+  } catch (e) {
+    next();
+  }
 });
 
 // Helper function to get the models directory (always from source)
@@ -899,6 +880,11 @@ app.post('/api/save-model', async (req, res) => {
         // ignore
       }
       updated.userDefined = mergedUDObj;
+    }
+
+    // Extract any newly added user images (base64) to .munchie_media/ for v2 models
+    if (updated.imageVersion === 2) {
+      imageExtractor.extractNewUserImages(updated, getAbsoluteModelsPath());
     }
 
     // Ensure the directory exists
@@ -3331,15 +3317,26 @@ app.get('/api/model-thumbnail/:id', (req, res) => {
 
     if (!thumbData) return res.status(404).end();
 
-    // Parse data URL and send binary image
-    const match = thumbData.match(/^data:([^;]+);base64,(.+)$/s);
-    if (!match) return res.status(404).end();
-
-    const mimeType = match[1];
-    const buffer = Buffer.from(match[2], 'base64');
-    res.set('Content-Type', mimeType);
-    res.set('Cache-Control', 'public, max-age=86400'); // cache 24h
-    res.send(buffer);
+    if (thumbData.startsWith('data:')) {
+      // v1: inline base64 data URL
+      const match = thumbData.match(/^data:([^;]+);base64,(.+)$/s);
+      if (!match) return res.status(404).end();
+      res.set('Content-Type', match[1]);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.send(Buffer.from(match[2], 'base64'));
+    } else {
+      // v2: filename reference — read from .munchie_media/
+      const mediaDir = imageExtractor.getMediaDir(getAbsoluteModelsPath());
+      const filePath = path.join(mediaDir, thumbData);
+      const resolved = path.resolve(filePath);
+      if (!resolved.startsWith(path.resolve(mediaDir) + path.sep)) return res.status(403).end();
+      if (!fs.existsSync(resolved)) return res.status(404).end();
+      const ext = path.extname(thumbData).slice(1).toLowerCase();
+      const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' }[ext] || 'application/octet-stream';
+      res.set('Content-Type', mime);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.sendFile(resolved);
+    }
   } catch (e) {
     console.error('[model-thumbnail] Error:', e.message);
     res.status(500).end();
@@ -3354,6 +3351,39 @@ app.post('/api/rebuild-index', (req, res) => {
     res.json({ success: true, count: modelIndex.size() });
   } catch (e) {
     console.error('Index rebuild error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// API endpoint to migrate inline base64 images to .munchie_media/ directory
+app.post('/api/migrate-images', async (req, res) => {
+  try {
+    const modelsRoot = getAbsoluteModelsPath();
+    const allPaths = modelIndex.getAllMunchieJsonPaths();
+
+    let migrated = 0, skipped = 0, errors = 0;
+    const errorList = [];
+
+    for (const jsonPath of allPaths) {
+      const result = imageExtractor.extractImages(jsonPath, modelsRoot);
+      if (result.migrated) {
+        migrated++;
+      } else if (result.skipped) {
+        skipped++;
+      } else {
+        errors++;
+        if (result.error) errorList.push({ path: path.basename(jsonPath), error: result.error });
+      }
+    }
+
+    // Rebuild index so thumbnailUrls reflect v2 media paths
+    if (migrated > 0) {
+      try { modelIndex.buildIndex(modelsRoot); } catch (e) { console.warn('[migrate-images] Index rebuild failed:', e.message); }
+    }
+
+    res.json({ success: true, migrated, skipped, errors, errorList: errorList.slice(0, 20) });
+  } catch (e) {
+    console.error('[migrate-images] Error:', e.message);
     res.status(500).json({ success: false, error: e.message });
   }
 });

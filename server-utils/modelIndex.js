@@ -56,6 +56,8 @@ function toLightweight(model, munchieJsonPath) {
     _munchieJsonPath: munchieJsonPath,
   };
 
+  entry.imageVersion = model.imageVersion || 1;
+
   // Compute image metadata
   const parsedCount = Array.isArray(model.parsedImages) ? model.parsedImages.length : 0;
   const userImages = model.userDefined && Array.isArray(model.userDefined.images) ? model.userDefined.images : [];
@@ -63,7 +65,28 @@ function toLightweight(model, munchieJsonPath) {
   entry.hasImages = entry.imageCount > 0;
   entry.thumbnailDescriptor = (model.userDefined && model.userDefined.thumbnail) || (parsedCount > 0 ? 'parsed:0' : '');
   if (entry.hasImages && entry.id) {
-    entry.thumbnailUrl = `/api/model-thumbnail/${encodeURIComponent(entry.id)}`;
+    if (model.imageVersion === 2) {
+      // Resolve the thumbnail filename directly from image arrays (available now, not stored in index)
+      const desc = entry.thumbnailDescriptor;
+      let mediaFile = null;
+      if (desc.startsWith('parsed:')) {
+        const idx = parseInt(desc.split(':')[1] || '', 10);
+        if (!isNaN(idx) && Array.isArray(model.parsedImages) && model.parsedImages[idx]) {
+          mediaFile = model.parsedImages[idx];
+        }
+      } else if (desc.startsWith('user:')) {
+        const idx = parseInt(desc.split(':')[1] || '', 10);
+        if (!isNaN(idx) && Array.isArray(model.userDefined && model.userDefined.images) && model.userDefined.images[idx]) {
+          const imgEntry = model.userDefined.images[idx];
+          mediaFile = (typeof imgEntry === 'object' && imgEntry.file) ? imgEntry.file : null;
+        }
+      }
+      entry.thumbnailUrl = mediaFile
+        ? `/api/media/${encodeURIComponent(mediaFile)}`
+        : `/api/model-thumbnail/${encodeURIComponent(entry.id)}`;
+    } else {
+      entry.thumbnailUrl = `/api/model-thumbnail/${encodeURIComponent(entry.id)}`;
+    }
   }
 
   return entry;
@@ -286,12 +309,22 @@ function getModelsRoot() {
   return modelsRoot;
 }
 
+/** Get all munchie.json absolute paths tracked by the index. */
+function getAllMunchieJsonPaths() {
+  const paths = [];
+  for (const entry of index.values()) {
+    if (entry._munchieJsonPath) paths.push(entry._munchieJsonPath);
+  }
+  return paths;
+}
+
 module.exports = {
   buildIndex,
   rebuild,
   getAll,
   get,
   getMunchieJsonPath,
+  getAllMunchieJsonPaths,
   updateFromDisk,
   addFromDisk,
   remove,
