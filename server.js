@@ -936,6 +936,14 @@ app.post('/api/save-model', async (req, res) => {
     } catch (e) {
       console.warn('postProcessMunchieFile failed after save for', safeTargetPath, e);
     }
+    // Extract any base64 images to .munchie_media/ on every save.
+    // For v1 models this upgrades them to imageVersion: 2 in-place (phasing out inline base64).
+    // For v2 models this is a no-op (extractImages skips files already at imageVersion: 2).
+    try {
+      imageExtractor.extractImages(safeTargetPath, getAbsoluteModelsPath());
+    } catch (e) {
+      console.warn('[save-model] Image extraction failed:', safeTargetPath, e.message);
+    }
     // Read back the saved file and return it as the authoritative refreshed model
     let refreshedModel = undefined;
     try {

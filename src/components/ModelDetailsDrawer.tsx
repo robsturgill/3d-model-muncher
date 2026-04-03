@@ -1137,8 +1137,8 @@ export function ModelDetailsDrawer({
       : {};
 
     const existingUserImages: any[] = Array.isArray(udObj.images) ? udObj.images.slice() : [];
-    // Push the new captured image as a simple data URL entry (legacy string form supported)
-    existingUserImages.push(dataUrl);
+    // Store as {id, data} so the server's extractNewUserImages extracts it to .munchie_media/
+    existingUserImages.push({ id: `capture-${Date.now()}`, data: dataUrl });
     udObj.images = existingUserImages;
 
     // Build or extend imageOrder to include a descriptor for the new user image.

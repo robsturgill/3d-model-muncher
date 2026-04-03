@@ -125,10 +125,11 @@ function extractNewUserImages(model, modelsRoot) {
   const modelHash = model.hash || model.id || 'unknown';
 
   model.userDefined.images = model.userDefined.images.map((entry, i) => {
-    const dataUrl = entry && typeof entry === 'object' ? (entry.data || '') : '';
-    if (!dataUrl || !dataUrl.startsWith('data:')) return entry; // already a file or no base64
+    // Accept both bare data URL strings and {id, data} objects
+    const dataUrl = typeof entry === 'string' ? entry : (entry && typeof entry === 'object' ? (entry.data || '') : '');
+    if (!dataUrl || !dataUrl.startsWith('data:')) return entry; // already a file ref or no base64
 
-    const id = entry.id || String(i);
+    const id = (entry && typeof entry === 'object' && entry.id) || String(i);
     const ext = getImageExtension(dataUrl);
     const filename = getMediaFilename(modelHash, 'user', i, ext);
     const base64Data = dataUrl.replace(/^data:[^;]+;base64,/, '');
