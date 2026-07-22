@@ -7,6 +7,7 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { Collection, CollectionGroup } from '../types/collection';
+import { getValidCollectionCoverId } from '../utils/collectionCoverUtils';
 
 interface CollectionGroupDrawerProps {
   open: boolean;
@@ -28,7 +29,7 @@ const buildCollectionPayload = (collection: Collection, groups: CollectionGroup[
   category: collection.category || '',
   tags: collection.tags || [],
   images: collection.images || [],
-  coverModelId: collection.coverModelId,
+  coverModelId: getValidCollectionCoverId(modelIds, collection.coverModelId),
 });
 
 export default function CollectionGroupDrawer({

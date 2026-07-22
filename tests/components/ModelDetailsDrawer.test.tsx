@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { ModelDetailsDrawer } from '../../src/components/ModelDetailsDrawer';
 import type { Model } from '../../src/types/model';
@@ -25,6 +25,14 @@ const baseProps = {
   categories: [],
 };
 
+beforeEach(() => {
+  // @ts-ignore
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({ success: true, collections: [] }),
+  });
+});
+
 describe('ModelDetailsDrawer currency symbol', () => {
   it('displays $ before price by default', () => {
     render(<ModelDetailsDrawer {...baseProps} currencySymbol="$" />);
@@ -40,5 +48,23 @@ describe('ModelDetailsDrawer currency symbol', () => {
     const modelNoPrice = { ...mockModel, price: 0 };
     render(<ModelDetailsDrawer {...baseProps} model={modelNoPrice} currencySymbol="$" />);
     expect(screen.queryByText('Price')).not.toBeInTheDocument();
+  });
+});
+
+describe('ModelDetailsDrawer collection actions', () => {
+  it('opens the shared collection drawer even when no collections exist yet', async () => {
+    render(<ModelDetailsDrawer {...baseProps} />);
+
+    const button = await screen.findByRole('button', { name: /add current to collection/i });
+    expect(button).toBeEnabled();
+
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Collection' })).toBeInTheDocument();
+    });
+    expect(screen.getByPlaceholderText('Collection name')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Existing' })).toBeInTheDocument();
   });
 });

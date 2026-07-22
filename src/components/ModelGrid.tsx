@@ -20,6 +20,7 @@ import { SelectionModeControls } from "./SelectionModeControls";
 
 interface ModelGridProps {
   models: Model[];
+  collectionModels?: Model[];
   collections?: Collection[];
   onModelClick: (model: Model) => void;
   onOpenCollection?: (collectionId: string) => void;
@@ -64,6 +65,7 @@ function saveUiPrefs(prefs: any) {
 
 export function ModelGrid({ 
   models,
+  collectionModels = models,
   collections = [],
   onModelClick, 
   onOpenCollection,
@@ -303,6 +305,7 @@ export function ModelGrid({
                         key={`col-${c.id}`}
                         collection={c}
                         categories={config.categories || []}
+                        models={collectionModels}
                         onOpen={(id) => onOpenCollection?.(id)}
                         onChanged={() => onCollectionChanged?.()}
                         onDeleted={() => onCollectionChanged?.()}
@@ -330,6 +333,7 @@ export function ModelGrid({
                       key={`col-${c.id}`}
                       collection={c}
                       categories={config.categories || []}
+                      models={collectionModels}
                       onOpen={(id) => onOpenCollection?.(id)}
                       onChanged={() => onCollectionChanged?.()}
                       onDeleted={() => onCollectionChanged?.()}
@@ -361,6 +365,7 @@ export function ModelGrid({
                         key={`col-row-${c.id}`}
                         collection={c}
                         categories={config.categories || []}
+                        models={models}
                         onOpen={(id) => onOpenCollection?.(id)}
                         onChanged={() => onCollectionChanged?.()}
                         onDeleted={() => onCollectionChanged?.()}
@@ -516,6 +521,7 @@ export function ModelGrid({
                       key={`col-row-${c.id}`}
                       collection={c}
                       categories={config.categories || []}
+                      models={collectionModels}
                       onOpen={(id) => onOpenCollection?.(id)}
                       onChanged={() => onCollectionChanged?.()}
                       onDeleted={() => onCollectionChanged?.()}

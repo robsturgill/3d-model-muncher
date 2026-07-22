@@ -3,6 +3,8 @@ import { FilterSidebar } from "./components/FilterSidebar";
 import { ModelGrid } from "./components/ModelGrid";
 import { ModelDetailsDrawer } from "./components/ModelDetailsDrawer";
 import { BulkEditDrawer } from "./components/BulkEditDrawer";
+import { CollectionCoverCollage } from "./components/CollectionCoverCollage";
+import CollectionEditDrawer from "./components/CollectionEditDrawer";
 import { DonationDialog } from "./components/DonationDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { DemoPage } from "./components/DemoPage";
@@ -17,7 +19,7 @@ import { ConfigManager } from "./utils/configManager";
 import * as pkg from '../package.json';
 import { applyFiltersToModels, FilterState } from "./utils/filterUtils";
 import { sortModels, sortCollections, SortKey } from "./utils/sortUtils";
-import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload, List, ArrowLeft } from "lucide-react";
+import { Menu, Palette, RefreshCw, Heart, FileCheck, Files, Box, Upload, List, ArrowLeft, Plus } from "lucide-react";
 import ModelUploadDialog from "./components/ModelUploadDialog";
 import { Button } from "./components/ui/button";
 import {
@@ -95,8 +97,8 @@ function AppContent() {
   // Track where to return when leaving a collection view
   const [collectionReturnView, setCollectionReturnView] = useState<ViewType>('models');
   // Track last applied filters so we can reapply when navigating back from a collection or after refresh
-  const [lastFilters, setLastFilters] = useState<{ search: string; category: string; printStatus: string; license: string; fileType: string; tags: string[]; showHidden: boolean; showMissingImages: boolean; sortBy?: string }>(
-    { search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false, showMissingImages: false, sortBy: 'none' }
+  const [lastFilters, setLastFilters] = useState<{ search: string; category: string; printStatus: string; license: string; fileType: string; collectionId?: string; tags: string[]; showHidden: boolean; showMissingImages: boolean; sortBy?: string }>(
+    { search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', collectionId: 'all', tags: [], showHidden: false, showMissingImages: false, sortBy: 'none' }
   );
   // Force sidebar to re-mount to reset its internal filter UI when switching contexts
   const [sidebarResetKey, setSidebarResetKey] = useState(0);
@@ -115,6 +117,21 @@ function AppContent() {
     }
     return models;
   }, [models, activeCollection]);
+
+  const applyCollectionScopedFilters = (
+    modelsToFilter: Model[],
+    filters: FilterState & { collectionId?: string }
+  ) => {
+    let scopedModels = modelsToFilter;
+    const selectedCollectionId = filters.collectionId || 'all';
+    if (selectedCollectionId !== 'all') {
+      const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId);
+      const allowedIds = new Set(selectedCollection?.modelIds || []);
+      scopedModels = scopedModels.filter((model) => allowedIds.has(model.id));
+    }
+
+    return applyFiltersToModels(scopedModels, filters);
+  };
   
   // Delete file type selection state
   const [includeThreeMfFiles, setIncludeThreeMfFiles] = useState(false);
@@ -195,13 +212,14 @@ function AppContent() {
           printStatus: defaultFilters.defaultPrintStatus,
           license: defaultFilters.defaultLicense,
           fileType: 'all',
+          collectionId: 'all',
           tags: [] as string[],
           showHidden: false,
           showMissingImages: false,
           sortBy: defaultFilters.defaultSortBy || 'none',
         };
   
-  const visibleModels = applyFiltersToModels(loadedModels, initialFilterState as FilterState);
+  const visibleModels = applyCollectionScopedFilters(loadedModels, initialFilterState as FilterState & { collectionId?: string });
   setFilteredModels(visibleModels);
   // Remember the initial filters for later reapplication
   setLastFilters(initialFilterState);
@@ -619,6 +637,7 @@ function AppContent() {
     printStatus: string;
     license: string;
     fileType: string;
+    collectionId?: string;
     tags: string[];
     showHidden: boolean;
     showMissingImages: boolean;
@@ -663,12 +682,13 @@ function AppContent() {
       printStatus: filters.printStatus,
       license: filters.license,
       fileType: filters.fileType,
+      collectionId: filters.collectionId,
       tags: filters.tags,
       showHidden: filters.showHidden,
       showMissingImages: filters.showMissingImages,
     };
     
-    const filtered = applyFiltersToModels(baseModels, filterState);
+    const filtered = applyCollectionScopedFilters(baseModels, filterState);
 
     // Apply sorting via utility
     const sortKey = (filters.sortBy || 'none') as SortKey;
@@ -715,14 +735,14 @@ function AppContent() {
           ...lastFilters,
           fileType: lastFilters.fileType?.toLowerCase() === 'collections' ? 'all' : lastFilters.fileType,
         } as any as FilterState;
-        const filtered = applyFiltersToModels(base, filtersForCollection);
+        const filtered = applyCollectionScopedFilters(base, filtersForCollection as FilterState & { collectionId?: string });
         const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
         setFilteredModels(sorted);
       } else {
         if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
           setFilteredModels([]);
         } else {
-          const filtered = applyFiltersToModels(updatedModels, lastFilters as FilterState);
+          const filtered = applyCollectionScopedFilters(updatedModels, lastFilters as FilterState & { collectionId?: string });
           const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
           setFilteredModels(sorted);
         }
@@ -802,6 +822,7 @@ function AppContent() {
 
   // Upload dialog state
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [isCreateEmptyCollectionOpen, setIsCreateEmptyCollectionOpen] = useState(false);
 
   const openSettingsOnTab = (tab: string, action?: { type: 'hash-check' | 'generate'; fileType: '3mf' | 'stl' }) => {
     setSettingsInitialTab(tab);
@@ -852,6 +873,7 @@ function AppContent() {
   const refreshCollections = async () => {
     try {
       const r = await fetch('/api/collections');
+      let resolvedActiveCollection = activeCollection;
       if (r.ok) {
         const data = await r.json();
         if (data && data.success && Array.isArray(data.collections)) {
@@ -859,7 +881,10 @@ function AppContent() {
           // Keep activeCollection in sync with latest modelIds
           if (activeCollection) {
             const updatedActive = data.collections.find((c: any) => c.id === activeCollection.id);
-            if (updatedActive) setActiveCollection(updatedActive);
+            if (updatedActive) {
+              resolvedActiveCollection = updatedActive;
+              setActiveCollection(updatedActive);
+            }
           }
         }
       }
@@ -870,8 +895,8 @@ function AppContent() {
           const updatedModels = await resp.json() as Model[];
           setModels(updatedModels);
           // Reapply filters based on current view
-          if (currentView === 'collection-view' && activeCollection) {
-            const setIds = new Set(activeCollection.modelIds || []);
+          if (currentView === 'collection-view' && resolvedActiveCollection) {
+            const setIds = new Set(resolvedActiveCollection.modelIds || []);
             let base = updatedModels.filter(m => setIds.has(m.id));
             const filtersForCollection = {
               ...lastFilters,
@@ -879,14 +904,14 @@ function AppContent() {
               // In collection view, default to including hidden unless explicitly toggled by user later
               showHidden: true,
             } as any as FilterState;
-            const filtered = applyFiltersToModels(base, filtersForCollection);
+            const filtered = applyCollectionScopedFilters(base, filtersForCollection as FilterState & { collectionId?: string });
             const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
             setFilteredModels(sorted);
           } else {
             if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
               setFilteredModels([]);
             } else {
-              const filtered = applyFiltersToModels(updatedModels, lastFilters as FilterState);
+              const filtered = applyCollectionScopedFilters(updatedModels, lastFilters as FilterState & { collectionId?: string });
               const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
               setFilteredModels(sorted);
             }
@@ -954,6 +979,10 @@ function AppContent() {
     }
 
     let filteredList = collections.slice();
+    const selectedCollectionId = filters.collectionId || 'all';
+    if (selectedCollectionId !== 'all') {
+      filteredList = filteredList.filter((collection) => collection.id === selectedCollectionId);
+    }
 
     const searchTerm = (filters.search || '').trim().toLowerCase();
     if (searchTerm) {
@@ -1051,20 +1080,23 @@ function AppContent() {
             onClose={() => setIsSidebarOpen(false)}
             onSettingsClick={handleSettingsClick}
             categories={sortedCategories}
+            collections={collections}
+            showCollectionFilter={currentView !== 'collection-view'}
             models={(currentView === 'collection-view' && activeCollection)
               ? collectionBaseModels
               : models}
             initialFilters={{
-              search: '',
-              category: appConfig?.filters?.defaultCategory || 'all',
-              printStatus: appConfig?.filters?.defaultPrintStatus || 'all',
-              license: appConfig?.filters?.defaultLicense || 'all',
-              fileType: 'all',
-              tags: [],
+              search: lastFilters.search ?? '',
+              category: lastFilters.category || appConfig?.filters?.defaultCategory || 'all',
+              printStatus: lastFilters.printStatus || appConfig?.filters?.defaultPrintStatus || 'all',
+              license: lastFilters.license || appConfig?.filters?.defaultLicense || 'all',
+              fileType: lastFilters.fileType || 'all',
+              collectionId: currentView === 'collection-view' ? 'all' : (lastFilters.collectionId || 'all'),
+              tags: lastFilters.tags || [],
               // In collection view, default to showing hidden items so the collection shows everything
-              showHidden: currentView === 'collection-view',
-              showMissingImages: false,
-              sortBy: appConfig?.filters?.defaultSortBy || 'none',
+              showHidden: currentView === 'collection-view' ? true : !!lastFilters.showHidden,
+              showMissingImages: !!lastFilters.showMissingImages,
+              sortBy: lastFilters.sortBy || appConfig?.filters?.defaultSortBy || 'none',
             }}
           />
         )}
@@ -1193,6 +1225,7 @@ function AppContent() {
           {currentView === 'models' ? (
             <ModelGrid 
               models={filteredModels} 
+              collectionModels={models}
               collections={sortCollections(collectionsForDisplay, currentSortBy)}
               sortBy={currentSortBy}
               onModelClick={handleModelClick}
@@ -1250,25 +1283,33 @@ function AppContent() {
                   </Button>
                   <div className="font-semibold">Collections</div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={refreshCollections} title="Refresh collections">
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsCreateEmptyCollectionOpen(true)} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    New Collection
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={refreshCollections} title="Refresh collections">
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div className="p-4 lg:p-6">
-                {collections.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No collections yet. Select some models and create one from the selection.</div>
+                {collectionsForDisplay.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    {collections.length === 0
+                      ? 'No collections yet. Create one here, or select some models and create one from the selection.'
+                      : 'No collections match the current filters.'}
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {sortCollections(collections, currentSortBy).map(c => (
+                    {sortCollections(collectionsForDisplay, currentSortBy).map(c => (
                       <button key={c.id} onClick={() => openCollection(c)} className="p-4 text-left rounded-lg border bg-card hover:bg-accent/50 transition-colors">
                         <div className="flex items-center gap-3">
-                          <div className="relative w-16 h-12 rounded overflow-hidden bg-muted/40 flex-shrink-0">
-                            {Array.isArray(c.images) && c.images.length > 0 ? (
-                              <img src={c.images[0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full" />
-                            )}
-                          </div>
+                          <CollectionCoverCollage
+                            collection={c}
+                            models={models}
+                            className="relative w-16 h-12 rounded overflow-hidden flex-shrink-0"
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="font-medium truncate">{c.name}</div>
                             <div className="text-xs text-muted-foreground mt-1">{(c.modelIds || []).length} items</div>
@@ -1294,7 +1335,7 @@ function AppContent() {
                   if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
                     setFilteredModels([]);
                   } else {
-                    const filtered = applyFiltersToModels(models, lastFilters as FilterState);
+                    const filtered = applyCollectionScopedFilters(models, lastFilters as FilterState & { collectionId?: string });
                     const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
                     setFilteredModels(sorted);
                   }
@@ -1459,7 +1500,18 @@ function AppContent() {
       <ModelUploadDialog
         isOpen={isUploadDialogOpen}
         onClose={() => setIsUploadDialogOpen(false)}
-        onUploaded={() => { handleRefreshModels(); }}
+        onUploaded={refreshCollections}
+      />
+      <CollectionEditDrawer
+        open={isCreateEmptyCollectionOpen}
+        onOpenChange={setIsCreateEmptyCollectionOpen}
+        collection={null}
+        categories={sortedCategories}
+        initialModelIds={[]}
+        onSaved={async () => {
+          setIsCreateEmptyCollectionOpen(false);
+          await refreshCollections();
+        }}
       />
     </div>
     </TagsProvider>

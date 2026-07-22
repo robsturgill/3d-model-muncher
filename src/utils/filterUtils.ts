@@ -6,6 +6,7 @@ export interface FilterState {
   printStatus: string;
   license: string;
   fileType: string;
+  collectionId?: string;
   tags: string[];
   showHidden: boolean;
   showMissingImages: boolean;
