@@ -156,13 +156,73 @@ const collectionsFilePath = (() => {
   return defaultPath;
 })();
 
+function uniqueStringArray(values) {
+  if (!Array.isArray(values)) return [];
+  return Array.from(new Set(values.filter(value => typeof value === 'string' && value.trim() !== '')));
+}
+
+function normalizeCollectionGroups(groups, allowedModelIds = null) {
+  if (!Array.isArray(groups) || groups.length === 0) return [];
+
+  const allowed = Array.isArray(allowedModelIds) ? new Set(uniqueStringArray(allowedModelIds)) : null;
+  const seenModelIds = new Set();
+  const normalized = [];
+
+  for (const group of groups) {
+    if (!group || typeof group !== 'object') continue;
+
+    const nextModelIds = [];
+    for (const modelId of uniqueStringArray(group.modelIds)) {
+      if (allowed && !allowed.has(modelId)) continue;
+      if (seenModelIds.has(modelId)) continue;
+      seenModelIds.add(modelId);
+      nextModelIds.push(modelId);
+    }
+
+    if (nextModelIds.length === 0) continue;
+
+    normalized.push({
+      ...group,
+      id: typeof group.id === 'string' && group.id.trim() ? group.id : makeId('grp'),
+      name: typeof group.name === 'string' && group.name.trim() ? group.name.trim() : 'Untitled group',
+      description: typeof group.description === 'string' ? group.description : '',
+      modelIds: nextModelIds,
+    });
+  }
+
+  return normalized;
+}
+
+function flattenCollectionModelIds(modelIds, groups = []) {
+  return uniqueStringArray([
+    ...uniqueStringArray(modelIds),
+    ...normalizeCollectionGroups(groups).flatMap(group => group.modelIds),
+  ]);
+}
+
+function reconcileCollectionGroups(groups, allowedModelIds) {
+  const allowed = uniqueStringArray(allowedModelIds);
+  return normalizeCollectionGroups(groups, allowed);
+}
+
+function normalizeStoredCollection(collection) {
+  if (!collection || typeof collection !== 'object') return collection;
+  const normalizedGroups = normalizeCollectionGroups(collection.groups);
+  return {
+    ...collection,
+    modelIds: flattenCollectionModelIds(collection.modelIds, normalizedGroups),
+    groups: normalizedGroups,
+  };
+}
+
 function loadCollections() {
   try {
     if (!fs.existsSync(collectionsFilePath)) return [];
     const raw = fs.readFileSync(collectionsFilePath, 'utf8');
     if (!raw || raw.trim() === '') return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.collections) ? parsed.collections : []);
+    const collections = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.collections) ? parsed.collections : []);
+    return collections.map(normalizeStoredCollection);
   } catch (e) {
     console.warn('Failed to load collections.json:', e);
     return [];
@@ -262,16 +322,20 @@ app.get('/api/collections', (req, res) => {
 // Create or update a collection
 app.post('/api/collections', (req, res) => {
   try {
-    const { id, name, description = '', modelIds = [], coverModelId, category = '', tags = [], images = [] } = req.body || {};
+    const { id, name, description = '', modelIds = [], coverModelId, category = '', tags = [], images = [], groups } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ success: false, error: 'Name is required' });
     }
     if (!Array.isArray(modelIds)) {
       return res.status(400).json({ success: false, error: 'modelIds must be an array' });
     }
+    if (groups !== undefined && !Array.isArray(groups)) {
+      return res.status(400).json({ success: false, error: 'groups must be an array when provided' });
+    }
 
     const now = new Date().toISOString();
-    const normalizedIds = Array.from(new Set(modelIds.filter(x => typeof x === 'string' && x.trim() !== '')));
+    const requestedIds = uniqueStringArray(modelIds);
+    const hasGroupsPayload = Object.prototype.hasOwnProperty.call(req.body || {}, 'groups');
 
     const cols = loadCollections();
     let result;
@@ -281,7 +345,11 @@ app.post('/api/collections', (req, res) => {
         return res.status(404).json({ success: false, error: 'Collection not found' });
       }
       const prev = cols[idx] || { modelIds: [] };
-      const updated = { ...prev, name, description, modelIds: normalizedIds, coverModelId, lastModified: now };
+      const nextGroups = hasGroupsPayload
+        ? normalizeCollectionGroups(groups)
+        : reconcileCollectionGroups(prev.groups, requestedIds);
+      const normalizedIds = flattenCollectionModelIds(requestedIds, nextGroups);
+      const updated = { ...prev, name, description, modelIds: normalizedIds, coverModelId, groups: nextGroups, lastModified: now };
       if (typeof category === 'string') updated.category = category;
       if (Array.isArray(tags)) updated.tags = Array.from(new Set(tags.filter(t => typeof t === 'string')));
       if (Array.isArray(images)) updated.images = images.filter(s => typeof s === 'string');
@@ -338,7 +406,9 @@ app.post('/api/collections', (req, res) => {
       try { reconcileHiddenFlags(); } catch {}
       result = updated;
     } else {
-      const newCol = { id: makeId(), name, description, modelIds: normalizedIds, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
+      const normalizedGroups = normalizeCollectionGroups(groups);
+      const normalizedIds = flattenCollectionModelIds(requestedIds, normalizedGroups);
+      const newCol = { id: makeId(), name, description, modelIds: normalizedIds, groups: normalizedGroups, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
       cols.push(newCol);
       if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
       // Newly created collection: mark included models as hidden in their munchie files

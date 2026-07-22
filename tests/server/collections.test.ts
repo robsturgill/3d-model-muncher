@@ -39,4 +39,34 @@ describe('Collections API', () => {
     expect(del.status).toBe(200);
     expect(del.body.success).toBe(true);
   });
+
+  it('normalizes groups and keeps them in sync with collection membership', async () => {
+    const create = await request(app).post('/api/collections').send({
+      name: 'Dragon Variants',
+      modelIds: ['loose-1'],
+      groups: [
+        { name: 'Dragon Model', modelIds: ['m1', 'm2', 'm1'] },
+        { name: 'Second Group', modelIds: ['m2', 'm3'] },
+      ],
+    });
+
+    expect(create.status).toBe(200);
+    expect(create.body.collection.modelIds).toEqual(['loose-1', 'm1', 'm2', 'm3']);
+    expect(create.body.collection.groups).toHaveLength(2);
+    expect(create.body.collection.groups[0].modelIds).toEqual(['m1', 'm2']);
+    expect(create.body.collection.groups[1].modelIds).toEqual(['m3']);
+
+    const id = create.body.collection.id;
+    const update = await request(app).post('/api/collections').send({
+      id,
+      name: 'Dragon Variants',
+      modelIds: ['loose-1', 'm1', 'm3'],
+    });
+
+    expect(update.status).toBe(200);
+    expect(update.body.collection.modelIds).toEqual(['loose-1', 'm1', 'm3']);
+    expect(update.body.collection.groups).toHaveLength(2);
+    expect(update.body.collection.groups[0].modelIds).toEqual(['m1']);
+    expect(update.body.collection.groups[1].modelIds).toEqual(['m3']);
+  });
 });

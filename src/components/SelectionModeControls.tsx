@@ -9,6 +9,8 @@ interface SelectionModeControlsProps {
   onExitSelectionMode?: () => void;
   onBulkEdit?: () => void | Promise<void>;
   onCreateCollection?: () => void;
+  createActionLabel?: string;
+  createActionTitle?: string;
   onBulkDelete?: () => void | Promise<void>;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
@@ -24,6 +26,8 @@ export function SelectionModeControls({
   onExitSelectionMode,
   onBulkEdit,
   onCreateCollection,
+  createActionLabel = "Collection",
+  createActionTitle = "Create collection from selection",
   onBulkDelete,
   onSelectAll,
   onDeselectAll,
@@ -81,11 +85,11 @@ export function SelectionModeControls({
               size="sm"
               onClick={onCreateCollection}
               className="gap-2"
-              title="Create collection from selection"
+              title={createActionTitle}
               data-testid="selection-mode-collection-button"
             >
               <List className="h-4 w-4" />
-              <span className="hidden sm:inline">Collection</span>
+              <span className="hidden sm:inline">{createActionLabel}</span>
             </Button>
           )}
 

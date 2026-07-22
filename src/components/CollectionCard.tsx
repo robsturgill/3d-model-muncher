@@ -46,6 +46,7 @@ export function CollectionCard({ collection, categories, onOpen, onChanged, onDe
 
   // Runtime guard: if a malformed item slips through, avoid crashing the UI
   const modelCount = collection?.modelIds ? collection.modelIds.length : 0;
+  const groupCount = Array.isArray(collection?.groups) ? collection.groups.length : 0;
   const collectionId = collection?.id;
 
   return (
@@ -149,7 +150,9 @@ export function CollectionCard({ collection, categories, onOpen, onChanged, onDe
       </CardContent>
       <CardFooter className="p-4 pt-0 mt-auto">
         <Button variant="outline" size="sm" className="w-full justify-between">
-          {`View ${modelCount} model${modelCount !== 1 ? 's' : ''}`}
+          {groupCount > 0
+            ? `View ${modelCount} model${modelCount !== 1 ? 's' : ''}, ${groupCount} group${groupCount !== 1 ? 's' : ''}`
+            : `View ${modelCount} model${modelCount !== 1 ? 's' : ''}`}
           <ChevronRight className="h-4 w-4" />
         </Button>
       </CardFooter>

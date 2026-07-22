@@ -23,6 +23,7 @@ export function CollectionListRow({ collection, categories, onOpen, onChanged, o
 
   const collectionId = collection?.id;
   const modelCount = Array.isArray(collection?.modelIds) ? collection.modelIds.length : 0;
+  const groupCount = Array.isArray(collection?.groups) ? collection.groups.length : 0;
 
   const handleOpen = () => {
     if (collectionId) {
@@ -99,6 +100,7 @@ export function CollectionListRow({ collection, categories, onOpen, onChanged, o
             <div className="flex flex-col items-end gap-2">
               <Badge variant="secondary" className="whitespace-nowrap">
                 {modelCount} item{modelCount === 1 ? "" : "s"}
+                {groupCount > 0 ? `, ${groupCount} group${groupCount === 1 ? "" : "s"}` : ""}
               </Badge>
 
               <DropdownMenu>
