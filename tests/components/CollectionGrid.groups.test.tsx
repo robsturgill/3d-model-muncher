@@ -83,4 +83,47 @@ describe('CollectionGrid groups', () => {
     expect(screen.getByText('Dragon Small')).toBeInTheDocument()
     expect(screen.getByText('Dragon Large')).toBeInTheDocument()
   })
+
+  it('offers both collection and group actions on a selection', () => {
+    render(
+      <CollectionGrid
+        name="Favorites"
+        modelIds={['m1', 'm2', 'm3']}
+        models={models}
+        onBack={vi.fn()}
+        onModelClick={vi.fn()}
+        isSelectionMode
+        selectedModelIds={['m1']}
+        onToggleSelectionMode={vi.fn()}
+        activeCollection={{ id: 'col-1', name: 'Favorites', modelIds: ['m1', 'm2', 'm3'], groups: [] }}
+      />
+    )
+
+    // Grouping was added alongside collection creation, not in place of it:
+    // moving a selection into another collection has to stay reachable here.
+    expect(screen.getByTestId('selection-mode-collection-button')).toBeInTheDocument()
+    expect(screen.getByTestId('selection-mode-group-button')).toBeInTheDocument()
+  })
+
+  it('keeps an emptied group visible so it can still be renamed or ungrouped', () => {
+    render(
+      <CollectionGrid
+        name="Favorites"
+        modelIds={['m3']}
+        models={models}
+        onBack={vi.fn()}
+        onModelClick={vi.fn()}
+        activeCollection={{
+          id: 'col-1',
+          name: 'Favorites',
+          modelIds: ['m3'],
+          groups: [{ id: 'grp-1', name: 'Dragon Model', description: '', modelIds: [] }],
+        }}
+      />
+    )
+
+    expect(screen.getByText('Dragon Model')).toBeInTheDocument()
+    expect(screen.getByText(/no variants yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /group actions/i })).toBeInTheDocument()
+  })
 })

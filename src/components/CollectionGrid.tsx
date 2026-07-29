@@ -9,6 +9,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import type { AppConfig } from '../types/config';
 import { SelectionModeControls } from './SelectionModeControls';
+import CollectionEditDrawer from './CollectionEditDrawer';
 import { Collapsible, CollapsibleContent } from './ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
@@ -84,14 +85,15 @@ export default function CollectionGrid({
     const groups = Array.isArray(activeCollection?.groups) ? activeCollection.groups : [];
     const modelMap = new Map(items.map((model) => [model.id, model]));
 
-    return groups
-      .map((group) => ({
-        ...group,
-        visibleModels: (group.modelIds || [])
-          .map((modelId) => modelMap.get(modelId))
-          .filter(Boolean) as Model[],
-      }))
-      .filter((group) => group.visibleModels.length > 0);
+    // A group with no visible members is still listed: the server keeps empty
+    // groups so their name survives, and hiding them here would leave the user
+    // no way to rename or ungroup them.
+    return groups.map((group) => ({
+      ...group,
+      visibleModels: (group.modelIds || [])
+        .map((modelId) => modelMap.get(modelId))
+        .filter(Boolean) as Model[],
+    }));
   }, [activeCollection?.groups, items]);
 
   const groupedVisibleIds = useMemo(() => {
@@ -107,6 +109,7 @@ export default function CollectionGrid({
     [groupedVisibleIds, items]
   );
 
+  const [isCreateCollectionOpen, setIsCreateCollectionOpen] = useState(false);
   const [isGroupDrawerOpen, setIsGroupDrawerOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<CollectionGroup | null>(null);
   const [groupToRemove, setGroupToRemove] = useState<CollectionGroup | null>(null);
@@ -114,6 +117,7 @@ export default function CollectionGrid({
   const [expandedGroupIds, setExpandedGroupIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    setIsCreateCollectionOpen(false);
     setIsGroupDrawerOpen(false);
     setEditingGroup(null);
     setGroupToRemove(null);
@@ -206,12 +210,11 @@ export default function CollectionGrid({
           onEnterSelectionMode={onToggleSelectionMode}
           onExitSelectionMode={onToggleSelectionMode}
           onBulkEdit={onBulkEdit}
-          onCreateCollection={selectedCount > 0 ? () => {
+          onCreateCollection={selectedCount > 0 ? () => setIsCreateCollectionOpen(true) : undefined}
+          onGroupSelection={selectedCount > 0 ? () => {
             setEditingGroup(null);
             setIsGroupDrawerOpen(true);
           } : undefined}
-          createActionLabel="Group"
-          createActionTitle="Group selected models"
           onBulkDelete={onBulkDelete ? handleBulkDeleteClick : undefined}
           onSelectAll={onSelectAll}
           onDeselectAll={onDeselectAll}
@@ -252,26 +255,36 @@ export default function CollectionGrid({
                               onClick={() => setExpandedGroupIds((prev) => ({ ...prev, [group.id]: !isExpanded }))}
                             >
                               <div className="w-24 shrink-0">
-                                <ImageWithFallback
-                                  src={coverModel ? resolveModelThumbnail(coverModel) : ''}
-                                  alt={group.name}
-                                  className="h-24 w-24 rounded-lg border object-cover"
-                                  draggable={false}
-                                />
+                                {/* Badged like a collection cover, so a group is not
+                                    mistaken for an unlabelled collection. */}
+                                <div className="relative h-24 w-24">
+                                  <ImageWithFallback
+                                    src={coverModel ? resolveModelThumbnail(coverModel) : ''}
+                                    alt={group.name}
+                                    className="h-24 w-24 rounded-lg border object-cover"
+                                    draggable={false}
+                                  />
+                                  <Badge variant="secondary" className="absolute top-2 left-2 text-xs pointer-events-none">
+                                    Group
+                                  </Badge>
+                                </div>
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-start gap-3">
                                   <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <h3 className="font-semibold text-lg truncate">{group.name}</h3>
-                                      <Badge variant="outline">Group</Badge>
-                                    </div>
+                                    <h3 className="font-semibold text-lg truncate">{group.name}</h3>
                                     {group.description && (
                                       <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{group.description}</p>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                    <span>{visibleCount === totalCount ? `${totalCount} variants` : `${visibleCount} of ${totalCount} variants`}</span>
+                                    <span>
+                                      {totalCount === 0
+                                        ? 'No variants yet'
+                                        : visibleCount === totalCount
+                                          ? `${totalCount} variants`
+                                          : `${visibleCount} of ${totalCount} variants`}
+                                    </span>
                                     <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                   </div>
                                 </div>
@@ -307,6 +320,11 @@ export default function CollectionGrid({
 
                           <CollapsibleContent>
                             <div className="border-t px-4 pb-4 pt-4">
+                              {group.visibleModels.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                  This group is empty. Select models in the collection and group them here to refill it.
+                                </p>
+                              ) : (
                               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                                 {group.visibleModels.map((model, index) => {
                                   const modelIndex = modelIndexMap.get(model.id) ?? index;
@@ -323,6 +341,7 @@ export default function CollectionGrid({
                                   );
                                 })}
                               </div>
+                              )}
                             </div>
                           </CollapsibleContent>
                         </div>
@@ -363,6 +382,25 @@ export default function CollectionGrid({
           )}
         </div>
       </ScrollArea>
+      <CollectionEditDrawer
+        open={isCreateCollectionOpen}
+        onOpenChange={setIsCreateCollectionOpen}
+        collection={null}
+        categories={config?.categories || []}
+        // Offering the current collection as the removal target is what makes this
+        // a move: the selection joins the new collection and leaves this one.
+        removalCollection={activeCollection ?? null}
+        initialModelIds={selectedModelIds}
+        onSaved={() => {
+          setIsCreateCollectionOpen(false);
+          onCollectionChanged?.();
+          onDeselectAll?.();
+          if (isSelectionMode) {
+            onToggleSelectionMode?.();
+          }
+        }}
+      />
+
       <CollectionGroupDrawer
         open={isGroupDrawerOpen}
         onOpenChange={(open) => {
