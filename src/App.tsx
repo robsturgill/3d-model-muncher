@@ -132,7 +132,23 @@ function AppContent() {
 
     return applyFiltersToModels(scopedModels, filters);
   };
-  
+
+  // The filter state a fresh context starts from, per the user's configured defaults.
+  // Switching between the library and a collection resets to this, so the sidebar
+  // controls and the models actually on screen never disagree.
+  const buildDefaultFilters = () => ({
+    search: '',
+    category: appConfig?.filters?.defaultCategory || 'all',
+    printStatus: appConfig?.filters?.defaultPrintStatus || 'all',
+    license: appConfig?.filters?.defaultLicense || 'all',
+    fileType: 'all',
+    collectionId: 'all',
+    tags: [] as string[],
+    showHidden: false,
+    showMissingImages: false,
+    sortBy: appConfig?.filters?.defaultSortBy || 'none',
+  });
+
   // Delete file type selection state
   const [includeThreeMfFiles, setIncludeThreeMfFiles] = useState(false);
 
@@ -730,10 +746,12 @@ function AppContent() {
       if (currentView === 'collection-view' && activeCollection) {
         const setIds = new Set(activeCollection.modelIds || []);
         let base = updatedModels.filter(m => setIds.has(m.id));
-        // In collection view, ignore 'collections' fileType filter (not relevant)
+        // In collection view, ignore the 'collections' fileType filter and the
+        // collection filter itself - neither is offered by the sidebar here.
         const filtersForCollection = {
           ...lastFilters,
           fileType: lastFilters.fileType?.toLowerCase() === 'collections' ? 'all' : lastFilters.fileType,
+          collectionId: 'all',
         } as any as FilterState;
         const filtered = applyCollectionScopedFilters(base, filtersForCollection as FilterState & { collectionId?: string });
         const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
@@ -867,7 +885,11 @@ function AppContent() {
       // In collection view, show all models in the collection including hidden
       setFilteredModels(base);
     } catch { /* ignore */ }
-    // Reset the sidebar controls to defaults for the new context
+    // Reset the sidebar controls to defaults for the new context. lastFilters has
+    // to be reset alongside them, or the sidebar shows cleared controls while the
+    // next refresh silently reapplies the library's filters to the collection.
+    // showHidden matches what the sidebar forces in collection view.
+    setLastFilters({ ...buildDefaultFilters(), showHidden: true });
     setSidebarResetKey(k => k + 1);
   };
   const refreshCollections = async () => {
@@ -901,6 +923,9 @@ function AppContent() {
             const filtersForCollection = {
               ...lastFilters,
               fileType: lastFilters.fileType?.toLowerCase() === 'collections' ? 'all' : lastFilters.fileType,
+              // The sidebar hides the collection filter in this view, so scoping by it
+              // here would intersect the open collection with an unrelated one.
+              collectionId: 'all',
               // In collection view, default to including hidden unless explicitly toggled by user later
               showHidden: true,
             } as any as FilterState;
@@ -917,25 +942,35 @@ function AppContent() {
             }
           }
         }
-      } catch (e) { /* ignore */ }
-    } catch (e) { /* ignore */ }
+      } catch (e) {
+        console.error('Failed to refresh models:', e);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      // Reported rather than swallowed: callers such as the upload dialog need to
+      // tell the user when the grid they are looking at is stale.
+      console.error('Failed to refresh collections:', e);
+      return false;
+    }
   };
-  // Listen for collection-created events from child dialogs
+  // A collection filter must not outlive the collection it points at. Deleting the
+  // collection you are filtering by would otherwise leave every model filtered out
+  // with no way back except Clear Filters, since the dropdown falls back to showing
+  // "All Collections" while still emitting the missing id.
   useEffect(() => {
-    const handler = (ev: Event) => {
-      try {
-        const anyEv: any = ev as any;
-        const col = anyEv?.detail as Collection | undefined;
-        if (col && Array.isArray(col.modelIds)) {
-          setActiveCollection(col);
-          setCurrentView('collection-view');
-        }
-      } catch { /* ignore */ }
-      refreshCollections();
-    };
-    window.addEventListener('collection-created', handler as any);
-    return () => window.removeEventListener('collection-created', handler as any);
-  }, []);
+    const selectedId = lastFilters.collectionId;
+    if (!selectedId || selectedId === 'all') return;
+    if (collections.some(collection => collection.id === selectedId)) return;
+
+    const nextFilters = { ...lastFilters, collectionId: 'all' };
+    setLastFilters(nextFilters);
+    setSidebarResetKey(k => k + 1);
+    if (currentView !== 'collection-view' && (nextFilters.fileType || '').toLowerCase() !== 'collections') {
+      const filtered = applyCollectionScopedFilters(models, nextFilters as FilterState & { collectionId?: string });
+      setFilteredModels(sortModels(filtered as any[], (nextFilters.sortBy as SortKey) || 'none'));
+    }
+  }, [collections, lastFilters, models, currentView]);
 
   // Listen for collection-updated events from ModelDetailsDrawer (add/remove)
   useEffect(() => {
@@ -1329,16 +1364,14 @@ function AppContent() {
               models={filteredModels}
               onBack={() => {
                 if (collectionReturnView === 'models') {
-                  // Return to main grid: reset filters and show all models
+                  // Return to main grid on the same defaults the sidebar resets to,
+                  // rather than carrying the collection view's filters back out.
                   setCurrentView('models');
-                  // Reapply last filters so hidden models remain hidden (and other filters persist)
-                  if ((lastFilters.fileType || '').toLowerCase() === 'collections') {
-                    setFilteredModels([]);
-                  } else {
-                    const filtered = applyCollectionScopedFilters(models, lastFilters as FilterState & { collectionId?: string });
-                    const sorted = sortModels(filtered as any[], (lastFilters.sortBy as SortKey) || 'none');
-                    setFilteredModels(sorted);
-                  }
+                  const defaults = buildDefaultFilters();
+                  setLastFilters(defaults);
+                  const filtered = applyCollectionScopedFilters(models, defaults as FilterState & { collectionId?: string });
+                  const sorted = sortModels(filtered as any[], (defaults.sortBy as SortKey) || 'none');
+                  setFilteredModels(sorted);
                   setSidebarResetKey(k => k + 1);
                   setSelectedModelIds([]);
                   setSelectionAnchorIndex(null);
@@ -1500,7 +1533,18 @@ function AppContent() {
       <ModelUploadDialog
         isOpen={isUploadDialogOpen}
         onClose={() => setIsUploadDialogOpen(false)}
-        onUploaded={refreshCollections}
+        onUploaded={async () => {
+          const refreshed = await refreshCollections();
+          if (refreshed) {
+            toast("Models reloaded successfully", {
+              description: "The library now includes your uploaded files"
+            });
+          } else {
+            toast("Failed to reload models", {
+              description: "Your files uploaded, but the library could not be refreshed. Try the refresh button."
+            });
+          }
+        }}
       />
       <CollectionEditDrawer
         open={isCreateEmptyCollectionOpen}
