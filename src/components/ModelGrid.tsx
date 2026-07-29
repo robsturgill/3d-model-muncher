@@ -5,18 +5,15 @@ import type { Collection } from "../types/collection";
 import { ModelCard } from "./ModelCard";
 import { CollectionCard } from "./CollectionCard";
 import { CollectionListRow } from "./CollectionListRow";
-import { ImageWithFallback } from "./ImageWithFallback";
-import { resolveModelThumbnail } from '../utils/thumbnailUtils';
 import { ConfigManager } from "../utils/configManager";
 import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
-import { Checkbox } from "./ui/checkbox";
-import { LayoutGrid, List, Sliders, Clock, Weight, HardDrive } from "lucide-react";
-import { Badge } from "./ui/badge";
+import { LayoutGrid, List, Sliders } from "lucide-react";
 import CollectionEditDrawer from "./CollectionEditDrawer";
 import { SortKey, getModelTimestamp, getCollectionTimestamp } from "../utils/sortUtils";
 import { SelectionModeControls } from "./SelectionModeControls";
+import { ModelListRow } from "./ModelListRow";
 
 interface ModelGridProps {
   models: Model[];
@@ -375,143 +372,15 @@ export function ModelGrid({
                   const model = it.data;
                   const index = modelIndexMap.get(model.id) ?? idx;
                   return (
-                    <div
+                    <ModelListRow
                       key={model.id}
-                      data-testid={`row-${model.id}`}
+                      model={model}
+                      isSelectionMode={isSelectionMode}
+                      isSelected={selectedModelIds.includes(model.id)}
                       onClick={(e) => handleModelInteraction(e, model, index)}
-                  onMouseDown={(e) => {
-                    // Prevent text selection when Shift-clicking in selection mode
-                    if (isSelectionMode && e.shiftKey) e.preventDefault();
-                  }}
-                  className={`flex items-center gap-4 p-4 bg-card rounded-lg border hover:bg-accent/50 hover:border-primary/30 cursor-pointer transition-all duration-200 group shadow-sm hover:shadow-md ${
-                    isSelectionMode && selectedModelIds.includes(model.id) 
-                      ? 'border-primary bg-primary/5' 
-                      : ''
-                  }`}
-                >
-                  {/* Selection Checkbox - Only show in selection mode */}
-                  {isSelectionMode && (
-                    <div className="flex-shrink-0 pl-1">
-                      <Checkbox
-                        checked={selectedModelIds.includes(model.id)}
-                        // handle clicks to capture shiftKey; avoid double firing on change
-                        onCheckedChange={() => { /* handled by click */ }}
-                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleCheckboxClick(e, model.id, index)}
-                        data-testid={`checkbox-${model.id}`}
-                        className="w-5 h-5"
-                      />
-                    </div>
-                  )}
-
-                  {/* Thumbnail */}
-                  <div className="flex-shrink-0">
-                      <div className="relative">
-                      <ImageWithFallback
-                        src={resolveModelThumbnail(model)}
-                        alt={model.name}
-                        className={`w-20 h-20 object-cover rounded-lg border group-hover:border-primary/30 transition-colors ${
-                          isSelectionMode && selectedModelIds.includes(model.id) 
-                            ? 'border-primary' 
-                            : ''
-                        }`}
-                      />
-                      {/* Print status overlay (hideable via config.showPrintedBadge) */}
-                      {(() => {
-                        const effectiveCfg = providedConfig ?? ConfigManager.loadConfig();
-                        const showBadge = effectiveCfg?.settings?.showPrintedBadge !== false;
-
-                        // If model is NOT printed, always show the not-printed dot
-                        if (!model.isPrinted) {
-                          return <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card bg-yellow-500`} />;
-                        }
-
-                        // If model is printed, only show the printed (green) dot when allowed
-                        if (model.isPrinted && showBadge) {
-                          return <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card bg-green-700`} />;
-                        }
-
-                        return null;
-                      })()}
-                    </div>
-                  </div>
-                  
-                  {/* Model Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div className="min-w-0 flex-1">
-                        <h3 className={`font-semibold group-hover:text-primary transition-colors truncate text-lg ${
-                          isSelectionMode && selectedModelIds.includes(model.id) 
-                            ? 'text-primary' 
-                            : 'text-card-foreground'
-                        }`}>
-                          {model.name}
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                          {model.description}
-                        </p>
-                        
-                        {/* Category */}
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Badge variant="outline" className="text-xs font-medium">
-                            {model.category}
-                          </Badge>
-                          {model.hidden && (
-                            <Badge variant="outline" className="text-xs bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300">
-                              Hidden
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        {/* Tags */}
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {(model.tags || []).slice(0, 4).map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                          {(model.tags || []).length > 4 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{(model.tags || []).length - 4}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Status and Stats */}
-                      <div className="flex flex-col items-end gap-3 ml-6">
-                        {(() => {
-                          const effectiveCfg = providedConfig ?? ConfigManager.loadConfig();
-                          const showBadge = effectiveCfg?.settings?.showPrintedBadge !== false;
-                          if (!showBadge) return null;
-
-                          return (
-                            <Badge 
-                              variant={model.isPrinted ? "default" : "secondary"}
-                              className="font-medium"
-                            >
-                              {model.isPrinted ? "✓ Printed" : "○ Not Printed"}
-                            </Badge>
-                          );
-                        })()}
-                        
-                        <div className="text-xs text-muted-foreground text-right space-y-1">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>{model.printTime}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Weight className="h-3 w-3" />
-                            <span>{model.filamentUsed}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <HardDrive className="h-3 w-3" />
-                            <span>{model.fileSize}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                      onCheckboxClick={(e) => handleCheckboxClick(e, model.id, index)}
+                      config={providedConfig}
+                    />
                   );
                 })
               ) : (
@@ -528,143 +397,15 @@ export function ModelGrid({
                     />
                   ))}
                   {models.map((model, index) => (
-                      <div
-                        key={model.id}
-                        data-testid={`row-${model.id}`}
-                        onClick={(e) => handleModelInteraction(e, model, index)}
-                      onMouseDown={(e) => {
-                        // Prevent text selection when Shift-clicking in selection mode
-                        if (isSelectionMode && e.shiftKey) e.preventDefault();
-                      }}
-                      className={`flex items-center gap-4 p-4 bg-card rounded-lg border hover:bg-accent/50 hover:border-primary/30 cursor-pointer transition-all duration-200 group shadow-sm hover:shadow-md ${
-                        isSelectionMode && selectedModelIds.includes(model.id) 
-                          ? 'border-primary bg-primary/5' 
-                          : ''
-                      }`}
-                    >
-                      {/* Selection Checkbox - Only show in selection mode */}
-                      {isSelectionMode && (
-                        <div className="flex-shrink-0 pl-1">
-                          <Checkbox
-                            checked={selectedModelIds.includes(model.id)}
-                            // handle clicks to capture shiftKey; avoid double firing on change
-                            onCheckedChange={() => { /* handled by click */ }}
-                            onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleCheckboxClick(e, model.id, index)}
-                            data-testid={`checkbox-${model.id}`}
-                            className="w-5 h-5"
-                          />
-                        </div>
-                      )}
-                      
-                      {/* Thumbnail */}
-                      <div className="flex-shrink-0">
-                          <div className="relative">
-                          <ImageWithFallback
-                            src={resolveModelThumbnail(model)}
-                            alt={model.name}
-                            className={`w-20 h-20 object-cover rounded-lg border group-hover:border-primary/30 transition-colors ${
-                              isSelectionMode && selectedModelIds.includes(model.id) 
-                                ? 'border-primary' 
-                                : ''
-                            }`}
-                          />
-                          {/* Print status overlay (hideable via config.showPrintedBadge) */}
-                          {(() => {
-                            const effectiveCfg = providedConfig ?? ConfigManager.loadConfig();
-                            const showBadge = effectiveCfg?.settings?.showPrintedBadge !== false;
-
-                            // If model is NOT printed, always show the not-printed dot
-                            if (!model.isPrinted) {
-                              return <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card bg-yellow-500`} />;
-                            }
-
-                            // If model is printed, only show the printed (green) dot when allowed
-                            if (model.isPrinted && showBadge) {
-                              return <div className={`absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-card bg-green-700`} />;
-                            }
-
-                            return null;
-                          })()}
-                        </div>
-                      </div>
-                      
-                      {/* Model Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between">
-                          <div className="min-w-0 flex-1">
-                            <h3 className={`font-semibold group-hover:text-primary transition-colors truncate text-lg ${
-                              isSelectionMode && selectedModelIds.includes(model.id) 
-                                ? 'text-primary' 
-                                : 'text-card-foreground'
-                            }`}>
-                              {model.name}
-                            </h3>
-                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                              {model.description}
-                            </p>
-                            
-                            {/* Category */}
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <Badge variant="outline" className="text-xs font-medium">
-                                {model.category}
-                              </Badge>
-                              {model.hidden && (
-                                <Badge variant="outline" className="text-xs bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300">
-                                  Hidden
-                                </Badge>
-                              )}
-                            </div>
-                            
-                            {/* Tags */}
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {(model.tags || []).slice(0, 4).map((tag) => (
-                                <Badge key={tag} variant="secondary" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
-                              {(model.tags || []).length > 4 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{(model.tags || []).length - 4}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Status and Stats */}
-                          <div className="flex flex-col items-end gap-3 ml-6">
-                            {(() => {
-                              const effectiveCfg = providedConfig ?? ConfigManager.loadConfig();
-                              const showBadge = effectiveCfg?.settings?.showPrintedBadge !== false;
-                              if (!showBadge) return null;
-
-                              return (
-                                <Badge 
-                                  variant={model.isPrinted ? "default" : "secondary"}
-                                  className="font-medium"
-                                >
-                                  {model.isPrinted ? "✓ Printed" : "○ Not Printed"}
-                                </Badge>
-                              );
-                            })()}
-                            
-                            <div className="text-xs text-muted-foreground text-right space-y-1">
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                <span>{model.printTime}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Weight className="h-3 w-3" />
-                                <span>{model.filamentUsed}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <HardDrive className="h-3 w-3" />
-                                <span>{model.fileSize}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <ModelListRow
+                      key={model.id}
+                      model={model}
+                      isSelectionMode={isSelectionMode}
+                      isSelected={selectedModelIds.includes(model.id)}
+                      onClick={(e) => handleModelInteraction(e, model, index)}
+                      onCheckboxClick={(e) => handleCheckboxClick(e, model.id, index)}
+                      config={providedConfig}
+                    />
                   ))}
                 </>
               )}

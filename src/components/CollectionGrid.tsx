@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronDown, MoreVertical, Pencil, Trash2 } from 'lucide-rea
 import type { Model } from '../types/model';
 import type { Collection, CollectionGroup } from '../types/collection';
 import { ModelCard } from './ModelCard';
+import { ModelListRow } from './ModelListRow';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -325,18 +326,24 @@ export default function CollectionGrid({
                                   This group is empty. Select models in the collection and group them here to refill it.
                                 </p>
                               ) : (
-                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                              // Variants of one model differ by little more than
+                              // scale, so rows read better than cards here.
+                              <div className="space-y-2">
                                 {group.visibleModels.map((model, index) => {
                                   const modelIndex = modelIndexMap.get(model.id) ?? index;
                                   return (
-                                    <ModelCard
+                                    <ModelListRow
                                       key={model.id}
                                       model={model}
-                                      onClick={(event) => handleModelInteraction(event, model, modelIndex)}
+                                      compact
                                       isSelectionMode={isSelectionMode}
                                       isSelected={selectedModelIds.includes(model.id)}
-                                      onSelectionChange={(id, shiftKey) => onModelSelection?.(id, { shiftKey, index: modelIndex })}
-                                      config={config || undefined}
+                                      onClick={(event) => handleModelInteraction(event, model, modelIndex)}
+                                      onCheckboxClick={(event) => {
+                                        event.stopPropagation();
+                                        onModelSelection?.(model.id, { shiftKey: event.shiftKey, index: modelIndex });
+                                      }}
+                                      config={config}
                                     />
                                   );
                                 })}
