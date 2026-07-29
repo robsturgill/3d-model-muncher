@@ -365,7 +365,7 @@ export function ModelGrid({
                         key={`col-row-${c.id}`}
                         collection={c}
                         categories={config.categories || []}
-                        models={models}
+                        models={collectionModels}
                         onOpen={(id) => onOpenCollection?.(id)}
                         onChanged={() => onCollectionChanged?.()}
                         onDeleted={() => onCollectionChanged?.()}

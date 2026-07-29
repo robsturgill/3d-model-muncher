@@ -1,7 +1,7 @@
 import { Folder } from "lucide-react";
 import type { Collection } from "../types/collection";
 import type { Model } from "../types/model";
-import { getCollectionCoverImages } from "../utils/collectionCoverUtils";
+import { getCollectionCoverImages, resolveCollectionCoverImage } from "../utils/collectionCoverUtils";
 
 interface CollectionCoverCollageProps {
   collection: Collection;
@@ -16,6 +16,24 @@ export function CollectionCoverCollage({
   className = "",
   imageClassName = "",
 }: CollectionCoverCollageProps) {
+  const coverAlt = collection?.name || "Collection cover";
+
+  // A cover the user chose - an uploaded image, or a member picked as the
+  // cover - wins over the generated collage.
+  const chosenCover = resolveCollectionCoverImage(collection, models);
+  if (chosenCover) {
+    return (
+      <div className={`bg-muted/40 ${className}`}>
+        <img
+          src={chosenCover}
+          alt={coverAlt}
+          className={`w-full h-full object-cover ${imageClassName}`}
+          draggable={false}
+        />
+      </div>
+    );
+  }
+
   const previewImages = getCollectionCoverImages(collection, models, 4);
 
   if (previewImages.length === 0) {
@@ -36,7 +54,8 @@ export function CollectionCoverCollage({
               {src ? (
                 <img
                   src={src}
-                  alt=""
+                  // Only the first tile is labelled; the rest are decorative.
+                  alt={index === 0 ? coverAlt : ""}
                   className={`w-full h-full object-cover ${imageClassName}`}
                   draggable={false}
                 />
