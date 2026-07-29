@@ -12,11 +12,13 @@ import { toast } from 'sonner';
 import { RendererPool } from '../utils/rendererPool';
 import TagsInput from './TagsInput';
 import { ConfigManager } from '../utils/configManager';
+import type { Collection } from '../types/collection';
+import { getValidCollectionCoverId } from '../utils/collectionCoverUtils';
 
 interface ModelUploadDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onUploaded?: () => void;
+  onUploaded?: () => void | Promise<void>;
 }
 
 export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, onClose, onUploaded }: ModelUploadDialogProps) => {
@@ -33,6 +35,8 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
   const [availableCategories, setAvailableCategories] = useState<string[]>(['Uncategorized']);
   const [selectedCategory, setSelectedCategory] = useState<string>('Uncategorized');
   const [applyTags, setApplyTags] = useState<string[]>([]);
+  const [availableCollections, setAvailableCollections] = useState<Collection[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>('none');
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -135,6 +139,38 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
     }
   }
 
+  async function addUploadedModelsToCollection(modelIds: string[]) {
+    if (selectedCollectionId === 'none' || modelIds.length === 0) return;
+
+    const collection = availableCollections.find((entry) => entry.id === selectedCollectionId);
+    if (!collection) {
+      throw new Error('Selected collection not found');
+    }
+
+    const nextIds = Array.from(new Set([...(collection.modelIds || []), ...modelIds]));
+    const payload = {
+      id: collection.id,
+      name: collection.name,
+      description: collection.description || '',
+      modelIds: nextIds,
+      category: collection.category || '',
+      tags: collection.tags || [],
+      images: collection.images || [],
+      groups: collection.groups || [],
+      coverModelId: getValidCollectionCoverId(nextIds, collection.coverModelId),
+    };
+
+    const resp = await fetch('/api/collections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data?.success) {
+      throw new Error(data?.error || 'Failed to update collection');
+    }
+  }
+
   const handleSubmit = async () => {
     if (files.length === 0) {
       toast.error('No files selected');
@@ -157,6 +193,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
       toast.success(`Uploaded ${(Array.isArray(data.saved) ? data.saved.length : files.length)} files`);
 
       const savedPaths: string[] = Array.isArray(data.saved) ? data.saved : [];
+      const uploadedModelIds = new Set<string>();
 
       if (generatePreviews && savedPaths.length > 0) {
         setPreviewGenerating(true);
@@ -187,6 +224,8 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
                 
                 return false;
               }) || null;
+
+              if (candidate?.id) uploadedModelIds.add(candidate.id);
 
               await applyCategoryAndTagsTo(rel, candidate);
 
@@ -251,6 +290,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
               
               return false;
             }) || null;
+            if (candidate?.id) uploadedModelIds.add(candidate.id);
             await applyCategoryAndTagsTo(rel, candidate);
           }
         } catch (e) {
@@ -258,8 +298,23 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
         }
       }
 
+      if (selectedCollectionId !== 'none') {
+        try {
+          const resolvedModelIds = Array.from(uploadedModelIds);
+          if (resolvedModelIds.length === 0) {
+            toast.error('Uploaded files, but could not match them to models for collection assignment');
+          } else {
+            await addUploadedModelsToCollection(resolvedModelIds);
+            toast.success('Added uploaded models to the selected collection');
+          }
+        } catch (e: any) {
+          console.error('Collection update error', e);
+          toast.error(e?.message || 'Uploaded files, but failed to update collection');
+        }
+      }
+
       setFiles([]);
-      onUploaded?.();
+      await onUploaded?.();
       onClose();
     } catch (err: any) {
       console.error('Upload error', err);
@@ -277,6 +332,8 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
   setNewFolderName('');
   setSelectedCategory('Uncategorized');
   setApplyTags([]);
+    setSelectedCollectionId('none');
+    setAvailableCollections([]);
 
     (async () => {
       try {
@@ -285,6 +342,19 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
         const data = await resp.json();
         if (data && Array.isArray(data.folders)) setFolders(Array.from(new Set(['uploads', ...data.folders])));
       } catch (e) {
+        // ignore
+      }
+    })();
+
+    (async () => {
+      try {
+        const resp = await fetch('/api/collections', { cache: 'no-store' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data && data.success && Array.isArray(data.collections)) {
+          setAvailableCollections(data.collections);
+        }
+      } catch {
         // ignore
       }
     })();
@@ -329,7 +399,7 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
         <DialogHeader>
           <DialogTitle>Upload 3MF / STL Files</DialogTitle>
           <DialogDescription>
-            Choose destination, optional category and tags to apply to all uploaded models, and optionally generate previews.
+            Choose destination, optional category and tags to apply to all uploaded models, optionally add them to an existing collection, and optionally generate previews.
           </DialogDescription>
         </DialogHeader>
 
@@ -405,6 +475,29 @@ export const ModelUploadDialog: React.FC<ModelUploadDialogProps> = ({ isOpen, on
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="mb-4">
+                <div className="text-sm text-foreground mb-1">Add to collection</div>
+                <Select value={selectedCollectionId} onValueChange={(v) => setSelectedCollectionId(v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Do not add to a collection" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Do not add to a collection</SelectItem>
+                    {availableCollections
+                      .slice()
+                      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                      .map((collection) => (
+                        <SelectItem key={collection.id} value={collection.id}>
+                          {collection.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Uploaded models will be appended to the selected collection after processing.
+                </p>
               </div>
 
               <div className="mb-4">

@@ -9,6 +9,7 @@ import TagsInput from './TagsInput';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from './ui/select';
 import type { Collection } from '../types/collection';
 import type { Category } from '../types/category';
+import { getValidCollectionCoverId } from '../utils/collectionCoverUtils';
 
 interface Props {
   open: boolean;
@@ -112,7 +113,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
           category: (existing as any).category || '',
           tags: (existing as any).tags || [],
           images: (existing as any).images || [],
-          coverModelId: (existing as any).coverModelId,
+          coverModelId: getValidCollectionCoverId(nextIds, (existing as any).coverModelId),
         };
       } else {
         // Create new or update current collection (edit)
@@ -126,9 +127,10 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
         if (isEdit) {
           payload.id = collection!.id;
           payload.modelIds = collection!.modelIds;
-          payload.coverModelId = collection!.coverModelId;
+          payload.coverModelId = getValidCollectionCoverId(collection!.modelIds, collection!.coverModelId);
         } else {
           payload.modelIds = Array.isArray(initialModelIds) ? initialModelIds : [];
+          payload.coverModelId = getValidCollectionCoverId(payload.modelIds);
         }
       }
 
@@ -165,7 +167,7 @@ export default function CollectionEditDrawer({ open, onOpenChange, collection, c
         category: (removalTarget as any).category || '',
         tags: (removalTarget as any).tags || [],
         images: (removalTarget as any).images || [],
-        coverModelId: (removalTarget as any).coverModelId,
+        coverModelId: getValidCollectionCoverId(remainingIds, (removalTarget as any).coverModelId),
       };
 
       const resp = await fetch('/api/collections', {

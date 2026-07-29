@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Filter, Layers, X, Settings, FileText, Eye, CircleCheckBig, FileBox, Tag } from "lucide-react";
+import { Search, Filter, Layers, X, Settings, FileText, Eye, CircleCheckBig, FileBox, Tag, List } from "lucide-react";
 import * as LucideIcons from 'lucide-react';
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -9,6 +9,7 @@ import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Category } from "../types/category";
 import { Model } from "../types/model";
+import type { Collection } from "../types/collection";
 import { ScrollArea } from "./ui/scroll-area";
 
 interface FilterSidebarProps {
@@ -18,6 +19,7 @@ interface FilterSidebarProps {
     printStatus: string;
     license: string;
     fileType: string;
+    collectionId?: string;
     tags: string[];
     showHidden: boolean;
     showMissingImages: boolean;
@@ -31,12 +33,15 @@ interface FilterSidebarProps {
   onSettingsClick: () => void;
   categories: Category[];
   models: Model[];
+  collections?: Collection[];
+  showCollectionFilter?: boolean;
   initialFilters?: {
     search: string;
     category: string;
     printStatus: string;
     license: string;
     fileType: string;
+    collectionId?: string;
     tags: string[];
     showHidden: boolean;
     showMissingImages: boolean;
@@ -60,7 +65,9 @@ export function FilterSidebar({
   onClose,
   onSettingsClick,
   categories,
-  models
+  models,
+  collections = [],
+  showCollectionFilter = true
   , initialFilters
 }: FilterSidebarProps) {
   const TAG_DISPLAY_LIMIT = 25;
@@ -102,6 +109,7 @@ export function FilterSidebar({
   const [selectedPrintStatus, setSelectedPrintStatus] = useState(initialFilters?.printStatus ?? "all");
   const [selectedLicense, setSelectedLicense] = useState(initialFilters?.license ?? "all");
   const [selectedFileType, setSelectedFileType] = useState(initialFilters?.fileType ?? "all");
+  const [selectedCollectionId, setSelectedCollectionId] = useState(initialFilters?.collectionId ?? "all");
   const [selectedTags, setSelectedTags] = useState<string[]>(initialFilters?.tags ?? []);
   const [showHidden, setShowHidden] = useState(initialFilters?.showHidden ?? false);
   const [showMissingImages, setShowMissingImages] = useState(initialFilters?.showMissingImages ?? false);
@@ -147,6 +155,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: selectedTags,
       showHidden: showHidden,
       showMissingImages: showMissingImages,
@@ -165,6 +174,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: selectedTags,
       showHidden: showHidden,
       showMissingImages: showMissingImages,
@@ -182,6 +192,7 @@ export function FilterSidebar({
       printStatus: value,
       license: selectedLicense,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: selectedTags,
       showHidden: showHidden,
       showMissingImages: showMissingImages,
@@ -197,6 +208,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: value,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: selectedTags,
       showHidden: showHidden,
       showMissingImages: showMissingImages,
@@ -212,6 +224,23 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: value,
+      collectionId: selectedCollectionId,
+      tags: selectedTags,
+      showHidden: showHidden,
+      showMissingImages: showMissingImages,
+      sortBy: selectedSort,
+    });
+  };
+
+  const handleCollectionChange = (value: string) => {
+    setSelectedCollectionId(value);
+    onFilterChange({
+      search: searchTerm,
+      category: selectedCategory,
+      printStatus: selectedPrintStatus,
+      license: selectedLicense,
+      fileType: selectedFileType,
+      collectionId: value,
       tags: selectedTags,
       showHidden: showHidden,
       showMissingImages: showMissingImages,
@@ -227,6 +256,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: selectedTags,
       showHidden: showHidden,
       showMissingImages: showMissingImages,
@@ -248,6 +278,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: newSelectedTags,
       showHidden: showHidden,
       showMissingImages: showMissingImages,
@@ -263,6 +294,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: selectedTags,
       showHidden: checked,
       showMissingImages: showMissingImages,
@@ -278,6 +310,7 @@ export function FilterSidebar({
       printStatus: selectedPrintStatus,
       license: selectedLicense,
       fileType: selectedFileType,
+      collectionId: selectedCollectionId,
       tags: selectedTags,
       showHidden: showHidden,
       showMissingImages: checked,
@@ -291,6 +324,7 @@ export function FilterSidebar({
     setSelectedPrintStatus("all");
     setSelectedLicense("all");
     setSelectedFileType("all");
+    setSelectedCollectionId("all");
     setSelectedTags([]);
     setShowHidden(false);
     setShowMissingImages(false);
@@ -302,6 +336,7 @@ export function FilterSidebar({
       printStatus: "all",
       license: "all",
       fileType: "all",
+      collectionId: "all",
       tags: [],
       showHidden: false,
       showMissingImages: false,
@@ -447,6 +482,28 @@ export function FilterSidebar({
                 </SelectContent>
               </Select>
             </div>
+
+            {showCollectionFilter && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <List className="h-4 w-4 text-foreground" />
+                  <label className="text-sm font-medium text-foreground">Collection</label>
+                </div>
+                <Select value={selectedCollectionId} onValueChange={handleCollectionChange}>
+                  <SelectTrigger data-testid="filter-collection-select" className="bg-background border-border text-foreground focus:ring-2 focus:ring-primary">
+                    <SelectValue placeholder="All Collections" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Collections</SelectItem>
+                    {collections.map((collection) => (
+                      <SelectItem key={collection.id} value={collection.id}>
+                        {collection.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Print Status */}
             <div className="space-y-1">

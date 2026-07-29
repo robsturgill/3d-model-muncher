@@ -46,6 +46,7 @@ import { FilterSidebar } from '../../src/components/FilterSidebar'
 describe('FilterSidebar file type includes Collections', () => {
   const categories = [{ id: 'cat1', label: 'Organizers', icon: 'Folder' }] as any
   const models = [] as any
+  const collections = [{ id: 'col-1', name: 'Dragon Set', modelIds: ['m1'] }] as any
 
   it('shows Collections option and triggers onFilterChange with fileType collections', async () => {
     const onFilterChange = vi.fn()
@@ -58,6 +59,7 @@ describe('FilterSidebar file type includes Collections', () => {
         onSettingsClick={() => {}}
         categories={categories}
         models={models}
+        collections={collections}
         initialFilters={{ search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', tags: [], showHidden: false, showMissingImages: false }}
       />
     )
@@ -70,5 +72,29 @@ describe('FilterSidebar file type includes Collections', () => {
     expect(onFilterChange).toHaveBeenCalled()
     const last = onFilterChange.mock.calls.at(-1)?.[0]
     expect(last?.fileType).toBe('collections')
+  })
+
+  it('triggers onFilterChange with the selected collection id', async () => {
+    const onFilterChange = vi.fn()
+    render(
+      <FilterSidebar
+        onFilterChange={onFilterChange}
+        onCategoryChosen={() => {}}
+        isOpen
+        onClose={() => {}}
+        onSettingsClick={() => {}}
+        categories={categories}
+        models={models}
+        collections={collections}
+        initialFilters={{ search: '', category: 'all', printStatus: 'all', license: 'all', fileType: 'all', collectionId: 'all', tags: [], showHidden: false, showMissingImages: false }}
+      />
+    )
+
+    const collectionSelect = screen.getByTestId('filter-collection-select') as HTMLSelectElement
+    fireEvent.change(collectionSelect, { target: { value: 'col-1' } })
+
+    expect(onFilterChange).toHaveBeenCalled()
+    const last = onFilterChange.mock.calls.at(-1)?.[0]
+    expect(last?.collectionId).toBe('col-1')
   })
 })

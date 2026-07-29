@@ -156,6 +156,101 @@ const collectionsFilePath = (() => {
   return defaultPath;
 })();
 
+function uniqueStringArray(values) {
+  if (!Array.isArray(values)) return [];
+  return Array.from(new Set(values.filter(value => typeof value === 'string' && value.trim() !== '')));
+}
+
+// Guards so an unbounded client payload can't be persisted into collections.json.
+const MAX_GROUPS_PER_COLLECTION = 200;
+const MAX_MODELS_PER_GROUP = 5000;
+const MAX_GROUP_TEXT_LENGTH = 500;
+
+// Thrown by the group helpers so the route handler can turn these into 400s.
+class CollectionValidationError extends Error {}
+
+function normalizeGroupText(value, fallback) {
+  const text = typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  if (text.length > MAX_GROUP_TEXT_LENGTH) {
+    throw new CollectionValidationError(`Group name and description must be ${MAX_GROUP_TEXT_LENGTH} characters or fewer`);
+  }
+  return text;
+}
+
+function normalizeGroupId(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : makeId('grp');
+}
+
+// Normalize a client-supplied groups array against the collection's modelIds.
+// `modelIds` is the single source of truth for membership: a group can only
+// reference models that are already in the collection, and never adds any.
+// Empty groups are kept so a group that loses its last member keeps its name.
+function normalizeCollectionGroups(groups, allowedModelIds) {
+  if (!Array.isArray(groups) || groups.length === 0) return [];
+  if (groups.length > MAX_GROUPS_PER_COLLECTION) {
+    throw new CollectionValidationError(`A collection cannot have more than ${MAX_GROUPS_PER_COLLECTION} groups`);
+  }
+
+  const allowed = new Set(uniqueStringArray(allowedModelIds));
+  const claimedBy = new Map();
+  const normalized = [];
+
+  for (const group of groups) {
+    if (!group || typeof group !== 'object') continue;
+
+    const name = normalizeGroupText(group.name, 'Untitled group');
+    const description = typeof group.description === 'string' ? normalizeGroupText(group.description, '') : '';
+    const modelIds = uniqueStringArray(group.modelIds);
+
+    if (modelIds.length > MAX_MODELS_PER_GROUP) {
+      throw new CollectionValidationError(`A group cannot contain more than ${MAX_MODELS_PER_GROUP} models`);
+    }
+
+    for (const modelId of modelIds) {
+      if (!allowed.has(modelId)) {
+        throw new CollectionValidationError(`Group "${name}" references model ${modelId}, which is not in the collection`);
+      }
+      const owner = claimedBy.get(modelId);
+      if (owner !== undefined) {
+        throw new CollectionValidationError(`Model ${modelId} cannot belong to more than one group ("${owner}" and "${name}")`);
+      }
+      claimedBy.set(modelId, name);
+    }
+
+    // Built key by key rather than spread, so unexpected client keys never persist.
+    normalized.push({ id: normalizeGroupId(group.id), name, description, modelIds });
+  }
+
+  return normalized;
+}
+
+// Used when a request omits `groups`: drop members that are no longer in the
+// collection, so removing a model also removes it from whichever group held it.
+function reconcileCollectionGroups(groups, allowedModelIds) {
+  if (!Array.isArray(groups) || groups.length === 0) return [];
+  const allowed = new Set(uniqueStringArray(allowedModelIds));
+  return groups
+    .filter(group => group && typeof group === 'object')
+    .map(group => ({
+      id: normalizeGroupId(group.id),
+      name: typeof group.name === 'string' && group.name.trim() ? group.name.trim() : 'Untitled group',
+      description: typeof group.description === 'string' ? group.description : '',
+      modelIds: uniqueStringArray(group.modelIds).filter(modelId => allowed.has(modelId)),
+    }));
+}
+
+// Shape a collection for an API response without persisting anything. Read paths
+// must not rewrite stored data: normalizing inside loadCollections() meant a write
+// to one collection silently rewrote every other collection on disk.
+function toCollectionView(collection) {
+  if (!collection || typeof collection !== 'object') return collection;
+  return {
+    ...collection,
+    modelIds: uniqueStringArray(collection.modelIds),
+    groups: Array.isArray(collection.groups) ? collection.groups : [],
+  };
+}
+
 function loadCollections() {
   try {
     if (!fs.existsSync(collectionsFilePath)) return [];
@@ -253,7 +348,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/collections', (req, res) => {
   try {
     const cols = loadCollections();
-    res.json({ success: true, collections: cols });
+    res.json({ success: true, collections: cols.map(toCollectionView) });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Failed to load collections' });
   }
@@ -262,16 +357,22 @@ app.get('/api/collections', (req, res) => {
 // Create or update a collection
 app.post('/api/collections', (req, res) => {
   try {
-    const { id, name, description = '', modelIds = [], coverModelId, category = '', tags = [], images = [] } = req.body || {};
+    const { id, name, description = '', modelIds = [], coverModelId, category = '', tags = [], images = [], groups } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ success: false, error: 'Name is required' });
     }
     if (!Array.isArray(modelIds)) {
       return res.status(400).json({ success: false, error: 'modelIds must be an array' });
     }
+    if (groups !== undefined && !Array.isArray(groups)) {
+      return res.status(400).json({ success: false, error: 'groups must be an array when provided' });
+    }
 
     const now = new Date().toISOString();
-    const normalizedIds = Array.from(new Set(modelIds.filter(x => typeof x === 'string' && x.trim() !== '')));
+    const body = req.body || {};
+    const hasGroupsPayload = Object.prototype.hasOwnProperty.call(body, 'groups');
+    // An absent `modelIds` means "leave membership alone"; an empty array means "clear it".
+    const hasModelIdsPayload = Object.prototype.hasOwnProperty.call(body, 'modelIds');
 
     const cols = loadCollections();
     let result;
@@ -281,7 +382,11 @@ app.post('/api/collections', (req, res) => {
         return res.status(404).json({ success: false, error: 'Collection not found' });
       }
       const prev = cols[idx] || { modelIds: [] };
-      const updated = { ...prev, name, description, modelIds: normalizedIds, coverModelId, lastModified: now };
+      const normalizedIds = hasModelIdsPayload ? uniqueStringArray(modelIds) : uniqueStringArray(prev.modelIds);
+      const nextGroups = hasGroupsPayload
+        ? normalizeCollectionGroups(groups, normalizedIds)
+        : reconcileCollectionGroups(prev.groups, normalizedIds);
+      const updated = { ...prev, name, description, modelIds: normalizedIds, coverModelId, groups: nextGroups, lastModified: now };
       if (typeof category === 'string') updated.category = category;
       if (Array.isArray(tags)) updated.tags = Array.from(new Set(tags.filter(t => typeof t === 'string')));
       if (Array.isArray(images)) updated.images = images.filter(s => typeof s === 'string');
@@ -338,7 +443,9 @@ app.post('/api/collections', (req, res) => {
       try { reconcileHiddenFlags(); } catch {}
       result = updated;
     } else {
-      const newCol = { id: makeId(), name, description, modelIds: normalizedIds, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
+      const normalizedIds = uniqueStringArray(modelIds);
+      const normalizedGroups = normalizeCollectionGroups(groups, normalizedIds);
+      const newCol = { id: makeId(), name, description, modelIds: normalizedIds, groups: normalizedGroups, coverModelId, category, tags: Array.isArray(tags) ? Array.from(new Set(tags.filter(t => typeof t === 'string'))) : [], images: Array.isArray(images) ? images.filter(s => typeof s === 'string') : [], created: now, lastModified: now };
       cols.push(newCol);
       if (!saveCollections(cols)) return res.status(500).json({ success: false, error: 'Failed to save collection' });
       // Newly created collection: mark included models as hidden in their munchie files
@@ -391,8 +498,11 @@ app.post('/api/collections', (req, res) => {
       try { reconcileHiddenFlags(); } catch {}
       result = newCol;
     }
-    res.json({ success: true, collection: result });
+    res.json({ success: true, collection: toCollectionView(result) });
   } catch (e) {
+    if (e instanceof CollectionValidationError) {
+      return res.status(400).json({ success: false, error: e.message });
+    }
     console.error('/api/collections error:', e);
     res.status(500).json({ success: false, error: 'Server error' });
   }

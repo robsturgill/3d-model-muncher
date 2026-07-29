@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Folder, ChevronRight, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -10,16 +10,19 @@ import type { Category } from "../types/category";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { ConfigManager } from "../utils/configManager";
 import { getLabel } from "../constants/labels";
+import type { Model } from "../types/model";
+import { CollectionCoverCollage } from "./CollectionCoverCollage";
 
 export interface CollectionCardProps {
   collection: Collection;
   categories: Category[];
+  models?: Model[];
   onOpen: (id: string) => void;
   onChanged?: () => void; // called after edit save
   onDeleted?: (id: string) => void;
 }
 
-export function CollectionCard({ collection, categories, onOpen, onChanged, onDeleted }: CollectionCardProps) {
+export function CollectionCard({ collection, categories, models = [], onOpen, onChanged, onDeleted }: CollectionCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
@@ -46,8 +49,8 @@ export function CollectionCard({ collection, categories, onOpen, onChanged, onDe
 
   // Runtime guard: if a malformed item slips through, avoid crashing the UI
   const modelCount = collection?.modelIds ? collection.modelIds.length : 0;
+  const groupCount = Array.isArray(collection?.groups) ? collection.groups.length : 0;
   const collectionId = collection?.id;
-
   return (
     <Card
       className="flex flex-col cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1"
@@ -56,17 +59,12 @@ export function CollectionCard({ collection, categories, onOpen, onChanged, onDe
       }}
     >
       <CardHeader className="p-0">
-        <div className="relative aspect-[4/3] overflow-hidden rounded-t-lg bg-muted/40 flex items-center justify-center">
-          {Array.isArray(collection?.images) && collection!.images!.length > 0 ? (
-            <img
-              src={collection!.images![0]}
-              alt={collection?.name || 'Collection cover'}
-              className="absolute inset-0 w-full h-full object-cover"
-              draggable={false}
-            />
-          ) : (
-            <Folder className="w-14 h-14 text-primary/80" />
-          )}
+        <div className="relative aspect-[4/3] overflow-hidden rounded-t-lg">
+          <CollectionCoverCollage
+            collection={collection}
+            models={models}
+            className="absolute inset-0"
+          />
           <div className="absolute top-3 left-3">
             <Badge variant="secondary">Collection</Badge>
           </div>
@@ -149,7 +147,9 @@ export function CollectionCard({ collection, categories, onOpen, onChanged, onDe
       </CardContent>
       <CardFooter className="p-4 pt-0 mt-auto">
         <Button variant="outline" size="sm" className="w-full justify-between">
-          {`View ${modelCount} model${modelCount !== 1 ? 's' : ''}`}
+          {groupCount > 0
+            ? `View ${modelCount} model${modelCount !== 1 ? 's' : ''}, ${groupCount} group${groupCount !== 1 ? 's' : ''}`
+            : `View ${modelCount} model${modelCount !== 1 ? 's' : ''}`}
           <ChevronRight className="h-4 w-4" />
         </Button>
       </CardFooter>

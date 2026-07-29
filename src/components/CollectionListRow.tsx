@@ -5,25 +5,27 @@ import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import CollectionEditDrawer from "./CollectionEditDrawer";
-import { ImageWithFallback } from "./ImageWithFallback";
 import type { Collection } from "../types/collection";
 import type { Category } from "../types/category";
+import type { Model } from "../types/model";
+import { CollectionCoverCollage } from "./CollectionCoverCollage";
 
 interface CollectionListRowProps {
   collection: Collection;
   categories: Category[];
+  models?: Model[];
   onOpen: (id: string) => void;
   onChanged?: () => void;
   onDeleted?: (id: string) => void;
 }
 
-export function CollectionListRow({ collection, categories, onOpen, onChanged, onDeleted }: CollectionListRowProps) {
+export function CollectionListRow({ collection, categories, models = [], onOpen, onChanged, onDeleted }: CollectionListRowProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const collectionId = collection?.id;
   const modelCount = Array.isArray(collection?.modelIds) ? collection.modelIds.length : 0;
-
+  const groupCount = Array.isArray(collection?.groups) ? collection.groups.length : 0;
   const handleOpen = () => {
     if (collectionId) {
       onOpen(collectionId);
@@ -64,11 +66,10 @@ export function CollectionListRow({ collection, categories, onOpen, onChanged, o
       >
         <div className="flex-shrink-0 pl-1">
           <div className="relative">
-            <ImageWithFallback
-              src={collection?.images && collection.images.length > 0 ? collection.images[0] : ""}
-              alt={collection?.name || "Collection image"}
-              className="w-20 h-20 object-cover rounded-lg border group-hover:border-primary/30 transition-colors"
-              draggable={false}
+            <CollectionCoverCollage
+              collection={collection}
+              models={models}
+              className="w-20 h-20 rounded-lg border group-hover:border-primary/30 transition-colors overflow-hidden"
             />
             <Badge variant="secondary" className="absolute top-2 left-2 text-xs pointer-events-none">
               Collection
@@ -99,6 +100,7 @@ export function CollectionListRow({ collection, categories, onOpen, onChanged, o
             <div className="flex flex-col items-end gap-2">
               <Badge variant="secondary" className="whitespace-nowrap">
                 {modelCount} item{modelCount === 1 ? "" : "s"}
+                {groupCount > 0 ? `, ${groupCount} group${groupCount === 1 ? "" : "s"}` : ""}
               </Badge>
 
               <DropdownMenu>

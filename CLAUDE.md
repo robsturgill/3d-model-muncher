@@ -44,7 +44,7 @@ npx vitest run tests/gcodeParser.test.ts
 
 - `models/*-munchie.json` — metadata for each 3D model
 - `data/config.json` — app configuration
-- `data/collections.json` — user-defined model groups
+- `data/collections.json` — user-defined collections (and the groups nested inside them)
 
 ### Key Backend Utilities (edit in `src/utils/`, then run `npm run build:backend`)
 
@@ -70,6 +70,15 @@ Each `.3mf` or `.stl` file gets a `-munchie.json` sidecar. On metadata regenerat
 - `.gcode.3mf` archives are saved as binary (not converted to text) to preserve BambuLab metadata.
 - G-code data is stored in the `gcodeData` field in `munchie.json`.
 - Unit tests: `tests/gcodeParser.test.ts`, fixtures: `tests/fixtures/gcode/`.
+
+### Collections and Groups
+
+- A **collection** is global: it appears in the sidebar's Collection filter, hides its members from the main grid via the `hidden` flag on each munchie sidecar, and owns a category, tags, and cover images.
+- A **group** is nested inside one collection and is presentational only (name + description). A model may belong to at most one group per collection.
+- **`modelIds` is authoritative.** `POST /api/collections` rejects a `groups` array referencing a model that is not in `modelIds` (400) rather than adding it. Omitting `groups` prunes group membership to match `modelIds`; omitting `modelIds` preserves the stored membership.
+- Empty groups are retained so a group that loses its last member keeps its name; the UI renders them with an empty state.
+- **Read paths must not normalize.** `loadCollections()` returns stored data verbatim; `toCollectionView()` shapes responses without persisting, and group ids are minted on write only. Normalizing on read made a write to one collection rewrite every other collection on disk, and made `GET` non-idempotent.
+- Cover precedence: `collection.images[0]` → `coverModelId` thumbnail → collage of member thumbnails → folder placeholder.
 
 ### Settings Architecture
 

@@ -1,6 +1,6 @@
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { CheckSquare, Square, Edit, Trash2, X, List } from "lucide-react";
+import { CheckSquare, Square, Edit, Trash2, X, List, Layers } from "lucide-react";
 
 interface SelectionModeControlsProps {
   isSelectionMode: boolean;
@@ -9,6 +9,9 @@ interface SelectionModeControlsProps {
   onExitSelectionMode?: () => void;
   onBulkEdit?: () => void | Promise<void>;
   onCreateCollection?: () => void;
+  // Grouping lives alongside collection creation rather than replacing it, so a
+  // selection inside a collection can still become a new or existing collection.
+  onGroupSelection?: () => void;
   onBulkDelete?: () => void | Promise<void>;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
@@ -24,6 +27,7 @@ export function SelectionModeControls({
   onExitSelectionMode,
   onBulkEdit,
   onCreateCollection,
+  onGroupSelection,
   onBulkDelete,
   onSelectAll,
   onDeselectAll,
@@ -86,6 +90,20 @@ export function SelectionModeControls({
             >
               <List className="h-4 w-4" />
               <span className="hidden sm:inline">Collection</span>
+            </Button>
+          )}
+
+          {onGroupSelection && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onGroupSelection}
+              className="gap-2"
+              title="Group selected models"
+              data-testid="selection-mode-group-button"
+            >
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">Group</span>
             </Button>
           )}
 
