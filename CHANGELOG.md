@@ -1,3 +1,18 @@
+# [0.18.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.17.0...v0.18.0) (2026-07-29)
+
+
+### Bug Fixes
+
+* **collections:** keep filter state and the models on screen in agreement ([c0fbc8e](https://github.com/robsturgill/3d-model-muncher/commit/c0fbc8ef8d2a00880c78720f26f69599fbf0253f))
+* **collections:** make modelIds authoritative and stop read-path rewrites ([468c54e](https://github.com/robsturgill/3d-model-muncher/commit/468c54e75d1788928ebc9928edfdf14a642fea3c))
+* **collections:** show user-chosen cover images again ([4993a66](https://github.com/robsturgill/3d-model-muncher/commit/4993a667a8efad829076ebe9bfdf5afa28360a75))
+* **deps:** resolve 22 of 27 audited advisories within existing ranges ([1c533a4](https://github.com/robsturgill/3d-model-muncher/commit/1c533a408a9654c3eeab671dd7367a1e02008e82))
+
+
+### Features
+
+* **collections:** group model variants inside a collection ([7178f40](https://github.com/robsturgill/3d-model-muncher/commit/7178f406319eb2309d04e580a787df306abb0984))
+
 # [0.17.0](https://github.com/robsturgill/3d-model-muncher/compare/v0.16.4...v0.17.0) (2026-04-02)
 
 
