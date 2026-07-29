@@ -1450,12 +1450,13 @@ function AppContent() {
             </AlertDialogDescription>
 
             <div className="mt-2 text-sm">
-              <h3 className="text-lg font-semibold mb-2">v0.17.x — Release updates</h3>
+              <h3 className="text-lg font-semibold mb-2">v0.18.x — Release updates</h3>
               <ul className="list-disc pl-5 list-outside space-y-1.5">
-                <li><strong>Markdown descriptions &amp; notes</strong> — Both the Description and Notes fields now render markdown. Use headings, bold, lists, links, and more. An Edit/Preview toggle in the editor lets you check formatting before saving.</li>
-                <li><strong>Normal material view for all file types</strong> — The normal material (surface normal color map) toggle is now available for both STL and 3MF files in the 3D viewer.</li>
-                <li><strong>Default material type setting</strong> — A new setting in General → 3D Viewer lets you choose whether models open in Standard or Normal material view by default.</li>
-                <li><strong>Wireframe view fix</strong> — The wireframe toggle in the 3D viewer was not applying to the model. This has been fixed for both STL and 3MF files.</li>
+                <li><strong>Groups inside collections</strong> — Open a collection, select a set of variants, and bundle them into a named group. The group shows as one expandable row, so a collection full of scaled copies of the same model stays readable. Groups can be renamed, and ungrouping keeps every model in the collection.</li>
+                <li><strong>Filter by collection</strong> — A new Collection dropdown in the sidebar narrows the library to a single collection's models.</li>
+                <li><strong>Collection covers</strong> — Collections without a cover image now show a collage of their members' thumbnails instead of a plain folder icon. A cover you upload yourself still takes priority.</li>
+                <li><strong>Add to a collection while uploading</strong> — The upload dialog can drop everything you just uploaded straight into an existing collection, and the Collections page has a New Collection button for starting an empty one.</li>
+                <li><strong>Add to Collection from a model</strong> — The model details drawer can now create a new collection as well as add to an existing one.</li>
               </ul>
             </div>
 

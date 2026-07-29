@@ -10,7 +10,8 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 - **Capture 3D previews**: Capture the current camera/view from the built-in 3D viewer and save it directly into a model's images (useful for thumbnails or gallery images). While editing a model in the details drawer, use the capture button to add the exact view you want.
 - **G-code Analysis**: Upload .gcode or .gcode.3mf files to automatically extract print time, filament usage, and material colors with multi-material support
 - **Model Management**: Organize, categorize, and track print status
-- **Advanced Search & Filtering**: Search by name, tags, category, print status, and license
+- **Collections & Groups**: Gather related models into a named collection, and bundle near-identical variants inside it into expandable groups so a library of scaled copies stays readable
+- **Advanced Search & Filtering**: Search by name, tags, category, collection, print status, and license
 - **Automatic Scanning**: Auto-generate metadata JSON files from 3MF files
 - **Duplicate Detection**: MD5 hash-based duplicate identification
 - **Bulk Editing**: Edit multiple models simultaneously
@@ -23,9 +24,16 @@ Organize, search, and preview your 3D printing models with an intuitive interfac
 
 1. **Add Models**: Place `.3mf` or `.stl` files in the `models/` directory
 2. **Scan Models**: Use the scan feature to generate JSON metadata files
-3. **Browse & Search**: Filter by category, tags, print status, or license
+3. **Browse & Search**: Filter by category, tags, collection, print status, or license
 4. **3D Preview**: Click models to view in the built-in Three.js viewer
 5. **Manage**: Edit details, track print status, bulk edit multiple models
+6. **Collect**: Select models and create a collection, then open it and group variants together under one expandable row
+
+### Collections and groups
+
+A **collection** is a named set of models that lives across the whole library: it appears in the sidebar's Collection filter, hides its members from the main grid, and carries its own category, tags, and cover image. Set a cover by uploading one in the collection's edit drawer; without one, the cover is a collage of the first few members' thumbnails.
+
+A **group** lives inside a single collection and exists purely to reduce clutter — a bundle of variants shown as one expandable row. Groups have a name and description only, and a model can belong to at most one group per collection. Membership is driven by the collection: removing a model from the collection removes it from its group, and a group that loses its last member is kept so you can refill it.
 
 ## Quick Start
 
@@ -90,6 +98,9 @@ docker-compose up -d
 - `GET /api/validate-3mf` - Validate 3MF & STL file integrity
 - `POST /api/delete-models` - Delete models and files
 - `POST /api/parse-gcode` - Parse G-code files and extract print metadata including filament colors
+- `GET /api/collections` - List collections
+- `POST /api/collections` - Create or update a collection (`modelIds` is authoritative; `groups` may only reference models already in the collection)
+- `DELETE /api/collections/:id` - Delete a collection
 - `GET /models/*` - Static model files (3MF, STL, images, etc.)
 - `POST /api/regenerate-munchie-files` - Regenerate munchie.json for specific models (preserves user-managed fields and post-processes files to ensure nested thumbnail/imageOrder defaults)
 
